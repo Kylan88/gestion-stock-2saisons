@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+dist/
+build/
+frontend-vue/node_modules/
+frontend-vue/dist/
+.opencode/
+*.log

@@ -1,0 +1,181 @@
+from datetime import datetime
+from typing import Optional, List
+from pydantic import BaseModel, Field
+
+class CategorieBase(BaseModel):
+    nom: str; description: str = ""; couleur: str = "#a04100"
+class CategorieCreate(CategorieBase): pass
+class CategorieResponse(CategorieBase):
+    id: int
+    class Config: from_attributes = True
+
+class FournisseurBase(BaseModel):
+    nom: str; contact: str = ""; telephone: str = ""; email: str = ""
+    adresse: str = ""; actif: bool = True
+class FournisseurCreate(FournisseurBase): pass
+class FournisseurResponse(FournisseurBase):
+    id: int
+    class Config: from_attributes = True
+
+class ProduitBase(BaseModel):
+    nom: str; categorie_id: Optional[int] = None; unite_mesure: str = "kg"
+    stock_min: float = 0.0; stock_actuel: float = 0.0; prix_unitaire: float = 0.0
+    description: str = ""; actif: bool = True
+class ProduitCreate(ProduitBase): pass
+class ProduitUpdate(BaseModel):
+    nom: Optional[str] = None; categorie_id: Optional[int] = None
+    unite_mesure: Optional[str] = None; stock_min: Optional[float] = None
+    stock_actuel: Optional[float] = None; prix_unitaire: Optional[float] = None
+    description: Optional[str] = None; actif: Optional[bool] = None
+class ProduitResponse(ProduitBase):
+    id: int; date_creation: datetime
+    categorie: Optional[CategorieResponse] = None
+    class Config: from_attributes = True
+
+class LotBase(BaseModel):
+    code_lot: str; type_fruit: str = ""; fournisseur_nom: str = ""
+    produit_id: Optional[int] = None; fournisseur_id: Optional[int] = None
+    statut: str = "réception"; quantite_initiale: float = 0.0
+    quantite_restante: float = 0.0; poids_frais: float = 0.0
+    poids_sec_final: float = 0.0; rendement_global: Optional[float] = None
+    export_cartons: int = 0; export_sachets: int = 0; export_poids_sachet: float = 2.5
+    local_cartons: int = 0; local_sachets: int = 0; local_poids_sachet: float = 2.5
+    dechets_cartons: int = 0; dechets_sachets: int = 0; dechets_poids_sachet: float = 2.5
+    rhum_cartons: int = 0; rhum_sachets: int = 0; rhum_poids_sachet: float = 2.5
+    ecart_bilan_pourcentage: Optional[float] = None
+    date_reception: datetime = Field(default_factory=datetime.now)
+    date_fabrication: Optional[datetime] = None; date_peremption: Optional[datetime] = None
+    notes: str = ""
+class LotCreate(LotBase): pass
+class EtapeResume(BaseModel):
+    id: int; etape: str; ordre: int; statut: str
+    date_debut: Optional[datetime] = None; date_fin: Optional[datetime] = None
+    poids_entree: float = 0.0; poids_sortie: float = 0.0
+    perte: float = 0.0; rendement_pourcentage: Optional[float] = None
+    operateur: str = ""
+    fruits_murs_kg: float = 0.0; dechets_tri_kg: float = 0.0
+    dechets_lavage_kg: float = 0.0; retour_non_mur_kg: float = 0.0
+    dechets_production_kg: float = 0.0
+    class Config: from_attributes = True
+
+class LotResponse(LotBase):
+    id: int; produit: Optional[ProduitResponse] = None
+    fournisseur: Optional[FournisseurResponse] = None
+    etapes: List[EtapeResume] = []
+    class Config: from_attributes = True
+
+class EtapeProductionBase(BaseModel):
+    lot_id: int; etape: str; ordre: int = 0; statut: str = "en_attente"
+    date_debut: Optional[datetime] = None; date_fin: Optional[datetime] = None
+    poids_entree: float = 0.0; poids_sortie: float = 0.0
+    perte: float = 0.0; rendement_pourcentage: Optional[float] = None
+    operateur: str = ""; notes: str = ""
+    fruits_murs_kg: float = 0.0; dechets_tri_kg: float = 0.0
+    dechets_lavage_kg: float = 0.0; retour_non_mur_kg: float = 0.0
+    dechets_production_kg: float = 0.0
+class EtapeProductionCreate(EtapeProductionBase): pass
+class EtapeProductionUpdate(BaseModel):
+    statut: Optional[str] = None; date_fin: Optional[datetime] = None
+    poids_entree: Optional[float] = None
+    poids_sortie: Optional[float] = None; operateur: Optional[str] = None
+    notes: Optional[str] = None
+    fruits_murs_kg: Optional[float] = None; dechets_tri_kg: Optional[float] = None
+    dechets_lavage_kg: Optional[float] = None; retour_non_mur_kg: Optional[float] = None
+    dechets_production_kg: Optional[float] = None
+class EtapeProductionResponse(EtapeProductionBase):
+    id: int
+    class Config: from_attributes = True
+
+class MusserieCreate(BaseModel):
+    fruits_murs_kg: float = 0.0
+    dechets_tri_kg: float = 0.0
+    dechets_lavage_kg: float = 0.0
+    retour_non_mur_kg: float = 0.0
+    dechets_production_kg: float = 0.0
+    operateur: str = ""
+
+class ConditionnementCreate(BaseModel):
+    export_cartons: int = 0
+    export_sachets: int = 0
+    export_poids_sachet: float = 2.5
+    local_cartons: int = 0
+    local_sachets: int = 0
+    local_poids_sachet: float = 2.5
+    dechets_cartons: int = 0
+    dechets_sachets: int = 0
+    dechets_poids_sachet: float = 2.5
+    rhum_cartons: int = 0
+    rhum_sachets: int = 0
+    rhum_poids_sachet: float = 2.5
+    responsable: str = ""
+    notes: str = ""
+
+class MouvementBase(BaseModel):
+    produit_id: int; lot_id: Optional[int] = None; type_mouvement: str
+    quantite: float; motif: str = ""; reference_doc: str = ""; responsable: str = ""
+class MouvementCreate(MouvementBase): pass
+class MouvementResponse(MouvementBase):
+    id: int; quantite_avant: float; quantite_apres: float; date_saisie: datetime
+    produit: Optional[ProduitResponse] = None; lot: Optional[LotResponse] = None
+    class Config: from_attributes = True
+
+class ZoneStockageBase(BaseModel):
+    nom: str; type_zone: str = "ambiant"; usage: Optional[str] = None
+    temperature_consigne: Optional[float] = None
+    capacite_kg: float = 0.0; actif: bool = True
+class ZoneStockageCreate(ZoneStockageBase): pass
+class ZoneStockageResponse(ZoneStockageBase):
+    id: int
+    class Config: from_attributes = True
+
+class StockZoneBase(BaseModel):
+    zone_id: int; lot_id: Optional[int] = None; produit_id: int; quantite: float = 0.0
+    sachets: Optional[int] = None
+class StockZoneCreate(StockZoneBase): pass
+class StockZoneResponse(StockZoneBase):
+    id: int; date_entree: datetime; date_sortie: Optional[datetime] = None
+    zone: Optional[ZoneStockageResponse] = None; lot: Optional[LotResponse] = None
+    produit: Optional[ProduitResponse] = None
+    class Config: from_attributes = True
+
+class LigneCommandeBase(BaseModel):
+    produit_id: int; lot_id: Optional[int] = None; quantite: float; prix_unitaire: float = 0.0
+class CommandeBase(BaseModel):
+    client_nom: str; client_contact: str = ""; date_livraison_prevue: Optional[datetime] = None
+    notes: str = ""; statut: str = "en_attente"
+class CommandeCreate(CommandeBase): lignes: List[LigneCommandeBase]
+class LigneCommandeResponse(LigneCommandeBase):
+    id: int; produit: Optional[ProduitResponse] = None; lot: Optional[LotResponse] = None
+    class Config: from_attributes = True
+
+class CommandeResponse(CommandeBase):
+    id: int; date_commande: datetime; total_ht: float; lignes: List[LigneCommandeResponse] = []
+    class Config: from_attributes = True
+
+class ChariotCreate(BaseModel):
+    numero_chariot: int
+    heure_remplissage: str = ""
+    heure_entree_sechoir: str = ""
+
+class ChariotResponse(BaseModel):
+    id: int; etape_production_id: int; lot_id: int
+    numero_chariot: int; heure_remplissage: str; heure_entree_sechoir: str
+    class Config: from_attributes = True
+
+class ProductionCreate(BaseModel):
+    dryer: int
+    nbre_chariots: int
+    quantite_totale: float
+    operateur: str = ""
+    chariots: List[ChariotCreate] = []
+
+class DashboardStats(BaseModel):
+    total_produits: int; total_mouvements: int; total_lots_actifs: int
+    produits_stock_bas: int; produits_rupture: int; valeur_stock: float
+    commandes_en_attente: int; lots_en_production: int
+    rendement_moyen: Optional[float] = None; stock_froid_kg: float = 0.0
+
+class DashboardProduction(BaseModel):
+    lots_suivi: int; etapes_terminees: int; etapes_en_cours: int
+    rendement_moyen_frais_sec: Optional[float] = None
+    production_jour_kg: float = 0.0
