@@ -1,7 +1,8 @@
 from database import SessionLocal, engine, Base
 from models import (Categorie, Fournisseur, Produit, Lot, MouvementStock,
                     Commande, LigneCommande, EtapeProduction,
-                    ZoneStockage, StockZone)
+                    ZoneStockage, StockZone, DemandeTransfert, DemandeTransfertLigne,
+                    Reconditionnement)
 from datetime import datetime, timedelta
 
 def seed_database():
@@ -53,6 +54,10 @@ def seed_database():
                     stock_min=100, stock_actuel=250, prix_unitaire=2000),
             Produit(nom="Carton d'Expédition", categorie_id=ce.id, unite_mesure="unité",
                     stock_min=500, stock_actuel=1200, prix_unitaire=250),
+            Produit(nom="Fitini Fê", categorie_id=cd.id, unite_mesure="kg",
+                    stock_min=30, stock_actuel=0, prix_unitaire=2000),
+            Produit(nom="Local Séché", categorie_id=cd.id, unite_mesure="kg",
+                    stock_min=30, stock_actuel=0, prix_unitaire=1800),
         ]
         db.add_all(produits); db.flush()
 
@@ -123,18 +128,17 @@ def seed_database():
         lot1.rendement_global = 87.0
 
         zones = [
-            ZoneStockage(nom="Chambre Froide 1 (Local)", type_zone="froid", usage="local",
+            ZoneStockage(nom="Chambre Froide 1", type_zone="froid", usage="local",
                         temperature_consigne=4, capacite_kg=1000),
-            ZoneStockage(nom="Chambre Froide 2 (Export)", type_zone="froid", usage="export",
+            ZoneStockage(nom="Chambre Froide 2", type_zone="froid", usage="export",
                         temperature_consigne=2, capacite_kg=500),
-            ZoneStockage(nom="Zone Ambiant", type_zone="ambiant", capacite_kg=2000),
         ]
         db.add_all(zones); db.flush()
 
         stocks_zone = [
-            StockZone(zone_id=zones[2].id, lot_id=lots[2].id, produit_id=produits[3].id,
+            StockZone(zone_id=zones[0].id, lot_id=lots[2].id, produit_id=produits[3].id,
                       quantite=180, date_entree=datetime(2026, 7, 2)),
-            StockZone(zone_id=zones[0].id, lot_id=lots[1].id, produit_id=produits[1].id,
+            StockZone(zone_id=zones[1].id, lot_id=lots[1].id, produit_id=produits[1].id,
                       quantite=120, sachets=1200, date_entree=datetime(2026, 6, 22)),
         ]
         db.add_all(stocks_zone)

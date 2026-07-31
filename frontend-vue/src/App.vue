@@ -1,18 +1,17 @@
 <template>
   <div class="app-layout">
-    <aside class="sidebar">
+    <!-- Mobile overlay -->
+    <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false"></div>
+
+    <aside class="sidebar" :class="{ 'sidebar-open': sidebarOpen }">
       <div class="sidebar-logo">
-        <div class="logo-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
+        <img src="/2saisons.jpeg" alt="2Saisons" class="logo-img" />
         <span class="logo-text">2Saisons</span>
       </div>
 
       <nav class="sidebar-nav">
         <router-link v-for="item in nav" :key="item.path" :to="item.path"
-          class="nav-item" active-class="nav-active">
+          class="nav-item" active-class="nav-active" @click="sidebarOpen = false">
           <span class="nav-icon" v-html="item.icon"></span>
           <span class="nav-label">{{ item.label }}</span>
         </router-link>
@@ -26,9 +25,29 @@
 
     <div class="main-wrapper">
       <header class="topbar">
+        <div class="topbar-left">
+          <button class="hamburger" @click="sidebarOpen = !sidebarOpen" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+          <nav class="breadcrumbs" v-if="breadcrumbs.length > 1">
+            <template v-for="(crumb, i) in breadcrumbs" :key="i">
+              <router-link v-if="crumb.path" :to="crumb.path" class="breadcrumb-link">{{ crumb.label }}</router-link>
+              <span v-else class="breadcrumb-current">{{ crumb.label }}</span>
+              <span v-if="i < breadcrumbs.length - 1" class="breadcrumb-sep">/</span>
+            </template>
+          </nav>
+        </div>
         <div class="topbar-search">
           <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" class="search-input" placeholder="Rechercher..." />
+          <input
+            type="text"
+            class="search-input"
+            placeholder="Rechercher un lot..."
+            v-model="searchQuery"
+            @keydown.enter="goSearch"
+          />
         </div>
         <div class="topbar-right">
           <div class="topbar-avatar">2S</div>
@@ -45,6 +64,52 @@
 </template>
 
 <script setup>
+import { ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+
+const router = useRouter()
+const route = useRoute()
+const searchQuery = ref('')
+const sidebarOpen = ref(false)
+
+function goSearch() {
+  if (!searchQuery.value.trim()) return
+  router.push({ path: '/lots', query: { q: searchQuery.value.trim() } })
+  searchQuery.value = ''
+}
+
+const routeLabels = {
+  '/': 'Dashboard',
+  '/reception': 'Réception',
+  '/lots': 'Lots',
+  '/musserie': 'Musserie',
+  '/production': 'Production',
+  '/conditionnement': 'Conditionnement',
+  '/stock': 'Stock',
+  '/stock/transfert': 'Transfert CF',
+  '/stock/reconditionnement': 'Reconditionnement',
+  '/produits': 'Produits',
+  '/fournisseurs': 'Fournisseurs',
+  '/commandes': 'Commandes',
+  '/anomalies': 'Anomalies',
+}
+
+const breadcrumbs = computed(() => {
+  const path = route.path
+  const crumbs = [{ label: 'Accueil', path: '/' }]
+  if (path === '/') return crumbs
+  const segments = path.split('/').filter(Boolean)
+  let builtPath = ''
+  for (const seg of segments) {
+    builtPath += '/' + seg
+    const label = routeLabels[builtPath]
+    if (label) {
+      crumbs.push({ label, path: builtPath === path ? null : builtPath })
+    }
+  }
+  return crumbs
+})
+
 const nav = [
   { path: '/', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>', label: 'Dashboard' },
   { path: '/reception', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', label: 'Réception' },
@@ -53,9 +118,12 @@ const nav = [
   { path: '/production', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>', label: 'Production' },
   { path: '/conditionnement', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', label: 'Conditionnement' },
   { path: '/stock', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>', label: 'Stock' },
+  { path: '/stock/transfert', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>', label: 'Transfert CF' },
+  { path: '/stock/reconditionnement', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><line x1="12" y1="12" x2="12" y2="21"/></svg>', label: 'Reconditionnement' },
   { path: '/produits', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>', label: 'Produits' },
   { path: '/fournisseurs', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', label: 'Fournisseurs' },
   { path: '/commandes', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>', label: 'Commandes' },
+  { path: '/anomalies', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>', label: 'Anomalies' },
 ]
 </script>
 
@@ -72,11 +140,9 @@ const nav = [
   display: flex; align-items: center; gap: 10px;
   padding: 20px 20px; border-bottom: 1px solid var(--border-light);
 }
-.logo-icon {
+.logo-img {
   width: 36px; height: 36px; border-radius: 10px;
-  background: var(--primary); color: white;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+  object-fit: cover; flex-shrink: 0;
 }
 .logo-text { font-size: 18px; font-weight: 700; color: var(--dark); letter-spacing: -0.02em; }
 
@@ -109,8 +175,20 @@ const nav = [
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 32px; background: white; border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 5;
+  position: sticky; top: 0; z-index: 5; gap: 16px;
 }
+.topbar-left { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.hamburger {
+  display: none; background: none; border: none; cursor: pointer;
+  padding: 6px; border-radius: var(--radius-sm); color: var(--text-secondary);
+}
+.hamburger:hover { background: var(--surface); }
+.breadcrumbs { display: flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+.breadcrumb-link { color: var(--text-muted); text-decoration: none; transition: color 0.15s; }
+.breadcrumb-link:hover { color: var(--primary); }
+.breadcrumb-current { color: var(--text); font-weight: 500; }
+.breadcrumb-sep { color: var(--text-muted); font-size: 11px; }
+
 .topbar-search {
   position: relative; flex: 0 1 320px;
 }
@@ -131,4 +209,23 @@ const nav = [
 
 /* ── Content ── */
 .main-content { flex: 1; padding: 28px 32px; overflow-y: auto; max-height: calc(100vh - 56px); }
+
+/* ── Mobile ── */
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.3);
+  z-index: 9; backdrop-filter: blur(2px);
+}
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed; left: -260px; top: 0; height: 100vh;
+    transition: left 0.25s ease; z-index: 11;
+  }
+  .sidebar-open { left: 0; }
+  .sidebar-overlay { display: block; }
+  .hamburger { display: flex; }
+  .breadcrumbs { display: none; }
+  .topbar { padding: 12px 16px; }
+  .topbar-search { flex: 1; min-width: 0; }
+  .main-content { padding: 16px; }
+}
 </style>

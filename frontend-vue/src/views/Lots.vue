@@ -1,14 +1,9 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">Lots de Production</h1>
-        <p class="page-subtitle">Suivi de tous les lots et leurs étapes</p>
-      </div>
-    </div>
+    <PageHeader title="Lots de Production" subtitle="Suivi de tous les lots et leurs étapes" />
 
     <div class="filters">
-      <input v-model="recherche" class="input" placeholder="Rechercher code lot..." @input="loadLots" style="max-width:260px" />
+      <input v-model="recherche" class="input" placeholder="Rechercher code lot..." @input="debouncedLoad" style="max-width:260px" />
       <select v-model="filtreStatut" class="input" @change="loadLots" style="max-width:180px">
         <option value="">Tous les statuts</option>
         <option v-for="s in statuts" :key="s" :value="s">{{ s }}</option>
@@ -51,7 +46,7 @@
             </tr>
             <tr v-if="expanded === lot.id && etapes[lot.id]" class="etapes-row">
               <td colspan="7" style="padding:0">
-                <div class="etapes-expand">
+                <div class="etapes-expand anim-expand">
                   <div v-for="e in etapes[lot.id]" :key="e.id" class="etape-item">
                     <div class="etape-left">
                       <span class="status-dot" :class="{
@@ -83,20 +78,29 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { getLots, getProductionsEtapes, updateLotStatut } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import PageHeader from '../components/PageHeader.vue'
 
+const route = useRoute()
 const lots = ref([])
 const etapes = ref({})
 const loading = ref(true)
-const recherche = ref('')
+const recherche = ref(route.query.q || '')
 const filtreStatut = ref('')
 const expanded = ref(null)
 const toast = useToastStore()
 
 const statuts = ['réception', 'en musserie', 'en production', 'en conditionnement', 'en stock', 'expédié', 'périmé']
+
+let debounceTimer = null
+function debouncedLoad() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => loadLots(), 300)
+}
 
 async function loadLots() {
   loading.value = true

@@ -7,7 +7,8 @@ import models
 from models import (
     Produit, Categorie, Fournisseur, Lot, MouvementStock,
     Commande, LigneCommande, EtapeProduction, Chariot,
-    ZoneStockage, StockZone
+    ZoneStockage, StockZone, DemandeTransfert, DemandeTransfertLigne,
+    Reconditionnement
 )
 
 # ── PRODUITS ──
@@ -252,7 +253,7 @@ DRYER_CONFIG = {1: {"chariots": 6, "claies": 42}, 2: {"chariots": 12, "claies": 
 
 def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
                        quantite_totale: float, operateur: str = "",
-                       chariots: list = None) -> Optional[EtapeProduction]:
+                       chariots: list = None) -> dict:
     lot = db.get(Lot, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
@@ -270,23 +271,71 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
         db.add(ep); db.flush()
 
     ep.statut = "en_cours"
-    ep.date_debut = datetime.now()
-    ep.poids_entree = quantite_totale
-    ep.poids_sortie = quantite_totale
+    if not ep.date_debut:
+        ep.date_debut = datetime.now()
     ep.operateur = operateur
-    ep.notes = f"Dryer {dryer} | {nbre_chariots} chariots | {config['claies']} claies/chariot"
 
     for c_data in (chariots or []):
         chariot = Chariot(
             etape_production_id=ep.id, lot_id=lot_id,
             numero_chariot=c_data.get("numero_chariot", 0),
+            dryer=dryer,
+            nbre_chariots=nbre_chariots,
+            total_claies=config["claies"] * nbre_chariots,
+            quantite_totale=quantite_totale,
+            operateur=operateur,
             heure_remplissage=c_data.get("heure_remplissage", ""),
             heure_entree_sechoir=c_data.get("heure_entree_sechoir", ""),
         )
         db.add(chariot)
 
+    db.flush()
+
+    all_chariots = db.query(Chariot).filter(Chariot.etape_production_id == ep.id).all()
+    dryers_seen = {}
+    for c in all_chariots:
+        if c.dryer not in dryers_seen:
+            dryers_seen[c.dryer] = {"dryer": c.dryer, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale}
+    ep.poids_entree = sum(d["quantite_totale"] for d in dryers_seen.values())
+    ep.poids_sortie = ep.poids_entree
+    ep.total_claies = sum(d["total_claies"] for d in dryers_seen.values())
+    ep.dryer = None
+    ep.nbre_chariots = None
+    ep.notes = " + ".join(f"Dryer {d['dryer']} ({d['nbre_chariots']} chariots)" for d in dryers_seen.values())
+
+    db.commit(); db.refresh(ep)
+    return {"etape": ep, "dryers": list(dryers_seen.values())}
+
+
+def cloturer_production(db: Session, lot_id: int) -> Optional[EtapeProduction]:
+    ep = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
+    ).first()
+    if not ep:
+        raise ValueError(f"Aucune étape production pour le lot {lot_id}")
+    ep.statut = "terminé"
+    ep.date_fin = datetime.now()
     db.commit(); db.refresh(ep)
     return ep
+
+
+def get_dryers_production(db: Session, lot_id: int) -> list:
+    ep = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
+    ).first()
+    if not ep:
+        return []
+    chariots = db.query(Chariot).filter(Chariot.etape_production_id == ep.id).order_by(Chariot.id).all()
+    dryers = {}
+    for c in chariots:
+        d = c.dryer
+        if d not in dryers:
+            dryers[d] = {"dryer": d, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale, "operateur": c.operateur or "", "chariots": []}
+        dryers[d]["chariots"].append({
+            "id": c.id, "numero_chariot": c.numero_chariot,
+            "heure_remplissage": c.heure_remplissage, "heure_entree_sechoir": c.heure_entree_sechoir,
+        })
+    return list(dryers.values())
 
 # ── CONDITIONNEMENT (cartons) ──
 
@@ -295,6 +344,7 @@ def valider_conditionnement(db: Session, lot_id: int,
                             local_cartons: int = 0, local_sachets: int = 0, local_poids_sachet: float = 2.5,
                             dechets_cartons: int = 0, dechets_sachets: int = 0, dechets_poids_sachet: float = 2.5,
                             rhum_cartons: int = 0, rhum_sachets: int = 0, rhum_poids_sachet: float = 2.5,
+                            fitini_fê_cartons: int = 0, fitini_fê_sachets: int = 0, fitini_fê_poids_sachet: float = 2.5,
                             responsable: str = "", notes: str = "") -> dict:
     lot = get_lot(db, lot_id)
     if not lot:
@@ -308,7 +358,8 @@ def valider_conditionnement(db: Session, lot_id: int,
     poids_local = round((local_cartons * 6 + local_sachets) * local_poids_sachet, 2)
     poids_dechets = round((dechets_cartons * 6 + dechets_sachets) * dechets_poids_sachet, 2)
     poids_rhum = round((rhum_cartons * 6 + rhum_sachets) * rhum_poids_sachet, 2)
-    total_flux = round(poids_export + poids_local + poids_dechets + poids_rhum, 2)
+    poids_fitini = round((fitini_fê_cartons * 6 + fitini_fê_sachets) * fitini_fê_poids_sachet, 2)
+    total_flux = round(poids_export + poids_local + poids_dechets + poids_rhum + poids_fitini, 2)
 
     etape_cond = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "conditionnement"
@@ -327,6 +378,8 @@ def valider_conditionnement(db: Session, lot_id: int,
     lot.dechets_poids_sachet = dechets_poids_sachet
     lot.rhum_cartons = rhum_cartons; lot.rhum_sachets = rhum_sachets
     lot.rhum_poids_sachet = rhum_poids_sachet
+    lot.fitini_fê_cartons = fitini_fê_cartons; lot.fitini_fê_sachets = fitini_fê_sachets
+    lot.fitini_fê_poids_sachet = fitini_fê_poids_sachet
     lot.ecart_bilan_pourcentage = ecart_pourcentage
     lot.poids_sec_final = total_flux
     if lot.poids_frais > 0:
@@ -334,6 +387,11 @@ def valider_conditionnement(db: Session, lot_id: int,
     if notes:
         lot.notes = (lot.notes + " | " if lot.notes else "") + notes
     lot.statut = "terminé"
+
+    etape_cond.statut = "termine"
+    etape_cond.date_fin = datetime.now()
+    etape_cond.poids_sortie = total_flux
+    etape_cond.rendement_pourcentage = lot.rendement_global
 
     db.commit(); db.refresh(lot)
 
@@ -344,6 +402,7 @@ def valider_conditionnement(db: Session, lot_id: int,
         "poids_local": poids_local,
         "poids_dechets": poids_dechets,
         "poids_rhum": poids_rhum,
+        "poids_fitini_fê": poids_fitini,
         "total_flux": total_flux,
         "reference": round(reference, 2) if reference else 0.0,
         "ecart_bilan_pourcentage": ecart_pourcentage,
@@ -556,3 +615,244 @@ def get_stats_production(db: Session) -> dict:
         "rendement_moyen_frais_sec": get_rendement_moyen_global(db),
         "production_jour_kg": round(prod_jour, 1),
     }
+
+# ── DEMANDE DE TRANSFERT CHAMBRE FROIDE ──
+
+def creer_demande_transfert(db: Session, lot_id: int, lignes: list,
+                            responsable: str = "", notes: str = "") -> "DemandeTransfert":
+    from models import DemandeTransfert, DemandeTransfertLigne, ZoneStockage
+    lot = get_lot(db, lot_id)
+    if not lot:
+        raise ValueError(f"Lot {lot_id} introuvable")
+    if lot.statut != "terminé":
+        raise ValueError(f"Le lot {lot.code_lot} n'a pas terminé le conditionnement")
+
+    demande = DemandeTransfert(lot_id=lot_id, responsable=responsable, notes=notes)
+    db.add(demande)
+    db.flush()
+
+    for l in lignes:
+        zone = db.get(ZoneStockage, l.zone_id)
+        if not zone:
+            raise ValueError(f"Zone {l.zone_id} introuvable")
+        if l.type_flux == "local":
+            available = lot.local_cartons
+        elif l.type_flux == "fitini_fê":
+            available = lot.fitini_fê_cartons
+        else:
+            raise ValueError(f"Type flux inconnu : {l.type_flux}")
+        if l.nb_cartons > available:
+            raise ValueError(f"Pas assez de cartons {l.type_flux} : {available} disponibles, {l.nb_cartons} demandés")
+
+        ligne = DemandeTransfertLigne(
+            demande_id=demande.id, type_flux=l.type_flux,
+            nb_cartons=l.nb_cartons, zone_id=l.zone_id,
+        )
+        db.add(ligne)
+
+    db.commit(); db.refresh(demande)
+    return demande
+
+
+def valider_demande_transfert(db: Session, demande_id: int) -> "DemandeTransfert":
+    from models import DemandeTransfert, DemandeTransfertLigne, StockZone, Produit
+    demande = db.get(DemandeTransfert, demande_id)
+    if not demande:
+        raise ValueError(f"Demande {demande_id} introuvable")
+    if demande.statut != "en_attente":
+        raise ValueError(f"Demande déjà {demande.statut}")
+
+    lot = get_lot(db, demande.lot_id)
+    lignes = db.query(DemandeTransfertLigne).filter(DemandeTransfertLigne.demande_id == demande_id).all()
+
+    produit_local = db.query(Produit).filter(Produit.nom == "Local").first()
+    produit_fitini = db.query(Produit).filter(Produit.nom == "Fitini Fê").first()
+
+    for ligne in lignes:
+        if ligne.type_flux == "local":
+            produit = produit_local
+            poids_sachet = lot.local_poids_sachet
+        else:
+            produit = produit_fitini
+            poids_sachet = lot.fitini_fê_poids_sachet
+        if not produit:
+            raise ValueError(f"Produit introuvable pour {ligne.type_flux}")
+
+        quantite = round(ligne.nb_cartons * 6 * poids_sachet, 2)
+        stock = StockZone(
+            zone_id=ligne.zone_id, lot_id=lot.id, produit_id=produit.id,
+            quantite=quantite, sachets=ligne.nb_cartons * 6,
+        )
+        db.add(stock)
+        ligne.statut = "validee"
+
+    demande.statut = "validee"
+    lot.statut_transfert = "valide"
+    db.commit(); db.refresh(demande)
+    return demande
+
+
+def annuler_demande_transfert(db: Session, demande_id: int) -> "DemandeTransfert":
+    from models import DemandeTransfert
+    demande = db.get(DemandeTransfert, demande_id)
+    if not demande:
+        raise ValueError(f"Demande {demande_id} introuvable")
+    demande.statut = "annulee"
+    db.commit(); db.refresh(demande)
+    return demande
+
+
+def get_demandes_transfert(db: Session, lot_id: int = None, statut: str = None):
+    from models import DemandeTransfert
+    q = db.query(DemandeTransfert)
+    if lot_id:
+        q = q.filter(DemandeTransfert.lot_id == lot_id)
+    if statut:
+        q = q.filter(DemandeTransfert.statut == statut)
+    return q.order_by(DemandeTransfert.date_demande.desc()).all()
+
+
+def get_demande_transfert(db: Session, demande_id: int):
+    from models import DemandeTransfert
+    return db.get(DemandeTransfert, demande_id)
+
+
+# ── RECONDITIONNEMENT (sachets 100g) ──
+
+def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
+                            nb_cartons_entree: int, responsable: str = "",
+                            notes: str = "") -> dict:
+    from models import Reconditionnement, StockZone, Produit
+    lot = get_lot(db, lot_id)
+    if not lot:
+        raise ValueError(f"Lot {lot_id} introuvable")
+
+    if type_source == "local":
+        disponible = lot.local_cartons
+        poids_sachet = lot.local_poids_sachet
+    elif type_source == "fitini_fê":
+        disponible = lot.fitini_fê_cartons
+        poids_sachet = lot.fitini_fê_poids_sachet
+    else:
+        raise ValueError(f"Type source inconnu : {type_source}")
+
+    if nb_cartons_entree > disponible:
+        raise ValueError(f"Pas assez de cartons {type_source} : {disponible} dispo, {nb_cartons_entree} demandés")
+
+    nb_sachets_100g = nb_cartons_entree * 6 * round(poids_sachet / 0.1)
+
+    produit = db.query(Produit).filter(Produit.nom == f"Sachet 100g {type_source}").first()
+    if not produit:
+        produit = Produit(nom=f"Sachet 100g {type_source}", unite_mesure="unité",
+                          stock_actuel=0, categorie_id=None)
+        db.add(produit); db.flush()
+
+    stock_exist = db.query(StockZone).filter(
+        StockZone.lot_id == lot_id, StockZone.produit_id == produit.id,
+        StockZone.date_sortie.is_(None)
+    ).first()
+    if stock_exist:
+        stock_exist.quantite += nb_sachets_100g * 0.1
+        stock_exist.sachets = (stock_exist.sachets or 0) + nb_sachets_100g
+    else:
+        stock_new = StockZone(
+            zone_id=1, lot_id=lot_id, produit_id=produit.id,
+            quantite=round(nb_sachets_100g * 0.1, 2), sachets=nb_sachets_100g,
+        )
+        db.add(stock_new)
+
+    if type_source == "local":
+        lot.local_cartons -= nb_cartons_entree
+    else:
+        lot.fitini_fê_cartons -= nb_cartons_entree
+
+    recond = Reconditionnement(
+        lot_id=lot_id, type_source=type_source,
+        nb_cartons_entree=nb_cartons_entree,
+        nb_sachets_100g_sortie=nb_sachets_100g,
+        responsable=responsable, notes=notes,
+    )
+    db.add(recond)
+    db.commit(); db.refresh(recond)
+
+    return {
+        "id": recond.id, "lot_id": lot_id, "type_source": type_source,
+        "nb_cartons_entree": nb_cartons_entree,
+        "nb_sachets_100g_sortie": nb_sachets_100g,
+        "poids_total_kg": round(nb_sachets_100g * 0.1, 2),
+    }
+
+
+def get_reconditionnements(db: Session, lot_id: int = None):
+    from models import Reconditionnement
+    q = db.query(Reconditionnement)
+    if lot_id:
+        q = q.filter(Reconditionnement.lot_id == lot_id)
+    return q.order_by(Reconditionnement.date_reconditionnement.desc()).all()
+
+
+# ── DETECTION D'ANOMALIES ──
+
+def detecter_anomalies(db: Session) -> list:
+    from models import EtapeProduction, StockZone
+    anomalies = []
+    lots = db.query(Lot).filter(Lot.statut.notin_(["expédié", "périmé"])).all()
+    for lot in lots:
+        etapes = get_etapes_lot(db, lot.id)
+
+        if lot.statut in ["en production", "en conditionnement", "terminé"]:
+            musserie = next((e for e in etapes if e.etape == "musserie"), None)
+            if not musserie or musserie.statut != "terminé":
+                anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "production_sans_musserie",
+                                  "message": f"{lot.code_lot} est en {lot.statut} mais n'a pas de musserie terminée",
+                                  "severite": "error"})
+
+        if lot.statut in ["en conditionnement", "terminé"]:
+            prod = next((e for e in etapes if e.etape == "production"), None)
+            if not prod or prod.statut != "terminé":
+                anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "conditionnement_sans_production",
+                                  "message": f"{lot.code_lot} est en {lot.statut} mais la production n'est pas terminée",
+                                  "severite": "error"})
+
+        if lot.statut == "terminé":
+            cond = next((e for e in etapes if e.etape == "conditionnement"), None)
+            if not cond or cond.statut != "termine":
+                anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "termine_sans_conditionnement",
+                                  "message": f"{lot.code_lot} est terminé mais le conditionnement n'est pas fait",
+                                  "severite": "warning"})
+
+            if lot.statut_transfert == "en_attente":
+                has_local = lot.local_cartons > 0
+                has_fitini = lot.fitini_fê_cartons > 0
+                if has_local or has_fitini:
+                    anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "pas_de_transfert",
+                                      "message": f"{lot.code_lot} a des cartons non transférés en chambre froide",
+                                      "severite": "warning"})
+
+    return anomalies
+
+
+# ── HISTORIQUE MUSSERIE ──
+
+def get_historique_musserie(db: Session, lot_id: int = None):
+    from models import EtapeProduction
+    q = db.query(EtapeProduction).filter(EtapeProduction.etape == "musserie")
+    if lot_id:
+        q = q.filter(EtapeProduction.lot_id == lot_id)
+    return q.order_by(EtapeProduction.date_debut.desc()).all()
+
+
+def get_historique_production(db: Session, lot_id: int = None):
+    from models import EtapeProduction
+    q = db.query(EtapeProduction).filter(EtapeProduction.etape == "production")
+    if lot_id:
+        q = q.filter(EtapeProduction.lot_id == lot_id)
+    return q.order_by(EtapeProduction.date_debut.desc()).all()
+
+
+def get_historique_conditionnement(db: Session, lot_id: int = None):
+    from models import EtapeProduction
+    q = db.query(EtapeProduction).filter(EtapeProduction.etape == "conditionnement")
+    if lot_id:
+        q = q.filter(EtapeProduction.lot_id == lot_id)
+    return q.order_by(EtapeProduction.date_debut.desc()).all()

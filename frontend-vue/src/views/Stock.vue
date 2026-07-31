@@ -1,11 +1,6 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">Stock & Zones</h1>
-        <p class="page-subtitle">Gestion des stocks par zone de stockage</p>
-      </div>
-    </div>
+    <PageHeader title="Stock & Zones" subtitle="Gestion des stocks par zone de stockage" />
 
     <LoadingSpinner v-if="loading" />
     <template v-else>
@@ -48,6 +43,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { getZonesStock, getContenuZone } from '../api'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import PageHeader from '../components/PageHeader.vue'
 
 const zones = ref([])
 const stocksByZone = reactive({})
@@ -56,10 +52,10 @@ const loading = ref(true)
 async function load() {
   loading.value = true
   try {
-    zones.value = await getZonesStock()
-    for (const zone of zones.value) {
-      stocksByZone[zone.id] = await getContenuZone(zone.id)
-    }
+    const z = await getZonesStock()
+    zones.value = z
+    const contents = await Promise.all(z.map(zone => getContenuZone(zone.id)))
+    z.forEach((zone, i) => { stocksByZone[zone.id] = contents[i] })
   } finally { loading.value = false }
 }
 

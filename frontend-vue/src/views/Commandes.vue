@@ -1,23 +1,21 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">Commandes</h1>
-        <p class="page-subtitle">Gestion des commandes clients</p>
-      </div>
-      <button v-if="!showForm" class="btn btn-primary" @click="showForm = true">+ Nouvelle</button>
-    </div>
+    <PageHeader title="Commandes" subtitle="Gestion des commandes clients">
+      <template #actions>
+        <button v-if="!showForm" class="btn btn-primary" @click="showForm = true">+ Nouvelle</button>
+      </template>
+    </PageHeader>
 
     <LoadingSpinner v-if="loading" />
     <template v-else>
       <div v-if="showForm" class="card anim-slide" style="margin-bottom:20px">
         <div class="card-header">
           <h3>Nouvelle commande</h3>
-          <button class="btn btn-ghost btn-sm" @click="showForm = false; resetForm()">✕</button>
+          <button class="btn btn-ghost btn-sm" @click="showForm = false; resetForm()" aria-label="Fermer">✕</button>
         </div>
         <div class="form-card">
           <div class="form-row">
-            <div class="form-group"><label>Client *</label><input v-model="form.client_nom" class="input" /></div>
+            <div class="form-group"><label>Client *</label><input ref="firstInput" v-model="form.client_nom" class="input" /></div>
             <div class="form-group"><label>Contact</label><input v-model="form.client_contact" class="input" /></div>
             <div class="form-group"><label>Livraison prévue</label><input type="date" v-model="form.date_livraison_prevue" class="input" /></div>
           </div>
@@ -31,7 +29,7 @@
               </select>
               <input type="number" v-model.number="ligne.quantite" class="input" style="flex:1" placeholder="Qté" min="0" />
               <input type="number" v-model.number="ligne.prix_unitaire" class="input" style="flex:1" placeholder="Prix" min="0" />
-              <button class="btn btn-ghost btn-sm" @click="form.lignes.splice(i, 1)">✕</button>
+              <button class="btn btn-ghost btn-sm" @click="form.lignes.splice(i, 1)" aria-label="Supprimer la ligne">✕</button>
             </div>
             <button class="btn btn-sm btn-outline" style="margin-top:8px" @click="form.lignes.push({ produit_id: '', quantite: 0, prix_unitaire: 0 })">+ Ajouter ligne</button>
           </div>
@@ -48,7 +46,11 @@
       </div>
 
       <div v-else>
-        <div v-for="cmd in commandes" :key="cmd.id" class="card anim-fade" style="margin-bottom:10px">
+        <div class="filters">
+          <input v-model="recherche" class="input" placeholder="Rechercher client..." style="max-width:260px" />
+        </div>
+        <EmptyState v-if="filteredCommandes.length === 0" :text="recherche ? 'Aucun résultat' : 'Aucune commande'" />
+        <div v-for="cmd in filteredCommandes" :key="cmd.id" class="card anim-fade" style="margin-bottom:10px">
           <div class="card-header" style="margin-bottom:0">
             <div style="display:flex;align-items:center;gap:10px">
               <strong>{{ cmd.client_nom }}</strong>
@@ -77,20 +79,32 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import { getCommandes, createCommande, updateCommandeStatut, getProduits } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import PageHeader from '../components/PageHeader.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const commandes = ref([])
 const produits = ref([])
 const loading = ref(true)
 const saving = ref(false)
 const showForm = ref(false)
+const recherche = ref('')
 const toast = useToastStore()
+const firstInput = ref(null)
 const form = reactive({ client_nom: '', client_contact: '', date_livraison_prevue: '', notes: '', lignes: [] })
 function resetForm() { form.client_nom = ''; form.client_contact = ''; form.date_livraison_prevue = ''; form.notes = ''; form.lignes = [] }
+
+watch(showForm, (v) => { if (v) nextTick(() => firstInput.value?.focus()) })
+
+const filteredCommandes = computed(() => {
+  if (!recherche.value) return commandes.value
+  const q = recherche.value.toLowerCase()
+  return commandes.value.filter(c => c.client_nom.toLowerCase().includes(q))
+})
 
 async function load() {
   loading.value = true

@@ -21,12 +21,26 @@ def valider_musserie(lot_id: int, data: schemas.MusserieCreate,
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-@router.post("/valider/{lot_id}", response_model=schemas.EtapeProductionResponse)
+@router.post("/valider/{lot_id}")
 def valider_production(lot_id: int, data: schemas.ProductionCreate,
                        db: Session = Depends(get_db)):
-    """Valide l'étape production : chargement chariots → séchoir."""
+    """Valide un dryer : chargement chariots → séchoir."""
     try:
-        ep = crud.valider_production(db, lot_id, **data.model_dump())
+        result = crud.valider_production(db, lot_id, **data.model_dump())
+        return {"etape": schemas.EtapeProductionResponse.model_validate(result["etape"]), "dryers": result["dryers"]}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@router.get("/dryers/{lot_id}")
+def get_dryers(lot_id: int, db: Session = Depends(get_db)):
+    """Retourne la liste des dryers enregistrés pour un lot."""
+    return crud.get_dryers_production(db, lot_id)
+
+@router.post("/cloturer/{lot_id}", response_model=schemas.EtapeProductionResponse)
+def cloturer_production(lot_id: int, db: Session = Depends(get_db)):
+    """Clôture la production d'un lot (passe le statut à terminé)."""
+    try:
+        ep = crud.cloturer_production(db, lot_id)
         return ep
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -80,3 +94,23 @@ def mettre_a_jour_etape(etape_id: int, data: schemas.EtapeProductionUpdate,
             lot.statut = "en stock"
             db.commit()
     return ep
+
+# ── HISTORIQUE MUSSERIE ──
+
+@router.get("/musserie/historique")
+def historique_musserie(lot_id: int = None, db: Session = Depends(get_db)):
+    return crud.get_historique_musserie(db, lot_id)
+
+@router.get("/production/historique")
+def historique_production(lot_id: int = None, db: Session = Depends(get_db)):
+    return crud.get_historique_production(db, lot_id)
+
+@router.get("/conditionnement/historique")
+def historique_conditionnement(lot_id: int = None, db: Session = Depends(get_db)):
+    return crud.get_historique_conditionnement(db, lot_id)
+
+# ── ANOMALIES ──
+
+@router.get("/anomalies")
+def detecter_anomalies(db: Session = Depends(get_db)):
+    return crud.detecter_anomalies(db)

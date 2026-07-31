@@ -100,6 +100,14 @@ export async function validerProduction(lotId, payload) {
   const { data } = await api.post(`/production/valider/${lotId}`, payload)
   return data
 }
+export async function getDryersProduction(lotId) {
+  const { data } = await api.get(`/production/dryers/${lotId}`)
+  return data
+}
+export async function cloturerProduction(lotId) {
+  const { data } = await api.post(`/production/cloturer/${lotId}`)
+  return data
+}
 
 // ── Conditionnement ──
 export async function validerConditionnement(lotId, payload) {
@@ -164,5 +172,57 @@ export async function getStatutsCommandes() {
 // ── Catégories ──
 export async function getCategories() {
   const { data } = await api.get('/categories')
+  return data
+}
+
+// ── Transfert chambre froide ──
+export async function creerDemandeTransfert(payload) {
+  const { data } = await api.post('/stock/demande-transfert', payload)
+  return data
+}
+export async function getDemandesTransfert(params = {}) {
+  const { data } = await api.get('/stock/demandes-transfert', { params })
+  return data
+}
+export async function validerDemandeTransfert(id) {
+  const { data } = await api.post(`/stock/demande-transfert/${id}/valider`)
+  return data
+}
+export async function annulerDemandeTransfert(id) {
+  const { data } = await api.post(`/stock/demande-transfert/${id}/annuler`)
+  return data
+}
+
+// ── Reconditionnement (sachets 100g) ──
+export async function creerReconditionnement(payload) {
+  const { data } = await api.post('/stock/reconditionnement', payload)
+  return data
+}
+export async function getReconditionnements(params = {}) {
+  const { data } = await api.get('/stock/reconditionnements', { params })
+  return data
+}
+
+// ── Historique Musserie ──
+export async function getHistoriqueMusserie(params = {}) {
+  const { data } = await api.get('/production/musserie/historique', { params })
+  return data
+}
+
+// ── Historique Production ──
+export async function getHistoriqueProduction(params = {}) {
+  const { data } = await api.get('/production/production/historique', { params })
+  return data
+}
+
+// ── Historique Conditionnement ──
+export async function getHistoriqueConditionnement(params = {}) {
+  const { data } = await api.get('/production/conditionnement/historique', { params })
+  return data
+}
+
+// ── Anomalies ──
+export async function getAnomalies() {
+  const { data } = await api.get('/production/anomalies')
   return data
 }

@@ -42,6 +42,8 @@ class LotBase(BaseModel):
     local_cartons: int = 0; local_sachets: int = 0; local_poids_sachet: float = 2.5
     dechets_cartons: int = 0; dechets_sachets: int = 0; dechets_poids_sachet: float = 2.5
     rhum_cartons: int = 0; rhum_sachets: int = 0; rhum_poids_sachet: float = 2.5
+    fitini_fê_cartons: int = 0; fitini_fê_sachets: int = 0; fitini_fê_poids_sachet: float = 2.5
+    statut_transfert: str = "en_attente"
     ecart_bilan_pourcentage: Optional[float] = None
     date_reception: datetime = Field(default_factory=datetime.now)
     date_fabrication: Optional[datetime] = None; date_peremption: Optional[datetime] = None
@@ -73,6 +75,9 @@ class EtapeProductionBase(BaseModel):
     fruits_murs_kg: float = 0.0; dechets_tri_kg: float = 0.0
     dechets_lavage_kg: float = 0.0; retour_non_mur_kg: float = 0.0
     dechets_production_kg: float = 0.0
+    dryer: Optional[int] = None
+    nbre_chariots: Optional[int] = None
+    total_claies: Optional[int] = None
 class EtapeProductionCreate(EtapeProductionBase): pass
 class EtapeProductionUpdate(BaseModel):
     statut: Optional[str] = None; date_fin: Optional[datetime] = None
@@ -107,6 +112,9 @@ class ConditionnementCreate(BaseModel):
     rhum_cartons: int = 0
     rhum_sachets: int = 0
     rhum_poids_sachet: float = 2.5
+    fitini_fê_cartons: int = 0
+    fitini_fê_sachets: int = 0
+    fitini_fê_poids_sachet: float = 2.5
     responsable: str = ""
     notes: str = ""
 
@@ -159,7 +167,10 @@ class ChariotCreate(BaseModel):
 
 class ChariotResponse(BaseModel):
     id: int; etape_production_id: int; lot_id: int
-    numero_chariot: int; heure_remplissage: str; heure_entree_sechoir: str
+    numero_chariot: int; dryer: int; nbre_chariots: int; total_claies: int
+    quantite_totale: float; operateur: str
+    heure_remplissage: str; heure_entree_sechoir: str
+    created_at: Optional[datetime] = None
     class Config: from_attributes = True
 
 class ProductionCreate(BaseModel):
@@ -179,3 +190,43 @@ class DashboardProduction(BaseModel):
     lots_suivi: int; etapes_terminees: int; etapes_en_cours: int
     rendement_moyen_frais_sec: Optional[float] = None
     production_jour_kg: float = 0.0
+
+# ── DEMANDE DE TRANSFERT CHAMBRE FROIDE ──
+
+class DemandeTransfertLigneCreate(BaseModel):
+    type_flux: str
+    nb_cartons: int
+    zone_id: int
+
+class DemandeTransfertCreate(BaseModel):
+    lot_id: int
+    responsable: str = ""
+    notes: str = ""
+    lignes: List[DemandeTransfertLigneCreate]
+
+class DemandeTransfertLigneResponse(BaseModel):
+    id: int; type_flux: str; nb_cartons: int; zone_id: int; statut: str
+    zone: Optional[ZoneStockageResponse] = None
+    class Config: from_attributes = True
+
+class DemandeTransfertResponse(BaseModel):
+    id: int; lot_id: int; date_demande: datetime; responsable: str
+    statut: str; notes: str
+    lignes: List[DemandeTransfertLigneResponse] = []
+    lot: Optional[LotResponse] = None
+    class Config: from_attributes = True
+
+# ── RECONDITIONNEMENT (sachets 100g) ──
+
+class ReconditionnementCreate(BaseModel):
+    lot_id: int
+    type_source: str
+    nb_cartons_entree: int
+    responsable: str = ""
+    notes: str = ""
+
+class ReconditionnementResponse(BaseModel):
+    id: int; lot_id: int; date_reconditionnement: datetime
+    type_source: str; nb_cartons_entree: int; nb_sachets_100g_sortie: int
+    responsable: str; notes: str; statut: str
+    class Config: from_attributes = True

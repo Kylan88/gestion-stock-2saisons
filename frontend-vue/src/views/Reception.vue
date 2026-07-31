@@ -1,12 +1,10 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">Réception</h1>
-        <p class="page-subtitle">Enregistrer un nouveau lot de fruits frais</p>
-      </div>
-      <button v-if="!showForm" class="btn btn-primary" @click="showForm = true">+ Nouveau Lot</button>
-    </div>
+    <PageHeader title="Réception" subtitle="Enregistrer un nouveau lot de fruits frais">
+      <template #actions>
+        <button v-if="!showForm" class="btn btn-primary" @click="showForm = true">+ Nouveau Lot</button>
+      </template>
+    </PageHeader>
 
     <LoadingSpinner v-if="loading" />
     <template v-else>
@@ -14,13 +12,13 @@
       <div v-if="showForm" class="card anim-slide" style="margin-bottom:20px">
         <div class="card-header">
           <h3>Nouvelle réception</h3>
-          <button class="btn btn-ghost btn-sm" @click="showForm = false; resetForm()">✕ Fermer</button>
+          <button class="btn btn-ghost btn-sm" @click="showForm = false; resetForm()" aria-label="Fermer">✕ Fermer</button>
         </div>
         <div class="form-card">
           <div class="form-row">
             <div class="form-group">
               <label>Code lot *</label>
-              <input v-model="form.code_lot" class="input" placeholder="LOT-2026-XXX" />
+              <input ref="firstInput" v-model="form.code_lot" class="input" placeholder="LOT-2026-XXX" />
             </div>
             <div class="form-group">
               <label>Type de fruit *</label>
@@ -62,11 +60,7 @@
       </div>
 
       <!-- Liste -->
-      <div v-if="lots.length === 0" class="empty anim-fade">
-        <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
-        <div class="empty-text">Aucun lot réceptionné</div>
-        <p style="margin-top:6px;font-size:12px;color:var(--text-muted)">Créez votre premier lot avec le bouton ci-dessus</p>
-      </div>
+      <EmptyState v-if="lots.length === 0" text="Aucun lot réceptionné" subtext="Créez votre premier lot avec le bouton ci-dessus" />
 
       <div v-else class="table-wrap anim-fade">
         <table>
@@ -101,17 +95,20 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick, watch } from 'vue'
 import { getLots, createLot, updateLotStatut } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import PageHeader from '../components/PageHeader.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const lots = ref([])
 const loading = ref(true)
 const saving = ref(false)
 const showForm = ref(false)
 const toast = useToastStore()
+const firstInput = ref(null)
 
 const form = reactive({
   code_lot: '', type_fruit: '', fournisseur_nom: '', poids_frais: null,
@@ -122,6 +119,8 @@ function resetForm() {
   form.code_lot = ''; form.type_fruit = ''; form.fournisseur_nom = ''
   form.poids_frais = null; form.date_reception = ''; form.notes = ''
 }
+
+watch(showForm, (v) => { if (v) nextTick(() => firstInput.value?.focus()) })
 
 async function load() {
   loading.value = true

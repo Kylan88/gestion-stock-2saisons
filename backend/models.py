@@ -70,6 +70,12 @@ class Lot(Base):
     rhum_cartons = Column(Integer, default=0)
     rhum_sachets = Column(Integer, default=0)
     rhum_poids_sachet = Column(Float, default=2.5)
+    # Conditionnement — fitini fê (produit fini vendable)
+    fitini_fê_cartons = Column(Integer, default=0)
+    fitini_fê_sachets = Column(Integer, default=0)
+    fitini_fê_poids_sachet = Column(Float, default=2.5)
+    # Stock transfert chambre froide
+    statut_transfert = Column(String(20), default="en_attente")
     ecart_bilan_pourcentage = Column(Float, nullable=True)
     date_reception = Column(DateTime, default=datetime.now)
     date_fabrication = Column(DateTime, nullable=True)
@@ -102,6 +108,10 @@ class EtapeProduction(Base):
     dechets_lavage_kg = Column(Float, default=0.0)
     retour_non_mur_kg = Column(Float, default=0.0)
     dechets_production_kg = Column(Float, default=0.0)
+    # Production — chariots/dryer
+    dryer = Column(Integer, nullable=True)
+    nbre_chariots = Column(Integer, nullable=True)
+    total_claies = Column(Integer, nullable=True)
 
     lot = relationship("Lot", back_populates="etapes")
     chariots = relationship("Chariot", back_populates="etape")
@@ -112,8 +122,14 @@ class Chariot(Base):
     etape_production_id = Column(Integer, ForeignKey("etapes_production.id"), nullable=False)
     lot_id = Column(Integer, ForeignKey("lots.id"), nullable=False)
     numero_chariot = Column(Integer, nullable=False)
+    dryer = Column(Integer, nullable=False, default=1)
+    nbre_chariots = Column(Integer, nullable=False, default=1)
+    total_claies = Column(Integer, nullable=False, default=0)
+    quantite_totale = Column(Float, default=0.0)
+    operateur = Column(String(100), default="")
     heure_remplissage = Column(String(10), default="")
     heure_entree_sechoir = Column(String(10), default="")
+    created_at = Column(DateTime, default=datetime.now)
 
     etape = relationship("EtapeProduction", back_populates="chariots")
     lot = relationship("Lot")
@@ -187,4 +203,46 @@ class LigneCommande(Base):
 
     commande = relationship("Commande", back_populates="lignes")
     produit = relationship("Produit")
+    lot = relationship("Lot")
+
+# ── DEMANDE DE TRANSFERT CHAMBRE FROIDE ──
+
+class DemandeTransfert(Base):
+    __tablename__ = "demandes_transfert"
+    id = Column(Integer, primary_key=True, index=True)
+    lot_id = Column(Integer, ForeignKey("lots.id"), nullable=False)
+    date_demande = Column(DateTime, default=datetime.now)
+    responsable = Column(String(100), default="")
+    statut = Column(String(20), default="en_attente")
+    notes = Column(Text, default="")
+
+    lot = relationship("Lot")
+    lignes = relationship("DemandeTransfertLigne", back_populates="demande")
+
+class DemandeTransfertLigne(Base):
+    __tablename__ = "lignes_demande_transfert"
+    id = Column(Integer, primary_key=True, index=True)
+    demande_id = Column(Integer, ForeignKey("demandes_transfert.id"), nullable=False)
+    type_flux = Column(String(50), nullable=False)
+    nb_cartons = Column(Integer, nullable=False)
+    zone_id = Column(Integer, ForeignKey("zones_stockage.id"), nullable=False)
+    statut = Column(String(20), default="en_attente")
+
+    demande = relationship("DemandeTransfert", back_populates="lignes")
+    zone = relationship("ZoneStockage")
+
+# ── RECONDITIONNEMENT (sachets 100g) ──
+
+class Reconditionnement(Base):
+    __tablename__ = "reconditionnements"
+    id = Column(Integer, primary_key=True, index=True)
+    lot_id = Column(Integer, ForeignKey("lots.id"), nullable=False)
+    date_reconditionnement = Column(DateTime, default=datetime.now)
+    type_source = Column(String(50), nullable=False)
+    nb_cartons_entree = Column(Integer, nullable=False)
+    nb_sachets_100g_sortie = Column(Integer, default=0)
+    responsable = Column(String(100), default="")
+    notes = Column(Text, default="")
+    statut = Column(String(20), default="termine")
+
     lot = relationship("Lot")
