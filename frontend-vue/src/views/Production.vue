@@ -119,7 +119,7 @@
             </div>
             <div class="resume-item">
               <span class="resume-label">Qté par claie</span>
-              <span class="resume-val">2.5 kg</span>
+              <span class="resume-val">{{ kgParClaie(lot.id) }} kg</span>
             </div>
             <div class="resume-item resume-total">
               <span class="resume-label">Qté totale</span>
@@ -188,9 +188,9 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
+import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, TERMINE } from '../utils/statuses'
 
-const DRYER = { 1: { chariots: 6, claies: 42 }, 2: { chariots: 12, claies: 20 } }
-const QTÉ_PAR_CLAIE = 2.5
+const DRYER = { 1: { chariots: 6, claies: 42, kg_par_claie: 6.25 }, 2: { chariots: 12, claies: 20, kg_par_claie: 6.5 } }
 
 const showHistorique = ref(false)
 const historique = ref([])
@@ -219,8 +219,9 @@ const dryers = reactive({})
 
 function maxChariots(lotId) { return DRYER[f[lotId]?.dryer || 1].chariots }
 function claiesPerChariot(lotId) { return DRYER[f[lotId]?.dryer || 1].claies }
+function kgParClaie(lotId) { return DRYER[f[lotId]?.dryer || 1].kg_par_claie }
 function totalClaies(lotId) { return (f[lotId]?.nbre_chariots || 0) * claiesPerChariot(lotId) }
-function qtéTotale(lotId) { return Math.round(totalClaies(lotId) * QTÉ_PAR_CLAIE * 100) / 100 }
+function qtéTotale(lotId) { return Math.round(totalClaies(lotId) * kgParClaie(lotId) * 100) / 100 }
 function canSubmit(lotId) {
   const d = f[lotId]
   if (!d || !d.dryer || d.nbre_chariots <= 0) return false
@@ -228,7 +229,7 @@ function canSubmit(lotId) {
 }
 function onDryerChange(lotId) {
   const d = f[lotId]
-  if (d.nbre_chariots > maxChariots(lotId)) d.nbre_chariots = maxChariots(lotId)
+  d.nbre_chariots = maxChariots(lotId)
   rebuildChariots(lotId)
 }
 function rebuildChariots(lotId) {
@@ -251,18 +252,22 @@ function totalAllDryers(lotId) {
 
 function initForm(lotId) {
   if (!f[lotId]) {
+    const d = 1
+    const n = DRYER[d].chariots
     f[lotId] = reactive({
-      dryer: 1, nbre_chariots: 1,
-      operateur: '', chariots: [{ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false }],
+      dryer: d, nbre_chariots: n,
+      operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })),
     })
   }
 }
 
 function resetForm(lotId) {
   if (f[lotId]) {
-    f[lotId].dryer = 1
-    f[lotId].nbre_chariots = 1
-    f[lotId].chariots = [{ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false }]
+    const d = 1
+    const n = DRYER[d].chariots
+    f[lotId].dryer = d
+    f[lotId].nbre_chariots = n
+    f[lotId].chariots = Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false }))
     f[lotId].operateur = ''
   }
 }
@@ -276,17 +281,19 @@ async function load() {
   loading.value = true
   try {
     const raw = await getLots()
-    lots.value = raw.filter(l => l.statut === 'en production')
-    for (const lot of lots.value) {
+    const filtered = raw.filter(l => [EN_MUSSERIE, EN_PRODUCTION].includes(toCanonical(l.statut)))
+    const result = []
+    for (const lot of filtered) {
       const etapes = await getProductionsEtapes(lot.id)
       const epProd = etapes.find(e => e.etape === 'production')
-      if (epProd && epProd.statut === 'terminé') {
-        delete f[lot.id]
+      if (epProd && toCanonical(epProd.statut) === TERMINE) {
         continue
       }
+      result.push(lot)
       initForm(lot.id)
       await loadDryers(lot.id)
     }
+    lots.value = result
   } finally { loading.value = false }
 }
 
@@ -363,4 +370,5 @@ onMounted(load)
   border-radius: 99px; color: var(--text-muted);
 }
 .dryers-total { text-align: right; font-size: 14px; color: var(--primary); padding: 4px 0; }
+@media (max-width: 768px) { .chariot-grid { grid-template-columns: 1fr !important; } .dryer-chariots { gap: 4px; } }
 </style>

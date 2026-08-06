@@ -72,6 +72,7 @@
               <th>Poids</th>
               <th>Date</th>
               <th>Statut</th>
+              <th>Workflow</th>
               <th></th>
             </tr>
           </thead>
@@ -83,6 +84,7 @@
               <td>{{ lot.poids_frais }} kg</td>
               <td>{{ lot.date_reception?.slice(0,10) }}</td>
               <td><StatusBadge :status="lot.statut" /></td>
+              <td style="min-width:260px"><WorkflowProgress :statut="lot.statut" /></td>
               <td>
                 <button class="btn btn-sm btn-primary" @click="lancerMusserie(lot)">→ Musserie</button>
               </td>
@@ -97,11 +99,13 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick, watch } from 'vue'
 import { getLots, createLot, updateLotStatut } from '../api'
+import { RECEPTION, EN_MUSSERIE } from '../utils/statuses'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import EmptyState from '../components/EmptyState.vue'
+import WorkflowProgress from '../components/WorkflowProgress.vue'
 
 const lots = ref([])
 const loading = ref(true)
@@ -125,7 +129,7 @@ watch(showForm, (v) => { if (v) nextTick(() => firstInput.value?.focus()) })
 async function load() {
   loading.value = true
   try {
-    lots.value = await getLots({ statut: 'réception' })
+  lots.value = await getLots({ statut: RECEPTION })
   } finally { loading.value = false }
 }
 
@@ -150,7 +154,7 @@ async function save() {
 
 async function lancerMusserie(lot) {
   try {
-    await updateLotStatut(lot.id, 'en musserie')
+    await updateLotStatut(lot.id, EN_MUSSERIE)
     toast.success(`${lot.code_lot} envoyé en musserie`)
     await load()
   } catch {}

@@ -95,6 +95,7 @@ import { getLots, creerReconditionnement, getReconditionnements } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import PageHeader from '../components/PageHeader.vue'
+import { toCanonical, CONDITIONNE } from '../utils/statuses'
 
 const lots = ref([])
 const historique = ref([])
@@ -119,7 +120,7 @@ async function load() {
   loading.value = true
   try {
     const raw = await getLots()
-    lots.value = raw.filter(l => l.statut === 'terminé' && (l.local_cartons > 0 || l.fitini_fê_cartons > 0))
+    lots.value = raw.filter(l => toCanonical(l.statut) === CONDITIONNE && (l.local_cartons > 0 || l.fitini_fê_cartons > 0))
     for (const lot of lots.value) {
       form[lot.id] = reactive({ local: 0, fitini: 0, responsable: '' })
     }

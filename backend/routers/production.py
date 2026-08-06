@@ -21,6 +21,14 @@ def valider_musserie(lot_id: int, data: schemas.MusserieCreate,
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+@router.post("/musserie/{lot_id}/cloturer")
+def cloturer_musserie(lot_id: int, db: Session = Depends(get_db)):
+    """Clôture la musserie d'un lot et passe le statut à en_production."""
+    try:
+        return crud.cloturer_musserie(db, lot_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
 @router.post("/valider/{lot_id}")
 def valider_production(lot_id: int, data: schemas.ProductionCreate,
                        db: Session = Depends(get_db)):

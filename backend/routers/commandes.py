@@ -29,13 +29,16 @@ def obtenir_commande(commande_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=schemas.CommandeResponse, status_code=201)
 def creer_commande(data: schemas.CommandeCreate, db: Session = Depends(get_db)):
-    return crud.create_commande(
-        db,
-        client_nom=data.client_nom,
-        lignes_data=[l.model_dump() for l in data.lignes],
-        date_livraison_prevue=data.date_livraison_prevue,
-        notes=data.notes,
-    )
+    try:
+        return crud.create_commande(
+            db,
+            client_nom=data.client_nom,
+            lignes_data=[l.model_dump() for l in data.lignes],
+            date_livraison_prevue=data.date_livraison_prevue,
+            notes=data.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 @router.put("/{commande_id}/statut", response_model=schemas.CommandeResponse)
 def mettre_a_jour_statut(commande_id: int,

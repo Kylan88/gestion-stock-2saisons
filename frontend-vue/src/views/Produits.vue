@@ -2,6 +2,7 @@
   <div class="page">
     <PageHeader title="Produits" subtitle="Catalogue des produits">
       <template #actions>
+        <button v-if="!showForm" class="btn btn-outline btn-sm" @click="doExport">CSV</button>
         <button v-if="!showForm" class="btn btn-primary" @click="openCreate">+ Nouveau</button>
       </template>
     </PageHeader>
@@ -93,6 +94,7 @@
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { getProduits, createProduit, updateProduit, getCategories } from '../api'
 import { useToastStore } from '../stores/toast'
+import { exportCsv } from '../utils/exportCsv'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -172,6 +174,12 @@ async function save() {
 }
 
 function confirmDelete() { showConfirm.value = false }
+
+function doExport() {
+  const headers = ['Nom', 'Catégorie', 'Prix Unitaire', 'Stock Actuel', 'Stock Min', 'Unité']
+  const rows = filteredProduits.value.map(p => [p.nom, p.categorie?.nom || '', p.prix_unitaire, p.stock_actuel, p.stock_min, p.unite_mesure])
+  exportCsv(headers, rows, 'produits.csv')
+}
 
 onMounted(load)
 </script>

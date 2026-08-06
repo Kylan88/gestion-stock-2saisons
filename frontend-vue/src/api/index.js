@@ -74,8 +74,11 @@ export async function createLot(payload) {
   const { data } = await api.post('/lots/', payload)
   return data
 }
+import { toCanonical as toCanonicalStatus } from '../utils/statuses'
+
 export async function updateLotStatut(id, statut) {
-  const { data } = await api.put(`/lots/${id}/statut`, null, { params: { statut } })
+  const canonical = toCanonicalStatus(statut)
+  const { data } = await api.put(`/lots/${id}/statut`, null, { params: { statut: canonical } })
   return data
 }
 
@@ -96,6 +99,10 @@ export async function validerMusserie(lotId, payload) {
   const { data } = await api.post(`/production/musserie/${lotId}`, payload)
   return data
 }
+export async function cloturerMusserie(lotId) {
+  const { data } = await api.post(`/production/musserie/${lotId}/cloturer`)
+  return data
+}
 export async function validerProduction(lotId, payload) {
   const { data } = await api.post(`/production/valider/${lotId}`, payload)
   return data
@@ -112,6 +119,10 @@ export async function cloturerProduction(lotId) {
 // ── Conditionnement ──
 export async function validerConditionnement(lotId, payload) {
   const { data } = await api.post(`/conditionnement/lots/${lotId}`, payload)
+  return data
+}
+export async function cloturerConditionnement(lotId) {
+  const { data } = await api.post(`/conditionnement/lots/${lotId}/cloturer`)
   return data
 }
 
@@ -144,6 +155,10 @@ export async function getDashboardStats() {
 }
 export async function getDashboardProduction() {
   const { data } = await api.get('/dashboard/production')
+  return data
+}
+export async function getDashboardProductionMensuelle() {
+  const { data } = await api.get('/dashboard/production-mensuelle')
   return data
 }
 

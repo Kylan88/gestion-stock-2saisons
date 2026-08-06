@@ -5,7 +5,10 @@
         <h1 class="page-title">Dashboard</h1>
         <p class="page-subtitle">{{ todayDate }}</p>
       </div>
-      <button class="btn btn-outline btn-sm" @click="load">↻ Actualiser</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" @click="load">↻ Actualiser</button>
+        <button class="btn btn-outline btn-sm" @click="doPrint">Imprimer</button>
+      </div>
     </div>
 
     <LoadingSpinner v-if="loading" />
@@ -62,7 +65,7 @@
       <!-- KPI Row 2 -->
       <div class="kpi-row">
         <div class="kpi-card">
-          <div class="kpi-icon-soft" style="background:#F0FDFA;color:#14B8A6">
+          <div class="kpi-icon-soft" style="background:var(--primary-50);color:var(--primary)">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           </div>
           <div class="kpi-data">
@@ -181,7 +184,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getDashboardStats, getDashboardProduction, getAlertesStockBas } from '../api'
+import { getDashboardStats, getDashboardProduction, getAlertesStockBas, getDashboardProductionMensuelle } from '../api'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 
@@ -190,6 +193,7 @@ const error = ref(null)
 const stats = ref({})
 const prod = ref({})
 const stockBas = ref([])
+const prodMensuelle = ref([])
 
 const todayDate = computed(() => {
   return new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
@@ -200,24 +204,19 @@ function formatNum(v) {
 }
 
 const barData = computed(() => {
-  const months = ['Jan', 'Fev', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aou', 'Sep', 'Oct', 'Nov', 'Dec']
-  const now = new Date()
-  const values = []
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    values.push({ label: months[d.getMonth()], value: Math.round(Math.random() * 2000 + 500) })
-  }
+  if (!prodMensuelle.value.length) return []
+  const values = prodMensuelle.value
   const max = Math.max(...values.map(v => v.value), 1)
-  return values.map(v => ({ ...v, pct: Math.round((v.value / max) * 100) }))
+  return values.map(v => ({ label: v.mois, value: Math.round(v.value), pct: Math.round((v.value / max) * 100) }))
 })
 
 const donutSegments = computed(() => {
   const total = stats.value.total_lots_actifs || 1
   const enProd = stats.value.lots_en_production || 0
-  const enStock = stats.value.lots_en_stock || Math.max(0, total - enProd)
+  const enStock = stats.value.lots_en_stock || 0
   const circumference = 2 * Math.PI * 48
   const segments = [
-    { count: enStock, color: '#14B8A6' },
+    { count: enStock, color: '#165B3D' },
     { count: enProd, color: '#F59E0B' },
   ]
   let offset = 0
@@ -231,50 +230,60 @@ const donutSegments = computed(() => {
 })
 
 const donutLegend = computed(() => {
-  const enProd = stats.value.lots_en_production || 0
-  const enStock = Math.max(0, (stats.value.total_lots_actifs || 0) - enProd)
   return [
-    { label: 'En stock', count: enStock, color: '#14B8A6' },
-    { label: 'En production', count: enProd, color: '#F59E0B' },
+    { label: 'En stock', count: stats.value.lots_en_stock || 0, color: '#165B3D' },
+    { label: 'En production', count: stats.value.lots_en_production || 0, color: '#F59E0B' },
   ]
 })
 
 async function load() {
   loading.value = true; error.value = null
   try {
-    const [s, p, sb] = await Promise.all([
-      getDashboardStats(), getDashboardProduction(), getAlertesStockBas(),
+    const [s, p, sb, pm] = await Promise.all([
+      getDashboardStats(), getDashboardProduction(), getAlertesStockBas(), getDashboardProductionMensuelle(),
     ])
     stats.value = s
     prod.value = p
     stockBas.value = sb
+    prodMensuelle.value = pm
   } catch (e) {
     error.value = e.response?.data?.detail || e.message
   } finally { loading.value = false }
 }
 
+function doPrint() { window.print() }
+
 onMounted(load)
 </script>
 
 <style scoped>
-.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; }
 
 /* ── KPI Rows ── */
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
 
 .kpi-card {
-  background: white; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: white; border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 20px; display: flex; align-items: center; gap: 14px;
   transition: all var(--transition); position: relative;
+  animation: cardReveal 0.45s var(--ease) both;
 }
-.kpi-card:hover { box-shadow: var(--shadow-sm); }
+.kpi-card:nth-child(2) { animation-delay: 0.04s; }
+.kpi-card:nth-child(3) { animation-delay: 0.08s; }
+.kpi-card:nth-child(4) { animation-delay: 0.12s; }
+.kpi-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 .kpi-main { padding: 22px; }
 .kpi-main .kpi-data { flex: 1; min-width: 0; }
 
 .kpi-icon-dark {
   width: 48px; height: 48px; border-radius: 14px; flex-shrink: 0;
-  background: var(--dark); color: white;
+  background: var(--secondary); color: white;
   display: flex; align-items: center; justify-content: center;
 }
 
@@ -282,8 +291,8 @@ onMounted(load)
   width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
 }
-.kpi-icon-warn { background: #FEF2F2; color: #EF4444; }
-.kpi-icon-ok { background: #F0FDF4; color: #22C55E; }
+.kpi-icon-warn { background: #FEF2F2; color: #D64545; }
+.kpi-icon-ok { background: var(--success-light); color: var(--success); }
 
 .kpi-data { min-width: 0; }
 .kpi-value { font-size: 26px; font-weight: 700; color: var(--dark); line-height: 1.1; }
@@ -294,7 +303,7 @@ onMounted(load)
   position: absolute; top: 14px; right: 14px;
   padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600;
 }
-.kpi-badge-green { background: #DCFCE7; color: #16A34A; }
+.kpi-badge-green { background: var(--success-light); color: var(--success); }
 .kpi-badge-amber { background: #FEF3C7; color: #D97706; }
 .kpi-badge-red { background: #FEE2E2; color: #DC2626; }
 
@@ -322,12 +331,12 @@ onMounted(load)
   display: flex; align-items: flex-end; overflow: hidden;
 }
 .bar-fill {
-  width: 100%; border-radius: 8px; transition: height 0.6s ease;
+  width: 100%; border-radius: 8px; transition: height 0.7s var(--ease);
   display: flex; align-items: flex-end;
 }
 .bar-fill-inner {
   width: 100%; height: 100%; border-radius: 8px;
-  background: linear-gradient(180deg, var(--primary) 0%, #0D9488 100%);
+  background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 100%);
 }
 .bar-label {
   font-size: 11px; color: var(--text-muted); font-weight: 500;

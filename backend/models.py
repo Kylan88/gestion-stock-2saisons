@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 
 from database import Base
+import statuses
 
 class Categorie(Base):
     __tablename__ = "categories"
@@ -48,7 +49,7 @@ class Lot(Base):
     fournisseur_nom = Column(String(200), default="")
     produit_id = Column(Integer, ForeignKey("produits.id"), nullable=True)
     fournisseur_id = Column(Integer, ForeignKey("fournisseurs.id"), nullable=True)
-    statut = Column(String(20), default="réception")
+    statut = Column(String(20), default=statuses.RECEPTION)
     quantite_initiale = Column(Float, default=0.0)
     quantite_restante = Column(Float, default=0.0)
     poids_frais = Column(Float, default=0.0)
@@ -75,7 +76,7 @@ class Lot(Base):
     fitini_fê_sachets = Column(Integer, default=0)
     fitini_fê_poids_sachet = Column(Float, default=2.5)
     # Stock transfert chambre froide
-    statut_transfert = Column(String(20), default="en_attente")
+    statut_transfert = Column(String(20), default=statuses.EN_ATTENTE)
     ecart_bilan_pourcentage = Column(Float, nullable=True)
     date_reception = Column(DateTime, default=datetime.now)
     date_fabrication = Column(DateTime, nullable=True)
@@ -93,7 +94,7 @@ class EtapeProduction(Base):
     lot_id = Column(Integer, ForeignKey("lots.id"), nullable=False)
     etape = Column(String(50), nullable=False)
     ordre = Column(Integer, default=0)
-    statut = Column(String(20), default="en_attente")
+    statut = Column(String(20), default=statuses.EN_ATTENTE)
     date_debut = Column(DateTime, nullable=True)
     date_fin = Column(DateTime, nullable=True)
     poids_entree = Column(Float, default=0.0)
@@ -243,6 +244,6 @@ class Reconditionnement(Base):
     nb_sachets_100g_sortie = Column(Integer, default=0)
     responsable = Column(String(100), default="")
     notes = Column(Text, default="")
-    statut = Column(String(20), default="termine")
+    statut = Column(String(20), default=statuses.TERMINE)
 
     lot = relationship("Lot")

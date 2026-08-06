@@ -1,6 +1,10 @@
 <template>
   <div class="page">
-    <PageHeader title="Stock & Zones" subtitle="Gestion des stocks par zone de stockage" />
+    <PageHeader title="Stock & Zones" subtitle="Gestion des stocks par zone de stockage">
+      <template #actions>
+        <button class="btn btn-outline btn-sm" @click="doPrint">Imprimer</button>
+      </template>
+    </PageHeader>
 
     <LoadingSpinner v-if="loading" />
     <template v-else>
@@ -59,6 +63,8 @@ async function load() {
   } finally { loading.value = false }
 }
 
+function doPrint() { window.print() }
+
 onMounted(load)
 </script>
 
@@ -77,4 +83,5 @@ onMounted(load)
 .stock-lot { font-size: 11px; color: var(--text-muted); background: var(--surface); padding: 2px 8px; border-radius: 4px; }
 .stock-qte { text-align: right; display: flex; flex-direction: column; gap: 1px; }
 .stock-empty { color: var(--text-muted); font-size: 13px; text-align: center; padding: 16px 0; border-top: 1px solid var(--border-light); margin-top: 12px; }
+@media (max-width: 768px) { .zones-grid { grid-template-columns: 1fr !important; } }
 </style>

@@ -2,6 +2,7 @@
   <div class="page">
     <PageHeader title="Commandes" subtitle="Gestion des commandes clients">
       <template #actions>
+        <button v-if="!showForm" class="btn btn-outline btn-sm" @click="doExport">CSV</button>
         <button v-if="!showForm" class="btn btn-primary" @click="showForm = true">+ Nouvelle</button>
       </template>
     </PageHeader>
@@ -82,6 +83,7 @@
 import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import { getCommandes, createCommande, updateCommandeStatut, getProduits } from '../api'
 import { useToastStore } from '../stores/toast'
+import { exportCsv } from '../utils/exportCsv'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -126,6 +128,12 @@ async function save() {
 
 async function changerStatut(id, statut) {
   try { await updateCommandeStatut(id, statut); toast.success('Statut mis à jour'); await load() } catch {}
+}
+
+function doExport() {
+  const headers = ['Client', 'Date', 'Statut', 'Total (FCFA)']
+  const rows = filteredCommandes.value.map(c => [c.client_nom || '', c.date_commande ? new Date(c.date_commande).toLocaleDateString('fr-FR') : '', c.statut, c.total_ht ?? 0])
+  exportCsv(headers, rows, 'commandes.csv')
 }
 
 onMounted(load)

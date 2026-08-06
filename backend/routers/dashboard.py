@@ -18,6 +18,11 @@ def stats_production(db: Session = Depends(get_db)):
     """Statistiques dédiées à la production (lots, étapes, séchoirs, rendement)."""
     return crud.get_stats_production(db)
 
+@router.get("/production-mensuelle")
+def production_mensuelle(db: Session = Depends(get_db)):
+    """Production par mois sur les 6 derniers mois."""
+    return crud.get_production_mensuelle(db)
+
 @router.get("/stock-bas", response_model=List[schemas.ProduitResponse])
 def stock_bas(db: Session = Depends(get_db)):
     return crud.get_produits_stock_bas(db)

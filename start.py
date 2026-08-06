@@ -8,7 +8,7 @@ Usage :
     python start.py --api-only   # API uniquement
     python start.py --frontend-only  # Frontend uniquement
 """
-import sys, subprocess, os, signal, time
+import sys, subprocess, os, signal, time, shutil
 
 API_PORT = 8000
 FRONTEND_PORT = 8080
@@ -25,11 +25,14 @@ def start_api():
     )
 
 def start_frontend():
-    """Lance le frontend NiceGUI."""
-    os.chdir(os.path.join(os.path.dirname(__file__), "frontend"))
-    print("Demarrage du Frontend...")
+    """Lance le frontend Vue/Vite."""
+    os.chdir(os.path.join(os.path.dirname(__file__), "frontend-vue"))
+    npm = "npm.cmd" if os.name == "nt" else "npm"
+    if not shutil.which(npm):
+        raise RuntimeError("Node.js et npm sont requis pour lancer le frontend Vue.")
+    print("Demarrage du Frontend Vue...")
     return subprocess.Popen(
-        [sys.executable, "main.py"],
+        [npm, "run", "dev", "--", "--host", "0.0.0.0", "--port", str(FRONTEND_PORT)],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT
     )
 
@@ -37,10 +40,9 @@ if __name__ == "__main__":
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     processes = []
 
-    # Installation des dependances
-    print("Installation des dependances...")
-    for req in ["backend/requirements.txt", "frontend/requirements.txt"]:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", req])
+    # Installation des dependances backend
+    print("Installation des dependances backend...")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", "backend/requirements.txt"])
 
     args = set(sys.argv[1:])
 

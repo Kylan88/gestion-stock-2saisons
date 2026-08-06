@@ -13,6 +13,7 @@ import Commandes from '../views/Commandes.vue'
 import TransfertChambreFroid from '../views/TransfertChambreFroid.vue'
 import Reconditionnement from '../views/Reconditionnement.vue'
 import Anomalies from '../views/Anomalies.vue'
+import Historique from '../views/Historique.vue'
 
 const routes = [
   { path: '/', name: 'Dashboard', component: Dashboard },
@@ -28,6 +29,7 @@ const routes = [
   { path: '/fournisseurs', name: 'Fournisseurs', component: Fournisseurs },
   { path: '/commandes', name: 'Commandes', component: Commandes },
   { path: '/anomalies', name: 'Anomalies', component: Anomalies },
+  { path: '/historique', name: 'Historique', component: Historique },
 ]
 
 const router = createRouter({

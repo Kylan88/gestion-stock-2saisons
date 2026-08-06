@@ -25,7 +25,7 @@
         <div class="transfert-fluxes">
           <div v-if="lot.local_cartons > 0" class="transfert-flux">
             <div class="flux-info">
-              <span class="flux-badge" style="background:#0F766E">Local</span>
+              <span class="flux-badge" style="background:#0B2E20">Local</span>
               <span>{{ lot.local_cartons }} cartons disponibles</span>
             </div>
             <div class="form-row">
@@ -112,6 +112,7 @@ import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
+import { toCanonical, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const lots = ref([])
 const demandes = ref([])
@@ -140,7 +141,7 @@ async function load() {
   try {
     const [raw, z] = await Promise.all([getLots(), getZonesStock()])
     zones.value = z.filter(z => z.actif)
-    lots.value = raw.filter(l => l.statut === 'terminé')
+    lots.value = raw.filter(l => toCanonical(l.statut) === CONDITIONNE)
     for (const lot of lots.value) {
       initForm(lot.id, lot)
     }

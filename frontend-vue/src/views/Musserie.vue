@@ -19,6 +19,7 @@
           <tr>
             <th>Date</th>
             <th>Lot</th>
+            <th>Dryer</th>
             <th>Fruits murs</th>
             <th>Dechets tri</th>
             <th>Retour non mûr</th>
@@ -34,6 +35,7 @@
           <tr v-for="ep in historique" :key="ep.id">
             <td>{{ formatDate(ep.date_debut) }}</td>
             <td><strong>{{ ep.lot?.code_lot || ep.lot_id }}</strong></td>
+            <td>{{ ep.dryer ? 'Dryer ' + ep.dryer : '—' }}</td>
             <td>{{ ep.fruits_murs_kg }} kg</td>
             <td>{{ ep.dechets_tri_kg }} kg</td>
             <td>{{ ep.retour_non_mur_kg }} kg</td>
@@ -69,101 +71,187 @@
           </div>
         </div>
 
-        <div v-if="getEtape(lot)" class="etape-section">
-          <!-- Cumul déjà saisi -->
-          <div v-if="getEtape(lot).fruits_murs_kg > 0" class="cumul-box anim-fade">
-            <div class="cumul-header">Cumul des sessions sur ce lot</div>
-            <div class="cumul-details">
-              <span>Total traite : <strong>{{ round(getEtape(lot).fruits_murs_kg) }} kg</strong></span>
-              <span>Parti en production : <strong>{{ round(getEtape(lot).poids_sortie) }} kg</strong></span>
-              <span>Tri : {{ round(getEtape(lot).dechets_tri_kg) }} kg</span>
-              <span>Lavage : {{ round(getEtape(lot).dechets_lavage_kg) }} kg</span>
-              <span>Dechets prod. : {{ round(getEtape(lot).dechets_production_kg) }} kg</span>
-              <span>Retour non mur : {{ round(getEtape(lot).retour_non_mur_kg) }} kg</span>
-              <span v-if="getEtape(lot).rendement_pourcentage" style="font-weight:600;color:var(--primary)">
-                Rendement : {{ getEtape(lot).rendement_pourcentage }}%
-              </span>
+        <!-- Total cumul tous dryers -->
+        <div v-if="getEtapes(lot).length > 0" class="etape-section">
+          <div class="cumul-row">
+            <div v-for="ep in getEtapes(lot)" :key="ep.id" class="cumul-box anim-fade">
+              <div class="cumul-header">Dryer {{ ep.dryer || '—' }}</div>
+              <div class="cumul-details">
+                <span>Traité : <strong>{{ round(ep.fruits_murs_kg) }} kg</strong></span>
+                <span>→ Production : <strong>{{ round(ep.poids_sortie) }} kg</strong></span>
+                <span>Tri : {{ round(ep.dechets_tri_kg) }} kg</span>
+                <span>Lavage : {{ round(ep.dechets_lavage_kg) }} kg</span>
+                <span>Dechets prod. : {{ round(ep.dechets_production_kg) }} kg</span>
+                <span>Retour : {{ round(ep.retour_non_mur_kg) }} kg</span>
+                <span v-if="ep.rendement_pourcentage" style="font-weight:600;color:var(--primary)">
+                  Rendement : {{ ep.rendement_pourcentage }}%
+                </span>
+              </div>
             </div>
           </div>
 
-          <!-- Saisie du jour -->
-          <div class="form-card">
-            <div class="jour-card">
-              <div class="jour-label">Poids total manipulé du jour <strong>↓</strong></div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Fruits mûrs du jour (kg) *</label>
-                  <input type="number" v-model.number="f[lot.id].fruits_murs_kg" class="input" step="0.1" min="0" @input="recalc(lot.id)" />
-                </div>
-                <div class="form-group">
-                  <label>Déchets tri (kg)</label>
-                  <input type="number" v-model.number="f[lot.id].dechets_tri_kg" class="input" step="0.1" min="0" @input="recalc(lot.id)" />
+          <div class="cumul-total">
+            <span>Total traité : <strong>{{ totalCumulFruits(lot) }} kg</strong></span>
+            <span>→ Production : <strong>{{ totalCumulProd(lot) }} kg</strong></span>
+            <span>Perte : <strong>{{ totalCumulPerte(lot) }} kg</strong></span>
+            <span v-if="totalCumulRendement(lot) != null" style="color:var(--primary)">
+              Rendement : <strong>{{ totalCumulRendement(lot) }}%</strong>
+            </span>
+          </div>
+
+          <div style="margin-top:12px;text-align:right">
+            <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
+              {{ cloturing ? 'Clôture...' : 'Clôturer la musserie' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Deux formulaires Dryer 1 / Dryer 2 côte à côte -->
+        <div class="dryers-form-row">
+          <div v-for="d in [1, 2]" :key="d" class="dryer-form">
+            <div class="dryer-title">Dryer {{ d }}</div>
+
+            <!-- Si cumul existant, afficher résumé + formulaire nouveau jour -->
+            <div v-if="getEtapeForDryer(lot, d)" class="jour-card jour-existant">
+              <div class="jour-sous" style="background:var(--success-light)">
+                <div class="jour-subtitle" style="color:#166534">Déjà enregistré (cumul)</div>
+                <div class="cumul-details" style="font-size:13px">
+                  <span>Fruits mûrs : <strong>{{ round(getEtapeForDryer(lot, d).fruits_murs_kg) }} kg</strong></span>
+                  <span>Production : <strong>{{ round(getEtapeForDryer(lot, d).poids_sortie) }} kg</strong></span>
                 </div>
               </div>
+
               <div class="jour-sous">
-                <div class="jour-subtitle">Déduit des fruits mûrs du jour</div>
+                <div class="jour-subtitle">Ajouter la journée</div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Fruits mûrs (kg) *</label>
+                    <input type="number" v-model.number="f[lot.id][d].fruits_murs_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                  </div>
+                  <div class="form-group">
+                    <label>Déchets tri (kg)</label>
+                    <input type="number" v-model.number="f[lot.id][d].dechets_tri_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                  </div>
+                </div>
                 <div class="form-row">
                   <div class="form-group">
                     <label>Retour non mûr (kg)</label>
-                    <input type="number" v-model.number="f[lot.id].retour_non_mur_kg" class="input" step="0.1" min="0" @input="recalc(lot.id)" />
+                    <input type="number" v-model.number="f[lot.id][d].retour_non_mur_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
                   </div>
                   <div class="form-group">
                     <label>Déchets lavage (kg)</label>
-                    <input type="number" v-model.number="f[lot.id].dechets_lavage_kg" class="input" step="0.1" min="0" @input="recalc(lot.id)" />
+                    <input type="number" v-model.number="f[lot.id][d].dechets_lavage_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
                   </div>
                   <div class="form-group">
                     <label>Déchets production (kg)</label>
-                    <input type="number" v-model.number="f[lot.id].dechets_production_kg" class="input" step="0.1" min="0" @input="recalc(lot.id)" />
+                    <input type="number" v-model.number="f[lot.id][d].dechets_production_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group" style="flex:1">
+                    <label>Reste pour demain (kg)</label>
+                    <input type="number" v-model.number="f[lot.id][d].reste_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                  </div>
+                  <div class="form-group" style="flex:1">
+                    <label>Opérateur</label>
+                    <input v-model="f[lot.id][d].operateur" class="input" placeholder="Nom" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pas encore de cumul → formulaire complet -->
+            <div v-else class="jour-card">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Fruits mûrs (kg) *</label>
+                  <input type="number" v-model.number="f[lot.id][d].fruits_murs_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                </div>
+                <div class="form-group">
+                  <label>Déchets tri (kg)</label>
+                  <input type="number" v-model.number="f[lot.id][d].dechets_tri_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                </div>
+              </div>
+              <div class="jour-sous">
+                <div class="jour-subtitle">Déduit des fruits mûrs</div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Retour non mûr (kg)</label>
+                    <input type="number" v-model.number="f[lot.id][d].retour_non_mur_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                  </div>
+                  <div class="form-group">
+                    <label>Déchets lavage (kg)</label>
+                    <input type="number" v-model.number="f[lot.id][d].dechets_lavage_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                  </div>
+                  <div class="form-group">
+                    <label>Déchets production (kg)</label>
+                    <input type="number" v-model.number="f[lot.id][d].dechets_production_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
                   </div>
                 </div>
               </div>
               <div class="form-row">
-                <div class="form-group">
+                <div class="form-group" style="flex:1">
+                  <label>Reste pour demain (kg)</label>
+                  <input type="number" v-model.number="f[lot.id][d].reste_kg" class="input" step="0.1" min="0" @input="recalc(lot.id, d)" />
+                </div>
+                <div class="form-group" style="flex:1">
                   <label>Opérateur</label>
-                  <input v-model="f[lot.id].operateur" class="input" placeholder="Nom" />
+                  <input v-model="f[lot.id][d].operateur" class="input" placeholder="Nom" />
                 </div>
               </div>
             </div>
 
-            <!-- Bilan du jour -->
-            <div v-if="bilanJ[lot.id]" class="bilan-jour">
+            <!-- Bilan du jour (calculé en temps réel) -->
+            <div v-if="bilanJ[lot.id]?.[d]" class="bilan-jour">
               <div class="bilan-ligne">
-                <span class="bilan-prod">Part en production : <strong>{{ bilanJ[lot.id].prod }} kg</strong></span>
-                <span class="bilan-detail">= {{ bilanJ[lot.id].gross }} &minus; retour {{ bilanJ[lot.id].retour }} &minus; lavage {{ bilanJ[lot.id].lavage }} &minus; prod {{ bilanJ[lot.id].prodDechet }}</span>
+                <span class="bilan-prod">→ Ajout : <strong>{{ bilanJ[lot.id][d].prod }} kg</strong></span>
+                <span class="bilan-detail">= {{ bilanJ[lot.id][d].gross }} − retour {{ bilanJ[lot.id][d].retour }} − lavage {{ bilanJ[lot.id][d].lavage }}</span>
               </div>
-              <div class="bilan-ligne">
-                <span>Retire du lot : <strong>{{ bilanJ[lot.id].brut }} kg</strong></span>
-                <span>&minus; Retour non mur : <strong>{{ bilanJ[lot.id].retour }} kg</strong></span>
-                <span class="bilan-net">Retrait net : <strong>{{ bilanJ[lot.id].retire }} kg</strong></span>
-                <span class="bilan-restant">Restant : <strong>{{ bilanJ[lot.id].nouveauRestant }} kg</strong></span>
+              <div class="bilan-ligne" v-if="bilanJ[lot.id][d].reste != null">
+                <span>Reste pour demain : <strong>{{ bilanJ[lot.id][d].reste }} kg</strong></span>
               </div>
             </div>
 
-            <button class="btn btn-primary" :disabled="!f[lot.id].fruits_murs_kg || saving" @click="enregistrer(lot)">
-              {{ saving ? 'Enregistrement...' : 'Enregistrer la journée' }}
+            <button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px"
+              :disabled="!f[lot.id][d].fruits_murs_kg || saving[d]" @click="enregistrer(lot, d)">
+              {{ saving[d] ? '...' : 'Enregistrer Dryer ' + d }}
             </button>
           </div>
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      :show="!!confirmClotureLot"
+      title="Clôturer la musserie ?"
+      :message="'Terminer la musserie pour ' + (confirmClotureLot?.code_lot || '') + ' ? Le lot passera en production. Cette action est irréversible.'"
+      confirmText="Clôturer"
+      variant="warning"
+      @confirm="cloturer(confirmClotureLot)"
+      @cancel="confirmClotureLot = null"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { getLots, getProductionsEtapes, validerMusserie, getHistoriqueMusserie } from '../api'
+import { getLots, getProductionsEtapes, validerMusserie, cloturerMusserie, getHistoriqueMusserie } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { toCanonical, RECEPTION, EN_MUSSERIE } from '../utils/statuses'
 
 const lots = ref([])
 const etapesData = ref({})
 const loading = ref(true)
-const saving = ref(false)
+const saving = reactive({ 1: false, 2: false })
+const cloturing = ref(false)
 const toast = useToastStore()
 const f = reactive({})
 const bilanJ = reactive({})
+const confirmClotureLot = ref(null)
 
 const showHistorique = ref(false)
 const historique = ref([])
@@ -183,66 +271,102 @@ watch(showHistorique, (v) => { if (v) loadHistorique() })
 
 function round(v) { return Math.round((v || 0) * 100) / 100 }
 
-function getEtape(lot) {
-  return etapesData.value[lot.id]?.find(e => e.etape === 'musserie')
+function getEtapes(lot) {
+  return (etapesData.value[lot.id] || []).filter(e => e.etape === 'musserie')
 }
 
-function recalc(lotId) {
-  const d = f[lotId]
-  if (!d || !d.fruits_murs_kg) { bilanJ[lotId] = null; return }
+function getEtapeForDryer(lot, dryer) {
+  return getEtapes(lot).find(e => e.dryer === dryer) || null
+}
+
+function totalCumulFruits(lot) {
+  return round(getEtapes(lot).reduce((s, e) => s + (e.fruits_murs_kg || 0), 0))
+}
+function totalCumulProd(lot) {
+  return round(getEtapes(lot).reduce((s, e) => s + (e.poids_sortie || 0), 0))
+}
+function totalCumulPerte(lot) {
+  return round(getEtapes(lot).reduce((s, e) => s + (e.perte || 0), 0))
+}
+function totalCumulRendement(lot) {
+  const eps = getEtapes(lot)
+  if (!eps.length) return null
+  const totalFM = eps.reduce((s, e) => s + (e.fruits_murs_kg || 0), 0)
+  const totalPS = eps.reduce((s, e) => s + (e.poids_sortie || 0), 0)
+  return totalFM > 0 ? Math.round((totalPS / totalFM) * 1000) / 10 : null
+}
+
+function recalc(lotId, dryer) {
+  const d = f[lotId]?.[dryer]
+  if (!d || !d.fruits_murs_kg) { if (bilanJ[lotId]) bilanJ[lotId][dryer] = null; return }
   const gross = d.fruits_murs_kg || 0
   const retour = d.retour_non_mur_kg || 0
   const lavage = d.dechets_lavage_kg || 0
-  const prodDechet = d.dechets_production_kg || 0
-  const tri = d.dechets_tri_kg || 0
-  const prod = Math.max(0, gross - retour - lavage - prodDechet)
-  const brut = gross + tri
-  const retire = brut - retour
-  const lot = lots.value.find(l => l.id === lotId)
-  const restant = (lot?.quantite_restante ?? lot?.poids_frais ?? 0)
-  bilanJ[lotId] = {
+  const prod = Math.max(0, gross - retour - lavage)
+  const reste = d.reste_kg != null && d.reste_kg !== '' ? Number(d.reste_kg) : null
+  if (!bilanJ[lotId]) bilanJ[lotId] = {}
+  bilanJ[lotId][dryer] = {
     gross: round(gross), retour: round(retour), lavage: round(lavage),
-    prodDechet: round(prodDechet), tri: round(tri),
-    prod: round(prod), brut: round(brut), retire: round(retire),
-    nouveauRestant: round(restant - retire),
+    prod: round(prod), reste: reste != null ? round(reste) : null,
   }
 }
 
-function initForm(lotId, lot) {
-  if (!f[lotId]) {
-    f[lotId] = reactive({
+function initForm(lotId, dryer) {
+  if (!f[lotId]) f[lotId] = {}
+  if (!f[lotId][dryer]) {
+    f[lotId][dryer] = reactive({
       fruits_murs_kg: null, dechets_tri_kg: 0, dechets_lavage_kg: 0,
-      retour_non_mur_kg: 0, dechets_production_kg: 0, operateur: '',
+      retour_non_mur_kg: 0, dechets_production_kg: 0, reste_kg: null, operateur: '',
     })
   }
+}
+
+function recalcAll(lotId) {
+  recalc(lotId, 1)
+  recalc(lotId, 2)
 }
 
 async function load() {
   loading.value = true
   try {
     const raw = await getLots()
-    lots.value = raw.filter(l => ['réception', 'en musserie'].includes(l.statut))
-    for (const lot of lots.value) {
+    const filtered = raw.filter(l => [RECEPTION, EN_MUSSERIE].includes(toCanonical(l.statut)))
+    for (const lot of filtered) {
       etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
-      initForm(lot.id, lot)
+      initForm(lot.id, 1)
+      initForm(lot.id, 2)
+      recalcAll(lot.id)
     }
+    lots.value = filtered
   } finally { loading.value = false }
 }
 
-async function enregistrer(lot) {
-  saving.value = true
+async function enregistrer(lot, dryer) {
+  saving[dryer] = true
   try {
     await validerMusserie(lot.id, {
-      fruits_murs_kg: f[lot.id].fruits_murs_kg,
-      dechets_tri_kg: f[lot.id].dechets_tri_kg || 0,
-      dechets_lavage_kg: f[lot.id].dechets_lavage_kg || 0,
-      retour_non_mur_kg: f[lot.id].retour_non_mur_kg || 0,
-      dechets_production_kg: f[lot.id].dechets_production_kg || 0,
-      operateur: f[lot.id].operateur || '',
+      fruits_murs_kg: f[lot.id][dryer].fruits_murs_kg,
+      dechets_tri_kg: f[lot.id][dryer].dechets_tri_kg || 0,
+      dechets_lavage_kg: f[lot.id][dryer].dechets_lavage_kg || 0,
+      retour_non_mur_kg: f[lot.id][dryer].retour_non_mur_kg || 0,
+      dechets_production_kg: f[lot.id][dryer].dechets_production_kg || 0,
+      operateur: f[lot.id][dryer].operateur || '',
+      dryer: dryer,
+      reste_kg: f[lot.id][dryer].reste_kg != null ? f[lot.id][dryer].reste_kg : undefined,
     })
-    toast.success(`Session musserie enregistrée pour ${lot.code_lot}`)
+    toast.success(`Dryer ${dryer} enregistré pour ${lot.code_lot}`)
     await load()
-  } finally { saving.value = false }
+  } finally { saving[dryer] = false }
+}
+
+async function cloturer(lot) {
+  confirmClotureLot.value = null
+  cloturing.value = true
+  try {
+    await cloturerMusserie(lot.id)
+    toast.success(`Musserie clôturée pour ${lot.code_lot} — passage en production`)
+    await load()
+  } finally { cloturing.value = false }
 }
 
 onMounted(load)
@@ -250,18 +374,26 @@ onMounted(load)
 
 <style scoped>
 .etape-section { border-top: 1px solid var(--border-light); margin-top: 14px; padding-top: 14px; }
-.cumul-box { padding: 12px; background: var(--success-light); border-radius: var(--radius-sm); margin-bottom: 14px; }
+.cumul-row { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.cumul-box { flex: 1; min-width: 280px; padding: 12px; background: var(--success-light); border-radius: var(--radius-sm); }
 .cumul-header { font-weight: 600; margin-bottom: 6px; font-size: 13px; color: #166534; }
 .cumul-details { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: #15803D; }
-.bilan-jour { padding: 10px 14px; background: var(--surface); border-radius: var(--radius-sm); font-size: 12px; margin-bottom: 12px; }
-.bilan-ligne { display: flex; gap: 16px; flex-wrap: wrap; }
-.jour-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 14px; }
-.jour-label { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--dark); }
-.jour-sous { background: var(--surface); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 10px; }
+.cumul-total {
+  display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--text-secondary);
+}
+.dryers-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+.dryer-form { min-width: 0; }
+.dryer-title { font-size: 14px; font-weight: 700; color: var(--dark); margin-bottom: 8px; padding-left: 2px; }
+.jour-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.jour-existant { border-color: var(--success); border-width: 1.5px; }
+.jour-sous { background: var(--surface); border-radius: var(--radius-sm); padding: 10px; }
 .jour-subtitle { font-size: 11px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
-.empty-no-emoji { font-size: 28px; font-weight: 300; color: var(--border); }
+.bilan-jour { padding: 10px 14px; background: var(--surface); border-radius: var(--radius-sm); font-size: 12px; }
+.bilan-ligne { display: flex; gap: 16px; flex-wrap: wrap; }
 .bilan-detail { font-size: 11px; color: var(--text-muted); }
 .bilan-prod { font-weight: 600; color: var(--primary); }
-.bilan-net { font-weight: 600; color: var(--accent); }
-.bilan-restant { font-weight: 700; color: var(--dark); }
+.empty-no-emoji { font-size: 28px; font-weight: 300; color: var(--border); }
+@media (max-width: 768px) { .dryers-form-row { grid-template-columns: 1fr !important; } }
 </style>

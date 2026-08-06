@@ -5,6 +5,7 @@ from typing import List, Optional
 from database import get_db
 import crud
 import schemas
+import statuses
 
 router = APIRouter(prefix="/api/lots", tags=["Lots"])
 
@@ -24,8 +25,16 @@ def liste_lots(
 @router.get("/statuts/liste", response_model=List[str])
 def liste_statuts():
     """Liste des statuts possibles pour les lots."""
-    return ["réception", "en musserie", "en production", "en séchage",
-            "conditionné", "en stock", "expédié", "périmé"]
+    return [
+        statuses.RECEPTION,
+        statuses.EN_MUSSERIE,
+        statuses.EN_PRODUCTION,
+        statuses.EN_SECHAGE,
+        statuses.CONDITIONNE,
+        statuses.EN_STOCK,
+        statuses.EXPEDIE,
+        statuses.PERIME,
+    ]
 
 @router.get("/{lot_id}", response_model=schemas.LotResponse)
 def obtenir_lot(lot_id: int, db: Session = Depends(get_db)):
@@ -43,8 +52,11 @@ def creer_lot(data: schemas.LotCreate, db: Session = Depends(get_db)):
 @router.put("/{lot_id}/statut", response_model=schemas.LotResponse)
 def mettre_a_jour_statut(lot_id: int, statut: str = Query(..., description="Nouveau statut"),
                          db: Session = Depends(get_db)):
-    """Change le statut d'un lot (ex: réception → en musserie → etc.)."""
-    lot = crud.changer_statut_lot(db, lot_id, statut)
+    """Change le statut d'un lot (ex: reception → en musserie → etc.)."""
+    try:
+        lot = crud.changer_statut_lot(db, lot_id, statut)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if not lot:
         raise HTTPException(404, f"Lot {lot_id} introuvable")
     return lot
