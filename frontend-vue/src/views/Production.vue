@@ -280,6 +280,11 @@ function totalAllDryers(lotId) {
   return dryers[lotId].reduce((sum, d) => sum + d.quantite_totale, 0)
 }
 
+function totalChariots(lotId) {
+  if (!dryers[lotId]) return 0
+  return dryers[lotId].reduce((sum, d) => sum + (d.nbre_chariots || 0), 0)
+}
+
 function getMusseriePoids(lotId, dryer) {
   const data = musserieData[lotId]
   if (!data) return 0

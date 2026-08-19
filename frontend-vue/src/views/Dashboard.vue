@@ -206,7 +206,7 @@ import { ref, computed, onMounted } from 'vue'
 import { getDashboardStats, getDashboardProduction, getAlertesStockBas, getDashboardProductionMensuelle, getLots, getProductionsEtapes } from '../api'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
-import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK } from '../utils/statuses'
+import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const loading = ref(true)
 const error = ref(null)

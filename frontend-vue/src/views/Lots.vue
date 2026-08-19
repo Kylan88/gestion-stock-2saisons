@@ -57,7 +57,7 @@
               <td>{{ lot.type_fruit || lot.produit?.nom || '—' }}</td>
               <td>{{ formatKg(lot.poids_frais) }} kg</td>
               <td>
-                <span v-if="getCumulTraite(lot) > 0" class="traite-val">{{ formatKg(getCumulTraite(lot)) }} kg</span>
+                <span v-if="getTraitePoids(lot) > 0" class="traite-val">{{ formatKg(getTraitePoids(lot)) }} kg</span>
                 <span v-else class="text-muted">—</span>
               </td>
               <td style="min-width:120px">
@@ -127,7 +127,7 @@ import PageHeader from '../components/PageHeader.vue'
 import WorkflowProgress from '../components/WorkflowProgress.vue'
 import PipelineView from '../components/PipelineView.vue'
 
-import { RECEPTION, EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME, toCanonical, TERMINE, EN_COURS, EN_ATTENTE } from '../utils/statuses'
+import { RECEPTION, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME, toCanonical, TERMINE, EN_COURS, EN_ATTENTE } from '../utils/statuses'
 
 const route = useRoute()
 const lots = ref([])
@@ -144,15 +144,36 @@ const statuts = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK, E
 
 function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
 
-function getCumulTraite(lot) {
-  if (lot.statut === 'reception') return 0
-  return lot.poids_frais - (lot.quantite_restante || lot.poids_frais)
-}
-
 function lotProgressPct(lot) {
   if (!lot.poids_frais) return 0
-  const traite = getCumulTraite(lot)
-  return Math.min(100, Math.round((traite / lot.poids_frais) * 100))
+  const statut = toCanonical(lot.statut)
+  const total = lot.poids_frais
+
+  // Progression par étape réelle
+  if (statut === RECEPTION) return 0
+  if (statut === EN_MUSSERIE) {
+    // Progression musserie : basée sur quantite_restante si dispo
+    const restant = lot.quantite_restante || total
+    return Math.min(30, Math.round(((total - restant) / total) * 100))
+  }
+  if (statut === EN_PRODUCTION) {
+    // Production : 30-60%
+    return 30 + Math.min(30, Math.round((total * 0.5 / total) * 100))
+  }
+  if (statut === EN_CONDITIONNEMENT) {
+    return 60 + Math.min(25, 25)
+  }
+  if (statut === CONDITIONNE) {
+    return 85
+  }
+  if (statut === EN_STOCK) return 100
+  if (statut === EXPEDIE || statut === PERIME) return 100
+  return 0
+}
+
+function getTraitePoids(lot) {
+  if (!lot.poids_frais) return 0
+  return Math.round(lot.poids_frais * lotProgressPct(lot) / 100)
 }
 
 function hasCartons(lot) {

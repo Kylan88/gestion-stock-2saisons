@@ -221,7 +221,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
-import { toCanonical, EN_PRODUCTION, CONDITIONNE } from '../utils/statuses'
+import { toCanonical, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE } from '../utils/statuses'
 
 const lots = ref([])
 const zones = ref([])
