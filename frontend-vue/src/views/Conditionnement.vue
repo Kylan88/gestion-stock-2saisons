@@ -349,7 +349,7 @@ async function load() {
     zones.value = z.filter(zz => zz.actif)
 
     const result = []
-    const filtered = raw.filter(l => [EN_PRODUCTION, CONDITIONNE].includes(toCanonical(l.statut)))
+    const filtered = raw.filter(l => [EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
     for (const lot of filtered) {
       etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
       const prodEtapes = etapesData.value[lot.id].filter(e => e.etape === 'production')

@@ -29,7 +29,8 @@ const WORKFLOW = [
   { key: 'reception', label: 'Réception' },
   { key: 'en_musserie', label: 'Musserie' },
   { key: 'en_production', label: 'Production' },
-  { key: 'conditionne', label: 'Conditionnement' },
+  { key: 'en_conditionnement', label: 'Conditionnement' },
+  { key: 'conditionne', label: 'Conditionné' },
   { key: 'en_stock', label: 'Stock' },
 ]
 

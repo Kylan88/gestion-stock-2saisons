@@ -226,14 +226,14 @@ function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
 
 const lotsMusserie = computed(() => allLots.value.filter(l => [EN_MUSSERIE].includes(toCanonical(l.statut))))
 const lotsProduction = computed(() => allLots.value.filter(l => [EN_PRODUCTION].includes(toCanonical(l.statut))))
-const lotsConditionnement = computed(() => allLots.value.filter(l => [CONDITIONNE].includes(toCanonical(l.statut))))
+const lotsConditionnement = computed(() => allLots.value.filter(l => [EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut))))
 
 const totalMusserieJour = computed(() => prod.value.musserie_jour_kg || 0)
 const totalProductionJour = computed(() => prod.value.production_jour_kg || 0)
 const totalConditionnementJour = computed(() => prod.value.conditionnement_jour_kg || 0)
 
 const lotsEnCours = computed(() => {
-  return allLots.value.filter(l => [EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE].includes(toCanonical(l.statut)))
+  return allLots.value.filter(l => [EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
 })
 
 function round(v) { return Math.round((v || 0) * 100) / 100 }

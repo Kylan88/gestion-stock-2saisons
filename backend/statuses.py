@@ -3,7 +3,7 @@
 RECEPTION = "reception"
 EN_MUSSERIE = "en_musserie"
 EN_PRODUCTION = "en_production"
-EN_SECHAGE = "en_sechage"
+EN_CONDITIONNEMENT = "en_conditionnement"
 CONDITIONNE = "conditionne"
 EN_STOCK = "en_stock"
 EXPEDIE = "expedie"
@@ -16,7 +16,7 @@ VALIDEE = "validee"
 VALIDE = "valide"
 ANNULEE = "annulee"
 
-STATUTS_LOT = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, EN_SECHAGE, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
+STATUTS_LOT = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
 
 # Normalization helpers
 import unicodedata
@@ -26,7 +26,7 @@ _LEGACY_MAP = {
     RECEPTION: ['réception', 'reception'],
     EN_MUSSERIE: ['en musserie', 'en_musserie', 'en-musserie'],
     EN_PRODUCTION: ['en production', 'en_production', 'en-production'],
-    EN_SECHAGE: ['en séchage', 'en sechage', 'en_sechage', 'ensechage'],
+    EN_CONDITIONNEMENT: ['en conditionnement', 'en_conditionnement', 'en-conditionnement'],
     CONDITIONNE: ['conditionné', 'conditionne', 'conditionne'],
     EN_STOCK: ['en stock', 'en_stock'],
     EXPEDIE: ['expédié', 'expedie', 'expedie'],
@@ -73,15 +73,15 @@ def is_lot_status(status: str) -> bool:
 
 # ── Workflow validation ──
 # Order defines the valid production pipeline
-WORKFLOW_ORDER = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, EN_SECHAGE, CONDITIONNE, EN_STOCK]
+WORKFLOW_ORDER = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK]
 TERMINAL_STATUSES = [EXPEDIE, PERIME]
 
 # Allowed transitions: from -> set of allowed "to"
 TRANSITIONS = {
     RECEPTION: {EN_MUSSERIE},
     EN_MUSSERIE: {EN_PRODUCTION},
-    EN_PRODUCTION: {EN_SECHAGE, CONDITIONNE},
-    EN_SECHAGE: {CONDITIONNE},
+    EN_PRODUCTION: {EN_CONDITIONNEMENT},
+    EN_CONDITIONNEMENT: {CONDITIONNE},
     CONDITIONNE: {EN_STOCK},
     EN_STOCK: {EXPEDIE, PERIME},
     EXPEDIE: set(),

@@ -74,6 +74,7 @@
                 <button v-if="toCanonical(lot.statut) === RECEPTION" class="btn btn-sm btn-primary" @click.stop="avancer(lot.id, EN_MUSSERIE)">→ Musserie</button>
                 <button v-else-if="toCanonical(lot.statut) === EN_MUSSERIE" class="btn btn-sm btn-outline" @click.stop="$router.push('/musserie')">Ouvrir</button>
                 <button v-else-if="toCanonical(lot.statut) === EN_PRODUCTION" class="btn btn-sm btn-outline" @click.stop="$router.push('/production')">Ouvrir</button>
+                <button v-else-if="toCanonical(lot.statut) === EN_CONDITIONNEMENT" class="btn btn-sm btn-outline" @click.stop="$router.push('/conditionnement')">Ouvrir</button>
                 <button v-else-if="toCanonical(lot.statut) === CONDITIONNE" class="btn btn-sm btn-outline" @click.stop="$router.push('/conditionnement')">Ouvrir</button>
                 <span v-else class="text-muted" style="font-size:12px">Terminé</span>
               </td>

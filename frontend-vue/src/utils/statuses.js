@@ -2,7 +2,7 @@
 export const RECEPTION = 'reception'
 export const EN_MUSSERIE = 'en_musserie'
 export const EN_PRODUCTION = 'en_production'
-export const EN_SECHAGE = 'en_sechage'
+export const EN_CONDITIONNEMENT = 'en_conditionnement'
 export const CONDITIONNE = 'conditionne'
 export const EN_STOCK = 'en_stock'
 export const EXPEDIE = 'expedie'
@@ -15,10 +15,14 @@ export const VALIDEE = 'validee'
 export const VALIDE = 'valide'
 export const ANNULEE = 'annulee'
 
+// Legacy status kept for backward compatibility with existing data
+export const EN_SECHAGE = 'en_sechage'
+
 const LEGACY_MAP = {
   [RECEPTION]: ['réception', 'reception'],
   [EN_MUSSERIE]: ['en musserie', 'en_musserie', 'en-musserie'],
   [EN_PRODUCTION]: ['en production', 'en_production', 'en-production'],
+  [EN_CONDITIONNEMENT]: ['en conditionnement', 'en_conditionnement', 'en-conditionnement'],
   [EN_SECHAGE]: ['en séchage', 'en sechage', 'en_sechage', 'ensechage'],
   [CONDITIONNE]: ['conditionné', 'conditionne', 'conditionne'],
   [EN_STOCK]: ['en stock', 'en_stock'],
@@ -56,6 +60,7 @@ export const LABELS = {
   [RECEPTION]: 'Réception',
   [EN_MUSSERIE]: 'En musserie',
   [EN_PRODUCTION]: 'En production',
+  [EN_CONDITIONNEMENT]: 'En conditionnement',
   [EN_SECHAGE]: 'En séchage',
   [CONDITIONNE]: 'Conditionné',
   [EN_STOCK]: 'En stock',
@@ -73,6 +78,8 @@ export const BADGE_CLASS = {
   [RECEPTION]: 'badge-primary',
   [EN_MUSSERIE]: 'badge-warning',
   [EN_PRODUCTION]: 'badge-info',
+  [EN_CONDITIONNEMENT]: 'badge-warning',
+  [EN_SECHAGE]: 'badge-info',
   [CONDITIONNE]: 'badge-primary',
   [EN_STOCK]: 'badge-success',
   [EXPEDIE]: 'badge-secondary',

@@ -510,8 +510,8 @@ def cloturer_production(db: Session, lot_id: int) -> EtapeProduction:
         main = eps[-1]
     lot = db.get(models.Lot, lot_id)
     if lot:
-        statuses.validate_transition(lot.statut, statuses.CONDITIONNE)
-        lot.statut = statuses.CONDITIONNE
+        statuses.validate_transition(lot.statut, statuses.EN_CONDITIONNEMENT)
+        lot.statut = statuses.EN_CONDITIONNEMENT
     db.commit(); db.refresh(main)
     if lot: db.refresh(lot)
     return main
@@ -594,10 +594,10 @@ def valider_conditionnement(db: Session, lot_id: int,
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "conditionnement"
     ).first()
     if not etape_cond:
-        etape_production = db.query(EtapeProduction).filter(
+        productions = db.query(EtapeProduction).filter(
             EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
-        ).first()
-        poids_entree = etape_production.poids_sortie if etape_production else 0.0
+        ).all()
+        poids_entree = sum(ep.poids_sortie or 0.0 for ep in productions)
         etape_cond = EtapeProduction(
             lot_id=lot_id, etape="conditionnement", ordre=3,
             statut=statuses.EN_COURS, poids_entree=poids_entree,
@@ -609,10 +609,10 @@ def valider_conditionnement(db: Session, lot_id: int,
             etape_cond.statut = statuses.EN_COURS
             etape_cond.date_debut = datetime.now()
         if not etape_cond.poids_entree:
-            etape_production = db.query(EtapeProduction).filter(
+            productions = db.query(EtapeProduction).filter(
                 EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
-            ).first()
-            etape_cond.poids_entree = etape_production.poids_sortie if etape_production else 0.0
+            ).all()
+            etape_cond.poids_entree = sum(ep.poids_sortie or 0.0 for ep in productions)
 
     etape_cond.poids_sortie = total_flux
     etape_cond.operateur = responsable or etape_cond.operateur or ""
@@ -642,14 +642,18 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
     if not etape_cond:
         raise ValueError(f"Aucune étape conditionnement pour le lot {lot.code_lot}")
 
-    etape_production = db.query(EtapeProduction).filter(
+    # Somme de TOUTES les étapes production terminées (multi-jours)
+    productions = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
-    ).first()
-    if not etape_production or etape_production.statut != statuses.TERMINE:
-        raise ValueError("La production doit être terminée avant de clôturer le conditionnement")
+    ).all()
+    if not productions:
+        raise ValueError("Aucune production trouvée pour ce lot")
+    for ep in productions:
+        if ep.statut != statuses.TERMINE:
+            raise ValueError("Toutes les productions doivent être terminées avant de clôturer le conditionnement")
 
-    etape_cond.poids_entree = etape_production.poids_sortie or 0.0
-    reference = etape_cond.poids_entree
+    reference = sum(ep.poids_sortie or 0.0 for ep in productions)
+    etape_cond.poids_entree = reference
     total_flux = _calc_total_flux(lot)
 
     if total_flux <= 0:
