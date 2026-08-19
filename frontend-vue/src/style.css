@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&display=swap');
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -13,13 +13,13 @@
   --secondary: #0B2E20;
   --accent: #78C98C;
   --dark: #10261B;
-  --text: #26352D;
-  --text-secondary: #607066;
-  --text-muted: #849188;
+  --text: #1A2D26;
+  --text-secondary: #4A5D52;
+  --text-muted: #7A8C82;
   --surface: #F5F7F3;
   --card: #FFFFFF;
-  --border: #DDE6DE;
-  --border-light: #EDF2ED;
+  --border: #D5DFD8;
+  --border-light: #E8EDE5;
   --error: #EF4444;
   --error-light: #FEF2F2;
   --warning: #F59E0B;
@@ -44,10 +44,10 @@
 html { font-size: 15px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
 body {
-  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background:
-    radial-gradient(circle at 88% -10%, rgba(198, 238, 140, 0.35), transparent 26rem),
-    radial-gradient(circle at 5% 100%, rgba(185, 229, 201, 0.3), transparent 26rem),
+    radial-gradient(circle at 88% -10%, rgba(198, 238, 140, 0.25), transparent 26rem),
+    radial-gradient(circle at 5% 100%, rgba(185, 229, 201, 0.2), transparent 26rem),
     var(--surface);
   color: var(--text);
   min-height: 100vh;
@@ -57,10 +57,10 @@ body {
 ::selection { background: var(--primary-light); color: var(--secondary); }
 
 /* ── Typography ── */
-h1, h2 { font-family: 'DM Serif Display', Georgia, serif; color: var(--dark); letter-spacing: -0.02em; }
-h1 { font-size: 30px; font-weight: 400; line-height: 1.12; }
-h2 { font-size: 22px; font-weight: 400; line-height: 1.2; }
-h3 { font-size: 14px; font-weight: 700; color: var(--text); }
+h1, h2 { font-family: 'Source Serif 4', Georgia, serif; color: var(--dark); letter-spacing: -0.02em; }
+h1 { font-size: 30px; font-weight: 600; line-height: 1.12; }
+h2 { font-size: 22px; font-weight: 600; line-height: 1.2; }
+h3 { font-size: 14px; font-weight: 600; color: var(--text); }
 
 /* ── Buttons ── */
 .btn {
