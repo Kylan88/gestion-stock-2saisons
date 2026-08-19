@@ -1,15 +1,21 @@
 <template>
   <div class="page">
-    <div class="page-header">
+    <section class="dashboard-hero">
       <div>
-        <h1 class="page-title">Dashboard</h1>
-        <p class="page-subtitle">{{ todayDate }}</p>
+        <span class="dashboard-eyebrow">VUE D'ENSEMBLE</span>
+        <h1 class="dashboard-title">Atelier de production</h1>
+        <p class="dashboard-subtitle">{{ todayDate }}</p>
       </div>
-      <div style="display:flex;gap:8px">
+      <div class="dashboard-snapshot">
+        <span class="snapshot-label">Stock chambre froide</span>
+        <strong>{{ formatKg(stats.stock_froid_kg || 0) }} <small>kg</small></strong>
+        <span class="snapshot-meta"><i></i>{{ stats.lots_en_stock || 0 }} lots prêts</span>
+      </div>
+      <div class="dashboard-actions">
         <button class="btn btn-outline btn-sm" @click="load">↻ Actualiser</button>
         <button class="btn btn-outline btn-sm" @click="doPrint">Imprimer</button>
       </div>
-    </div>
+    </section>
 
     <LoadingSpinner v-if="loading" />
     <div v-else-if="error" class="error-state anim-fade">
@@ -17,7 +23,59 @@
       <button class="btn btn-outline btn-sm" style="margin-top:12px" @click="load">Réessayer</button>
     </div>
     <template v-else>
-      <!-- KPI Row 1 -->
+
+      <!-- Pipeline workflow -->
+      <div class="pipeline-caption">
+        <span>Flux de production</span>
+        <span>{{ lotsEnCours.length }} lots en cours</span>
+      </div>
+      <div class="pipeline-row">
+        <div class="pipeline-stage">
+          <div class="pipeline-icon" style="background:#FEF3C7;color:#D97706">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="pipeline-info">
+            <span class="pipeline-value">{{ lotsMusserie.length }}</span>
+            <span class="pipeline-label">En Musserie</span>
+          </div>
+          <span class="pipeline-weight">{{ formatKg(totalMusserieJour) }} kg/jour</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-stage">
+          <div class="pipeline-icon" style="background:#DBEAFE;color:#2563EB">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="pipeline-info">
+            <span class="pipeline-value">{{ lotsProduction.length }}</span>
+            <span class="pipeline-label">En Production</span>
+          </div>
+          <span class="pipeline-weight">{{ formatKg(totalProductionJour) }} kg/jour</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-stage">
+          <div class="pipeline-icon" style="background:#EDE9FE;color:#7C3AED">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+          </div>
+          <div class="pipeline-info">
+            <span class="pipeline-value">{{ lotsConditionnement.length }}</span>
+            <span class="pipeline-label">Conditionnement</span>
+          </div>
+          <span class="pipeline-weight">{{ formatKg(totalConditionnementJour) }} kg/jour</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-stage">
+          <div class="pipeline-icon" style="background:#D1FAE5;color:#059669">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="pipeline-info">
+            <span class="pipeline-value">{{ stats.lots_en_stock }}</span>
+            <span class="pipeline-label">En Stock</span>
+          </div>
+          <span class="pipeline-weight">{{ formatKg(stats.stock_froid_kg || 0) }} kg total</span>
+        </div>
+      </div>
+
+      <!-- KPIs -->
       <div class="kpi-row">
         <div class="kpi-card kpi-main">
           <div class="kpi-icon-dark">
@@ -25,11 +83,9 @@
           </div>
           <div class="kpi-data">
             <div class="kpi-value">{{ stats.total_produits }}</div>
-            <div class="kpi-label">Total Produits</div>
+            <div class="kpi-label">Produits</div>
           </div>
-          <span class="kpi-badge kpi-badge-green">Actif</span>
         </div>
-
         <div class="kpi-card kpi-main">
           <div class="kpi-icon-dark">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
@@ -38,9 +94,7 @@
             <div class="kpi-value">{{ stats.total_lots_actifs }}</div>
             <div class="kpi-label">Lots Actifs</div>
           </div>
-          <span v-if="stats.lots_en_production > 0" class="kpi-badge kpi-badge-amber">{{ stats.lots_en_production }} en cours</span>
         </div>
-
         <div class="kpi-card kpi-main">
           <div class="kpi-icon-dark">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
@@ -50,70 +104,21 @@
             <div class="kpi-label">Valeur Stock</div>
           </div>
         </div>
-
         <div class="kpi-card kpi-main">
           <div class="kpi-icon-dark">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/><line x1="19.07" y1="4.93" x2="4.93" y2="19.07"/></svg>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           </div>
           <div class="kpi-data">
-            <div class="kpi-value">{{ formatNum(stats.stock_froid_kg) }} kg</div>
-            <div class="kpi-label">Stock Froid</div>
+            <div class="kpi-value">{{ formatNum(stats.rendement_moyen || 0) }}%</div>
+            <div class="kpi-label">Rendement Moyen</div>
           </div>
-        </div>
-      </div>
-
-      <!-- KPI Row 2 -->
-      <div class="kpi-row">
-        <div class="kpi-card">
-          <div class="kpi-icon-soft" style="background:var(--primary-50);color:var(--primary)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          </div>
-          <div class="kpi-data">
-            <div class="kpi-value-sm">{{ prod.etapes_terminees }}</div>
-            <div class="kpi-label">Etapes Terminees</div>
-          </div>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-icon-soft" style="background:#FFFBEB;color:#F59E0B">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          </div>
-          <div class="kpi-data">
-            <div class="kpi-value-sm">{{ prod.etapes_en_cours }}</div>
-            <div class="kpi-label">Etapes en Cours</div>
-          </div>
-          <span v-if="prod.etapes_en_cours > 0" class="kpi-badge kpi-badge-amber">{{ prod.etapes_en_cours }}</span>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-icon-soft" style="background:#EFF6FF;color:#3B82F6">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
-          </div>
-          <div class="kpi-data">
-            <div class="kpi-value-sm">{{ formatNum(prod.production_jour_kg) }} kg</div>
-            <div class="kpi-label">Production Jour</div>
-          </div>
-        </div>
-
-        <div class="kpi-card">
-          <div class="kpi-icon-soft" :class="stats.produits_stock_bas > 0 ? 'kpi-icon-warn' : 'kpi-icon-ok'">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          </div>
-          <div class="kpi-data">
-            <div class="kpi-value-sm">{{ stats.produits_stock_bas }}</div>
-            <div class="kpi-label">Stock Bas</div>
-          </div>
-          <span v-if="stats.produits_stock_bas > 0" class="kpi-badge kpi-badge-red">{{ stats.produits_stock_bas }}</span>
         </div>
       </div>
 
       <!-- Charts row -->
       <div class="charts-row">
-        <!-- Bar chart production -->
         <div class="card chart-card">
-          <div class="card-header">
-            <h3>Production Mensuelle</h3>
-          </div>
+          <div class="card-header"><h3>Production Mensuelle (kg)</h3></div>
           <div class="bar-chart">
             <div class="bar-chart-inner">
               <div v-for="(bar, i) in barData" :key="i" class="bar-col">
@@ -128,12 +133,8 @@
             </div>
           </div>
         </div>
-
-        <!-- Donut chart lots -->
         <div class="card chart-card chart-card-donut">
-          <div class="card-header">
-            <h3>Repartition des Lots</h3>
-          </div>
+          <div class="card-header"><h3>Répartition des Lots</h3></div>
           <div class="donut-wrap">
             <svg class="donut-svg" viewBox="0 0 120 120">
               <circle v-for="(seg, i) in donutSegments" :key="i"
@@ -157,6 +158,26 @@
         </div>
       </div>
 
+      <!-- Lots en cours -->
+      <div v-if="lotsEnCours.length" class="card" style="margin-top:20px">
+        <div class="card-header"><h3>Lots en Cours de Traitement</h3></div>
+        <div class="lots-list">
+          <div v-for="lot in lotsEnCours" :key="lot.id" class="lot-row">
+            <div class="lot-row-left">
+              <strong>{{ lot.code_lot }}</strong>
+              <span class="lot-row-fruit">{{ lot.type_fruit }}</span>
+            </div>
+            <div class="lot-row-progress">
+              <div class="mini-progress">
+                <div class="mini-progress-fill" :style="{ width: lotProgressPct(lot) + '%' }"></div>
+              </div>
+              <span class="lot-row-pct">{{ lotProgressPct(lot) }}%</span>
+            </div>
+            <StatusBadge :status="lot.statut" />
+          </div>
+        </div>
+      </div>
+
       <!-- Alertes stock bas -->
       <div v-if="stockBas.length" class="card" style="margin-top:20px">
         <div class="card-header">
@@ -171,9 +192,7 @@
               <span class="alert-nom">{{ p.nom }}</span>
               <span class="alert-cat">{{ p.categorie?.nom }}</span>
             </div>
-            <div class="alert-qte">
-              {{ p.stock_actuel }} / {{ p.stock_min }} {{ p.unite_mesure }}
-            </div>
+            <div class="alert-qte">{{ p.stock_actuel }} / {{ p.stock_min }} {{ p.unite_mesure }}</div>
             <StatusBadge :status="p.stock_actuel <= 0 ? 'rupture' : 'stock bas'" />
           </div>
         </div>
@@ -184,9 +203,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getDashboardStats, getDashboardProduction, getAlertesStockBas, getDashboardProductionMensuelle } from '../api'
+import { getDashboardStats, getDashboardProduction, getAlertesStockBas, getDashboardProductionMensuelle, getLots, getProductionsEtapes } from '../api'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const loading = ref(true)
 const error = ref(null)
@@ -194,13 +214,81 @@ const stats = ref({})
 const prod = ref({})
 const stockBas = ref([])
 const prodMensuelle = ref([])
+const allLots = ref([])
+const etapesData = ref({})
 
 const todayDate = computed(() => {
   return new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 })
 
-function formatNum(v) {
-  return Number(v || 0).toLocaleString('fr-FR')
+function formatNum(v) { return Number(v || 0).toLocaleString('fr-FR') }
+function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
+
+const lotsMusserie = computed(() => allLots.value.filter(l => [EN_MUSSERIE].includes(toCanonical(l.statut))))
+const lotsProduction = computed(() => allLots.value.filter(l => [EN_PRODUCTION].includes(toCanonical(l.statut))))
+const lotsConditionnement = computed(() => allLots.value.filter(l => [CONDITIONNE].includes(toCanonical(l.statut))))
+
+const totalMusserieJour = computed(() => prod.value.musserie_jour_kg || 0)
+const totalProductionJour = computed(() => prod.value.production_jour_kg || 0)
+const totalConditionnementJour = computed(() => prod.value.conditionnement_jour_kg || 0)
+
+const lotsEnCours = computed(() => {
+  return allLots.value.filter(l => [EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE].includes(toCanonical(l.statut)))
+})
+
+function round(v) { return Math.round((v || 0) * 100) / 100 }
+
+function getEtapes(lotId) {
+  return etapesData.value[lotId] || []
+}
+
+function getMusserieEtapes(lotId) {
+  return getEtapes(lotId).filter(e => e.etape === 'musserie')
+}
+
+function getProductionEtapes(lotId) {
+  return getEtapes(lotId).filter(e => e.etape === 'production')
+}
+
+function getConditionnementEtapes(lotId) {
+  return getEtapes(lotId).filter(e => e.etape === 'conditionnement')
+}
+
+function totalCumulFruitsMusserie(lotId) {
+  return round(getMusserieEtapes(lotId).reduce((s, e) => s + (e.fruits_murs_kg || 0), 0))
+}
+
+function totalCumulPoidsSortieProduction(lotId) {
+  return round(getProductionEtapes(lotId).reduce((s, e) => s + (e.poids_sortie || 0), 0))
+}
+
+function totalCumulPoidsSortieConditionnement(lotId) {
+  return round(getConditionnementEtapes(lotId).reduce((s, e) => s + (e.poids_sortie || 0), 0))
+}
+
+function lotProgressPct(lot) {
+  const statut = toCanonical(lot.statut)
+  const poidsTotal = lot.poids_frais || 0
+  if (!poidsTotal) return 0
+
+  if (statut === EN_MUSSERIE) {
+    const traite = totalCumulFruitsMusserie(lot.id)
+    return Math.min(100, Math.round((traite / poidsTotal) * 100))
+  }
+  if (statut === EN_PRODUCTION) {
+    const traite = totalCumulPoidsSortieProduction(lot.id)
+    const entreeProd = getEtapes(lot.id).find(e => e.etape === 'production')?.poids_entree || 0
+    const base = entreeProd || poidsTotal
+    return Math.min(100, Math.round((traite / base) * 100))
+  }
+  if (statut === CONDITIONNE) {
+    const traite = totalCumulPoidsSortieConditionnement(lot.id)
+    const entreeCond = getEtapes(lot.id).find(e => e.etape === 'conditionnement')?.poids_entree || 0
+    const base = entreeCond || poidsTotal
+    return Math.min(100, Math.round((traite / base) * 100))
+  }
+  if (statut === EN_STOCK) return 100
+  return 0
 }
 
 const barData = computed(() => {
@@ -212,12 +300,16 @@ const barData = computed(() => {
 
 const donutSegments = computed(() => {
   const total = stats.value.total_lots_actifs || 1
-  const enProd = stats.value.lots_en_production || 0
+  const enMusserie = lotsMusserie.value.length
+  const enProduction = lotsProduction.value.length
+  const enConditionnement = lotsConditionnement.value.length
   const enStock = stats.value.lots_en_stock || 0
   const circumference = 2 * Math.PI * 48
   const segments = [
     { count: enStock, color: '#165B3D' },
-    { count: enProd, color: '#F59E0B' },
+    { count: enConditionnement, color: '#7C3AED' },
+    { count: enProduction, color: '#2563EB' },
+    { count: enMusserie, color: '#D97706' },
   ]
   let offset = 0
   return segments.filter(s => s.count > 0).map(s => {
@@ -229,23 +321,31 @@ const donutSegments = computed(() => {
   })
 })
 
-const donutLegend = computed(() => {
-  return [
-    { label: 'En stock', count: stats.value.lots_en_stock || 0, color: '#165B3D' },
-    { label: 'En production', count: stats.value.lots_en_production || 0, color: '#F59E0B' },
-  ]
-})
+const donutLegend = computed(() => [
+  { label: 'En stock', count: stats.value.lots_en_stock || 0, color: '#165B3D' },
+  { label: 'Conditionnement', count: lotsConditionnement.value.length, color: '#7C3AED' },
+  { label: 'Production', count: lotsProduction.value.length, color: '#2563EB' },
+  { label: 'Musserie', count: lotsMusserie.value.length, color: '#D97706' },
+])
 
 async function load() {
   loading.value = true; error.value = null
   try {
-    const [s, p, sb, pm] = await Promise.all([
-      getDashboardStats(), getDashboardProduction(), getAlertesStockBas(), getDashboardProductionMensuelle(),
+    const [s, p, sb, pm, lots] = await Promise.all([
+      getDashboardStats(), getDashboardProduction(), getAlertesStockBas(), getDashboardProductionMensuelle(), getLots(),
     ])
     stats.value = s
     prod.value = p
     stockBas.value = sb
     prodMensuelle.value = pm
+    allLots.value = lots
+
+    // Fetch etapes for each lot to calculate real progress
+    for (const lot of lots) {
+      if ([EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE].includes(toCanonical(lot.statut))) {
+        etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
+      }
+    }
   } catch (e) {
     error.value = e.response?.data?.detail || e.message
   } finally { loading.value = false }
@@ -257,11 +357,58 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; }
+.dashboard-hero {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 22px;
+  margin-bottom: 26px; padding: 26px 28px; overflow: hidden; position: relative;
+  border: 1px solid rgba(22, 91, 61, 0.15); border-radius: var(--radius-xl);
+  background: linear-gradient(112deg, #0C3424 0%, #165B3D 58%, #247A53 100%);
+  box-shadow: 0 18px 35px rgba(11, 46, 32, 0.16);
+}
+.dashboard-hero::after {
+  content: ''; position: absolute; width: 260px; height: 260px; border-radius: 50%;
+  right: -92px; top: -150px; background: rgba(198, 238, 140, 0.15); box-shadow: 0 0 0 38px rgba(198, 238, 140, 0.06);
+}
+.dashboard-hero > * { position: relative; z-index: 1; }
+.dashboard-eyebrow { display: block; margin-bottom: 8px; color: var(--lime); font-size: 10px; font-weight: 800; letter-spacing: 0.14em; }
+.dashboard-title { margin: 0; color: white; font-size: 34px; font-weight: 400; letter-spacing: -0.03em; }
+.dashboard-subtitle { margin-top: 7px; color: #C9E0D0; font-size: 12px; text-transform: capitalize; }
+.dashboard-snapshot {
+  min-width: 168px; padding: 13px 16px; border: 1px solid rgba(255,255,255,0.16); border-radius: var(--radius-md);
+  background: rgba(4, 35, 23, 0.22); color: white; backdrop-filter: blur(10px);
+}
+.snapshot-label { display: block; color: #BFDDC9; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
+.dashboard-snapshot strong { display: block; margin: 1px 0 5px; font-size: 24px; line-height: 1.2; letter-spacing: -0.04em; }
+.dashboard-snapshot small { font-size: 12px; font-weight: 700; color: #C9E0D0; letter-spacing: 0; }
+.snapshot-meta { display: flex; align-items: center; gap: 6px; color: #D8EADD; font-size: 10px; font-weight: 600; }
+.snapshot-meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 3px rgba(198,238,140,0.12); }
+.dashboard-actions { display: flex; gap: 8px; }
+.dashboard-actions .btn-outline { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.24); color: white; }
+.dashboard-actions .btn-outline:hover { background: white; border-color: white; color: var(--primary); }
 
-/* ── KPI Rows ── */
+/* Pipeline */
+.pipeline-caption { display: flex; justify-content: space-between; align-items: center; margin: 0 4px 9px; color: var(--text-muted); font-size: 11px; font-weight: 700; }
+.pipeline-caption span:first-child { color: var(--dark); font-size: 13px; }
+.pipeline-row {
+  display: flex; align-items: center; gap: 0; margin-bottom: 20px;
+  background: rgba(255,255,255,0.9); border: 1px solid rgba(221,230,222,0.9); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); padding: 20px; overflow-x: auto;
+}
+.pipeline-stage {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  min-width: 140px;
+}
+.pipeline-icon {
+  width: 48px; height: 48px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center; box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+.pipeline-info { display: flex; flex-direction: column; align-items: center; }
+.pipeline-value { font-size: 28px; font-weight: 700; color: var(--dark); line-height: 1; }
+.pipeline-label { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 2px; }
+.pipeline-weight { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+.pipeline-arrow { font-size: 20px; color: var(--border); padding: 0 8px; flex-shrink: 0; }
+
+/* KPIs */
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
-
 .kpi-card {
   background: white; border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 20px; display: flex; align-items: center; gap: 14px;
@@ -287,31 +434,14 @@ onMounted(load)
   display: flex; align-items: center; justify-content: center;
 }
 
-.kpi-icon-soft {
-  width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-}
-.kpi-icon-warn { background: #FEF2F2; color: #D64545; }
-.kpi-icon-ok { background: var(--success-light); color: var(--success); }
-
 .kpi-data { min-width: 0; }
 .kpi-value { font-size: 26px; font-weight: 700; color: var(--dark); line-height: 1.1; }
-.kpi-value-sm { font-size: 20px; font-weight: 700; color: var(--dark); line-height: 1.1; }
 .kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-top: 3px; white-space: nowrap; }
 
-.kpi-badge {
-  position: absolute; top: 14px; right: 14px;
-  padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600;
-}
-.kpi-badge-green { background: var(--success-light); color: var(--success); }
-.kpi-badge-amber { background: #FEF3C7; color: #D97706; }
-.kpi-badge-red { background: #FEE2E2; color: #DC2626; }
-
-/* ── Charts ── */
+/* Charts */
 .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 0; }
 .chart-card { padding: 20px; }
 
-/* ── Bar Chart ── */
 .bar-chart { height: 220px; padding-top: 10px; }
 .bar-chart-inner {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -321,29 +451,16 @@ onMounted(load)
   flex: 1; display: flex; flex-direction: column; align-items: center;
   height: 100%; justify-content: flex-end; position: relative;
 }
-.bar-tooltip {
-  font-size: 10px; font-weight: 600; color: var(--text-muted);
-  margin-bottom: 4px; white-space: nowrap;
-}
+.bar-tooltip { font-size: 10px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; white-space: nowrap; }
 .bar-track {
   width: 100%; max-width: 48px; height: 160px;
   background: var(--surface); border-radius: 8px;
   display: flex; align-items: flex-end; overflow: hidden;
 }
-.bar-fill {
-  width: 100%; border-radius: 8px; transition: height 0.7s var(--ease);
-  display: flex; align-items: flex-end;
-}
-.bar-fill-inner {
-  width: 100%; height: 100%; border-radius: 8px;
-  background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 100%);
-}
-.bar-label {
-  font-size: 11px; color: var(--text-muted); font-weight: 500;
-  margin-top: 8px;
-}
+.bar-fill { width: 100%; border-radius: 8px; transition: height 0.7s var(--ease); display: flex; align-items: flex-end; }
+.bar-fill-inner { width: 100%; height: 100%; border-radius: 8px; background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 100%); }
+.bar-label { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 8px; }
 
-/* ── Donut ── */
 .chart-card-donut { display: flex; flex-direction: column; }
 .donut-wrap { display: flex; align-items: center; gap: 24px; flex: 1; }
 .donut-svg { width: 140px; height: 140px; flex-shrink: 0; transform: rotate(-90deg); }
@@ -355,7 +472,21 @@ onMounted(load)
 .legend-label { color: var(--text-secondary); flex: 1; }
 .legend-val { font-weight: 600; color: var(--dark); }
 
-/* ── Alerts ── */
+/* Lots en cours */
+.lots-list { display: flex; flex-direction: column; }
+.lot-row {
+  display: flex; align-items: center; gap: 16px; padding: 12px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.lot-row:last-child { border-bottom: none; }
+.lot-row-left { display: flex; flex-direction: column; gap: 2px; min-width: 140px; }
+.lot-row-fruit { font-size: 12px; color: var(--text-muted); }
+.lot-row-progress { flex: 1; display: flex; align-items: center; gap: 10px; }
+.mini-progress { flex: 1; height: 6px; background: var(--border-light); border-radius: 3px; overflow: hidden; }
+.mini-progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); border-radius: 3px; transition: width 0.4s; }
+.lot-row-pct { font-size: 11px; font-weight: 600; color: var(--text-secondary); min-width: 32px; text-align: right; }
+
+/* Alerts */
 .alert-list { display: flex; flex-direction: column; }
 .alert-row {
   display: flex; align-items: center; gap: 16px; padding: 10px 0;
@@ -368,10 +499,21 @@ onMounted(load)
 .alert-qte { color: var(--text-secondary); font-size: 12px; }
 
 @media (max-width: 1024px) {
+  .dashboard-hero { grid-template-columns: 1fr auto; }
+  .dashboard-actions { grid-column: 1 / -1; }
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
   .charts-row { grid-template-columns: 1fr; }
+  .pipeline-row { padding: 14px; }
+  .pipeline-stage { min-width: 100px; }
 }
 @media (max-width: 640px) {
+  .dashboard-hero { grid-template-columns: 1fr; gap: 16px; padding: 22px; }
+  .dashboard-title { font-size: 30px; }
+  .dashboard-snapshot { width: 100%; }
+  .dashboard-actions { width: 100%; }
+  .dashboard-actions .btn { flex: 1; }
   .kpi-row { grid-template-columns: 1fr; }
+  .pipeline-arrow { display: none; }
+  .pipeline-row { flex-direction: column; gap: 12px; }
 }
 </style>

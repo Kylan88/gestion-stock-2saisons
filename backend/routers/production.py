@@ -22,10 +22,18 @@ def valider_musserie(lot_id: int, data: schemas.MusserieCreate,
         raise HTTPException(400, str(e))
 
 @router.post("/musserie/{lot_id}/cloturer")
-def cloturer_musserie(lot_id: int, db: Session = Depends(get_db)):
-    """Clôture la musserie d'un lot et passe le statut à en_production."""
+def cloturer_musserie(lot_id: int, date: str | None = Query(None, description="Date ISO (YYYY-MM-DD) pour clôturer seulement ce jour"), db: Session = Depends(get_db)):
+    """Clôture la musserie d'un lot. Si date fournie, clôture seulement ce jour ; sinon clôture tout et passe en production."""
     try:
-        return crud.cloturer_musserie(db, lot_id)
+        return crud.cloturer_musserie(db, lot_id, date)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@router.get("/musserie/{lot_id}/by-date-dryer")
+def get_musserie_by_date_dryer(lot_id: int, date: str = Query(..., description="Date ISO (YYYY-MM-DD)"), db: Session = Depends(get_db)):
+    """Retourne les étapes musserie d'un lot pour une date donnée, groupées par dryer."""
+    try:
+        return crud.get_musserie_by_date_dryer(db, lot_id, date)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

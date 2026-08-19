@@ -74,11 +74,8 @@ export async function createLot(payload) {
   const { data } = await api.post('/lots/', payload)
   return data
 }
-import { toCanonical as toCanonicalStatus } from '../utils/statuses'
-
 export async function updateLotStatut(id, statut) {
-  const canonical = toCanonicalStatus(statut)
-  const { data } = await api.put(`/lots/${id}/statut`, null, { params: { statut: canonical } })
+  const { data } = await api.put(`/lots/${id}/statut`, null, { params: { statut } })
   return data
 }
 
@@ -99,8 +96,9 @@ export async function validerMusserie(lotId, payload) {
   const { data } = await api.post(`/production/musserie/${lotId}`, payload)
   return data
 }
-export async function cloturerMusserie(lotId) {
-  const { data } = await api.post(`/production/musserie/${lotId}/cloturer`)
+export async function cloturerMusserie(lotId, date = null) {
+  const params = date ? { date } : {}
+  const { data } = await api.post(`/production/musserie/${lotId}/cloturer`, null, { params })
   return data
 }
 export async function validerProduction(lotId, payload) {
@@ -117,6 +115,10 @@ export async function cloturerProduction(lotId) {
 }
 
 // ── Conditionnement ──
+export async function getConditionnements(params = {}) {
+  const { data } = await api.get('/conditionnement/lots', { params })
+  return data
+}
 export async function validerConditionnement(lotId, payload) {
   const { data } = await api.post(`/conditionnement/lots/${lotId}`, payload)
   return data
@@ -227,6 +229,12 @@ export async function getHistoriqueMusserie(params = {}) {
 // ── Historique Production ──
 export async function getHistoriqueProduction(params = {}) {
   const { data } = await api.get('/production/production/historique', { params })
+  return data
+}
+
+// ── Musserie by date/dryer for production ──
+export async function getMusserieByDateDryer(lotId, date) {
+  const { data } = await api.get(`/production/musserie/${lotId}/by-date-dryer`, { params: { date } })
   return data
 }
 

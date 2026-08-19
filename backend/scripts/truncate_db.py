@@ -7,7 +7,7 @@ from sqlalchemy import text
 with engine.connect() as conn:
     tables = conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'")).fetchall()
     for t in tables:
-        conn.execute(text(f"TRUNCATE TABLE {t[0]} CASCADE"))
+        conn.execute(text(f"TRUNCATE TABLE {t[0]} RESTART IDENTITY CASCADE"))
         print(f"Truncated: {t[0]}")
     conn.commit()
-print("Done.")
+print("Base de données vidée.")

@@ -6,15 +6,21 @@
     <aside class="sidebar" :class="{ 'sidebar-open': sidebarOpen }">
       <div class="sidebar-logo">
         <img src="/2saisons.jpeg" alt="2Saisons" class="logo-img" />
-        <span class="logo-text">2Saisons</span>
+        <div>
+          <span class="logo-text">2Saisons</span>
+          <span class="logo-kicker">ATELIER DE PRODUCTION</span>
+        </div>
       </div>
 
       <nav class="sidebar-nav">
-        <router-link v-for="item in nav" :key="item.path" :to="item.path"
-          class="nav-item" active-class="nav-active" @click="sidebarOpen = false">
-          <span class="nav-icon" v-html="item.icon"></span>
-          <span class="nav-label">{{ item.label }}</span>
-        </router-link>
+        <div v-for="group in navGroups" :key="group.label" class="nav-group">
+          <span class="nav-group-label">{{ group.label }}</span>
+          <router-link v-for="item in group.items" :key="item.path" :to="item.path"
+            class="nav-item" active-class="nav-active" @click="sidebarOpen = false">
+            <span class="nav-icon" v-html="item.icon"></span>
+            <span class="nav-label">{{ item.label }}</span>
+          </router-link>
+        </div>
       </nav>
 
       <div class="sidebar-footer">
@@ -50,6 +56,7 @@
           />
         </div>
         <div class="topbar-right">
+          <div class="topbar-status"><span class="topbar-status-dot"></span>Opérations en direct</div>
           <div class="topbar-avatar">2S</div>
         </div>
       </header>
@@ -115,7 +122,7 @@ const breadcrumbs = computed(() => {
   return crumbs
 })
 
-const nav = [
+const navItems = [
   { path: '/', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>', label: 'Dashboard' },
   { path: '/reception', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', label: 'Réception' },
   { path: '/lots', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>', label: 'Lots' },
@@ -131,6 +138,13 @@ const nav = [
   { path: '/anomalies', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>', label: 'Anomalies' },
   { path: '/historique', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>', label: 'Historique' },
 ]
+
+const navGroups = [
+  { label: 'Vue d’ensemble', items: navItems.slice(0, 1) },
+  { label: 'Flux de production', items: navItems.slice(1, 6) },
+  { label: 'Stock & ventes', items: navItems.slice(6, 11) },
+  { label: 'Suivi', items: navItems.slice(11) },
+]
 </script>
 
 <style scoped>
@@ -138,21 +152,24 @@ const nav = [
 
 /* ── Sidebar ── */
 .sidebar {
-  width: 256px; background: var(--secondary); border-right: 1px solid rgba(255,255,255,0.08);
+  width: 264px; background: linear-gradient(165deg, #103C2A 0%, var(--secondary) 46%, #062218 100%); border-right: 1px solid rgba(255,255,255,0.08);
   display: flex; flex-direction: column; flex-shrink: 0;
   position: sticky; top: 0; height: 100vh; z-index: 10;
 }
 .sidebar-logo {
   display: flex; align-items: center; gap: 10px;
-  padding: 22px 20px; border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding: 24px 20px 22px; border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 .logo-img {
   width: 38px; height: 38px; border-radius: 12px;
   object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2);
 }
-.logo-text { font-family: 'DM Serif Display', Georgia, serif; font-size: 21px; font-weight: 400; color: white; letter-spacing: -0.02em; }
+.logo-text { display: block; font-family: 'DM Serif Display', Georgia, serif; font-size: 22px; font-weight: 400; color: white; letter-spacing: -0.02em; line-height: 1; }
+.logo-kicker { display: block; margin-top: 5px; color: #9CCBB0; font-size: 8px; letter-spacing: 0.15em; font-weight: 800; }
 
-.sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.sidebar-nav { flex: 1; padding: 18px 12px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+.nav-group { display: flex; flex-direction: column; gap: 3px; }
+.nav-group-label { padding: 0 12px 5px; color: #79A58B; font-size: 9px; letter-spacing: 0.11em; font-weight: 800; text-transform: uppercase; }
 
 .nav-item {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px;
@@ -161,8 +178,8 @@ const nav = [
 }
 .nav-item:hover { background: rgba(255,255,255,0.08); color: white; transform: translateX(2px); }
 .nav-active {
-  background: rgba(185,229,201,0.16); color: white; font-weight: 700;
-  box-shadow: inset 3px 0 0 var(--primary-light);
+  background: linear-gradient(90deg, rgba(185,229,201,0.2), rgba(185,229,201,0.06)); color: white; font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--lime), 0 4px 14px rgba(0,0,0,0.12);
 }
 .nav-icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .nav-icon :deep(svg) { width: 20px; height: 20px; }
@@ -180,7 +197,7 @@ const nav = [
 /* ── Topbar ── */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  min-height: 70px; padding: 12px 36px; background: rgba(255,255,255,0.92); border-bottom: 1px solid var(--border);
+  min-height: 74px; padding: 12px 36px; background: rgba(255,255,255,0.76); border-bottom: 1px solid rgba(221,230,222,0.8);
   position: sticky; top: 0; z-index: 5; gap: 16px;
   backdrop-filter: blur(12px);
 }
@@ -207,7 +224,9 @@ const nav = [
 }
 .search-input:focus { border-color: var(--primary); background: white; box-shadow: 0 0 0 3px rgba(22,91,61,0.1); }
 .search-input::placeholder { color: var(--text-muted); }
-.topbar-right { display: flex; align-items: center; gap: 12px; }
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.topbar-status { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid #DCEBDD; border-radius: 99px; background: rgba(255,255,255,0.7); color: var(--primary); font-size: 10px; font-weight: 800; }
+.topbar-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px rgba(46,139,87,0.13); }
 .topbar-avatar {
   width: 38px; height: 38px; border-radius: 50%; background: var(--primary);
   color: white; display: flex; align-items: center; justify-content: center;
@@ -219,7 +238,7 @@ const nav = [
 .route-leave-to { opacity: 0; transform: translateY(-5px); }
 
 /* ── Content ── */
-.main-content { flex: 1; padding: 34px 36px 48px; overflow-y: auto; max-height: calc(100vh - 70px); }
+.main-content { flex: 1; padding: 38px 40px 52px; overflow-y: auto; max-height: calc(100vh - 74px); }
 
 /* ── Mobile ── */
 .sidebar-overlay {
@@ -236,6 +255,7 @@ const nav = [
   .hamburger { display: flex; }
   .breadcrumbs { display: none; }
   .topbar { padding: 12px 16px; }
+  .topbar-status { display: none; }
   .topbar-search { flex: 1; min-width: 0; }
   .main-content { padding: 16px; }
 }

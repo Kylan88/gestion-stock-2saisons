@@ -51,27 +51,27 @@ function stepIndex(key) {
 <style scoped>
 .workflow-bar {
   display: flex; align-items: center; gap: 0;
-  padding: 12px 0; overflow-x: auto;
+  padding: 8px 0; overflow-x: auto;
 }
 .wf-step {
-  display: flex; align-items: center; gap: 6px; position: relative;
+  display: flex; align-items: center; gap: 4px; position: relative;
   white-space: nowrap;
 }
 .wf-dot {
-  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700; transition: all 0.3s ease;
+  font-size: 10px; font-weight: 700; transition: all 0.3s ease;
 }
 .wf-done .wf-dot { background: var(--success); color: white; }
 .wf-current .wf-dot { background: var(--primary); color: white; box-shadow: 0 0 0 4px rgba(22,91,61,0.16); }
 .wf-pending .wf-dot { background: var(--surface); color: var(--text-muted); border: 1.5px solid var(--border); }
-.wf-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.wf-label { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
 .wf-done .wf-label { color: var(--success); font-weight: 600; }
 .wf-current .wf-label { color: var(--primary); font-weight: 600; }
 .wf-pending .wf-label { color: var(--text-muted); }
 .wf-line {
-  width: 32px; height: 2px; background: var(--border);
-  margin: 0 4px; flex-shrink: 0; transition: background 0.3s;
+  width: 24px; height: 2px; background: var(--border);
+  margin: 0 2px; flex-shrink: 0; transition: background 0.3s;
 }
 .wf-line-done { background: var(--success); }
 .wf-pulse {

@@ -6,6 +6,15 @@
       </template>
     </PageHeader>
 
+    <WorkflowFrame
+      :step="5"
+      eyebrow="Disponibilité & conservation"
+      title="Visualiser le stock prêt"
+      description="Consultez le contenu de chaque zone et repérez rapidement les volumes disponibles pour la suite des opérations."
+    >
+      <template #meta><div class="flow-metric"><strong>{{ zones.length }}</strong><span>zones actives</span></div></template>
+    </WorkflowFrame>
+
     <LoadingSpinner v-if="loading" />
     <template v-else>
       <div class="zones-grid">
@@ -22,6 +31,10 @@
               </div>
             </div>
             <StatusBadge :status="zone.actif ? 'disponible' : 'périmé'" />
+          </div>
+          <div class="zone-capacity">
+            <div class="zone-capacity-head"><span>Occupation</span><strong>{{ formatKg(zoneTotal(zone)) }} / {{ formatKg(zone.capacite_kg) }} kg</strong></div>
+            <div class="zone-capacity-track"><span :style="{ width: zoneCapacityPercent(zone) + '%' }"></span></div>
           </div>
           <div v-if="(stocksByZone[zone.id] || []).length" class="zone-stocks">
             <div v-for="s in stocksByZone[zone.id]" :key="s.id" class="stock-row">
@@ -48,6 +61,7 @@ import { getZonesStock, getContenuZone } from '../api'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
+import WorkflowFrame from '../components/WorkflowFrame.vue'
 
 const zones = ref([])
 const stocksByZone = reactive({})
@@ -65,17 +79,37 @@ async function load() {
 
 function doPrint() { window.print() }
 
+function zoneTotal(zone) {
+  return (stocksByZone[zone.id] || []).reduce((total, stock) => total + Number(stock.quantite || 0), 0)
+}
+function zoneCapacityPercent(zone) {
+  if (!zone.capacite_kg) return 0
+  return Math.min(100, Math.round((zoneTotal(zone) / zone.capacite_kg) * 100))
+}
+function formatKg(value) { return Number(value || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) }
+
 onMounted(load)
 </script>
 
 <style scoped>
-.zones-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.flow-metric { display: flex; flex-direction: column; }
+.flow-metric strong { font-family: 'DM Serif Display', Georgia, serif; font-size: 25px; line-height: 0.9; color: var(--lime); }
+.flow-metric span { margin-top: 4px; color: #C6D8CC; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.zones-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 18px; }
+.zones-grid > .card { position: relative; overflow: hidden; }
+.zones-grid > .card::after { content: ''; position: absolute; width: 120px; height: 120px; border-radius: 50%; right: -55px; top: -60px; background: var(--primary-50); z-index: 0; }
+.zones-grid > .card > * { position: relative; z-index: 1; }
 .zone-icon-wrap {
   width: 40px; height: 40px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; font-size: 18px;
 }
 .zone-froid { background: #EFF6FF; }
-.zone-ambiant { background: #F0FDF4; }
+.zone-ambiant { background: var(--primary-50); }
+.zone-capacity { padding: 11px 0 3px; }
+.zone-capacity-head { display: flex; justify-content: space-between; gap: 10px; color: var(--text-muted); font-size: 10px; font-weight: 700; }
+.zone-capacity-head strong { color: var(--dark); font-size: 10px; }
+.zone-capacity-track { height: 6px; margin-top: 7px; overflow: hidden; border-radius: 99px; background: var(--border-light); }
+.zone-capacity-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--lime)); transition: width 0.45s var(--ease); }
 .zone-stocks { border-top: 1px solid var(--border-light); margin-top: 12px; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .stock-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 13px; }
 .stock-info { display: flex; align-items: center; gap: 8px; }

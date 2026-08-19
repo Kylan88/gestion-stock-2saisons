@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_
-from datetime import datetime
+from datetime import datetime, timedelta, date as date_type
 from typing import Optional, List
 import math
 
@@ -12,6 +12,16 @@ from models import (
     ZoneStockage, StockZone, DemandeTransfert, DemandeTransfertLigne,
     Reconditionnement
 )
+
+
+def today_start() -> datetime:
+    """Début de la journée courante (00:00 local)."""
+    now = datetime.now()
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def tomorrow_start() -> datetime:
+    return today_start() + timedelta(days=1)
 
 
 # ── WEIGHT VALIDATION ──
@@ -188,12 +198,6 @@ def create_lot(db: Session, **data) -> Lot:
     if not lot.quantite_restante:
         lot.quantite_restante = lot.poids_frais
     db.add(lot); db.flush()
-    etapes_defaut = [
-        ("musserie", 1), ("production", 2), ("conditionnement", 3)
-    ]
-    for nom_etape, ordre in etapes_defaut:
-        ep = EtapeProduction(lot_id=lot.id, etape=nom_etape, ordre=ordre, statut=statuses.EN_ATTENTE)
-        db.add(ep)
     db.commit(); db.refresh(lot)
     return lot
 
@@ -264,14 +268,16 @@ def valider_musserie(db: Session, lot_id: int,
         raise ValueError(f"Lot {lot_id} introuvable")
     ep = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie",
-        EtapeProduction.dryer == (dryer or None)
+        EtapeProduction.dryer == (dryer or None),
+        EtapeProduction.statut != statuses.TERMINE
     ).first()
     if not ep:
         ep = EtapeProduction(lot_id=lot_id, etape="musserie", ordre=1, statut="en_cours", dryer=dryer or None)
         db.add(ep); db.flush()
+    if not ep.date_debut:
+        ep.date_debut = datetime.now()
     if ep.statut == statuses.EN_ATTENTE:
         ep.statut = statuses.EN_COURS
-        ep.date_debut = datetime.now()
     if operateur:
         ep.operateur = operateur
 
@@ -294,39 +300,114 @@ def valider_musserie(db: Session, lot_id: int,
     else:
         delta = fruits_murs_kg + dechets_tri_kg - retour_non_mur_kg
         lot.quantite_restante = round(max(0, base_restant - delta), 2)
-    if lot.statut == statuses.RECEPTION:
+    if statuses.normalize(lot.statut) == statuses.RECEPTION:
         lot.statut = statuses.EN_MUSSERIE
 
     db.commit()
     db.refresh(ep)
     return ep
 
-def cloturer_musserie(db: Session, lot_id: int):
-    """Clôture toutes les étapes musserie d'un lot et passe le statut à en_production."""
+from datetime import date as date_type
+
+def cloturer_musserie(db: Session, lot_id: int, date_str: str | None = None):
+    """Clôture les étapes musserie d'un lot et crée les entrées production correspondantes.
+    - Si date_str fourni: clôture seulement les entrées de ce jour, crée production pour ce jour (lot reste EN_MUSSERIE)
+    - Si date_str None: clôture tout, crée production pour tout, passe le lot en EN_PRODUCTION
+    """
     lot = db.get(Lot, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
-    if lot.statut not in (statuses.EN_MUSSERIE, statuses.RECEPTION):
+    if statuses.normalize(lot.statut) not in (statuses.EN_MUSSERIE, statuses.RECEPTION):
         raise ValueError(f"Le lot {lot.code_lot} n'est pas en musserie (statut: {lot.statut})")
-    etapes = db.query(EtapeProduction).filter(
+
+    query = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie"
-    ).all()
-    if not etapes:
-        raise ValueError(f"Aucune étape musserie trouvée pour le lot {lot.code_lot}")
-    for ep in etapes:
+    )
+    if date_str:
+        try:
+            target_date = date_type.fromisoformat(date_str)
+        except ValueError:
+            raise ValueError("Format date invalide (attendu YYYY-MM-DD)")
+        query = query.filter(EtapeProduction.date_debut >= target_date, EtapeProduction.date_debut < target_date + timedelta(days=1))
+        action = "jour"
+    else:
+        action = "tout"
+
+    etapes_musserie = query.all()
+    if not etapes_musserie:
+        raise ValueError(f"Aucune étape musserie trouvée pour le lot {lot.code_lot} ({action})")
+
+    # Pour chaque entrée musserie clôturée, créer l'entrée production correspondante
+    for ep in etapes_musserie:
         if ep.statut != statuses.TERMINE:
             ep.statut = statuses.TERMINE
             if not ep.date_fin:
                 ep.date_fin = datetime.now()
             if not ep.poids_sortie and ep.fruits_murs_kg:
                 ep.poids_sortie = round(max(0, ep.fruits_murs_kg - ep.retour_non_mur_kg - ep.dechets_lavage_kg - ep.dechets_production_kg), 2)
-    statuses.validate_transition(lot.statut, statuses.EN_PRODUCTION)
-    lot.statut = statuses.EN_PRODUCTION
+
+            # Créer l'étape production correspondante avec le poids sortie de la musserie
+            if ep.poids_sortie and ep.poids_sortie > 0:
+                existing_prod = db.query(EtapeProduction).filter(
+                    EtapeProduction.lot_id == lot_id,
+                    EtapeProduction.etape == "production",
+                    EtapeProduction.dryer == ep.dryer,
+                    EtapeProduction.date_debut >= ep.date_debut,
+                    EtapeProduction.date_debut < ep.date_debut + timedelta(days=1)
+                ).first()
+                if not existing_prod:
+                    prod_ep = EtapeProduction(
+                        lot_id=lot_id,
+                        etape="production",
+                        ordre=2,
+                        statut=statuses.EN_ATTENTE,
+                        date_debut=ep.date_debut,
+                        poids_entree=ep.poids_sortie,
+                        dryer=ep.dryer,
+                        operateur=ep.operateur,
+                    )
+                    db.add(prod_ep)
+
+    if not date_str:
+        # Clôture finale : plus de musserie possible, passage en production
+        statuses.validate_transition(lot.statut, statuses.EN_PRODUCTION)
+        lot.statut = statuses.EN_PRODUCTION
+    elif (lot.quantite_restante or 0) <= 0:
+        # Lot 100% traité : la clôture du jour est aussi la clôture finale
+        statuses.validate_transition(lot.statut, statuses.EN_PRODUCTION)
+        lot.statut = statuses.EN_PRODUCTION
+
     db.commit()
-    for ep in etapes:
+    for ep in etapes_musserie:
         db.refresh(ep)
     db.refresh(lot)
-    return {"lot": lot, "etapes": etapes}
+    return {"lot": lot, "etapes": etapes_musserie, "action": action}
+
+
+def get_musserie_by_date_dryer(db: Session, lot_id: int, date_str: str):
+    """Retourne les étapes musserie d'un lot pour une date donnée, groupées par dryer."""
+    try:
+        target_date = date_type.fromisoformat(date_str)
+    except ValueError:
+        raise ValueError("Format date invalide (attendu YYYY-MM-DD)")
+
+    etapes = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot_id,
+        EtapeProduction.etape == "musserie",
+        EtapeProduction.date_debut >= target_date,
+        EtapeProduction.date_debut < target_date + timedelta(days=1),
+        EtapeProduction.statut == statuses.TERMINE
+    ).all()
+
+    return [
+        {
+            "dryer": ep.dryer,
+            "poids_sortie": ep.poids_sortie or 0,
+            "fruits_murs_kg": ep.fruits_murs_kg or 0,
+            "date_debut": ep.date_debut.isoformat() if ep.date_debut else None,
+        }
+        for ep in etapes
+    ]
 
 # ── PRODUCTION (chargement chariots → séchoir) ──
 
@@ -350,14 +431,19 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
         raise ValueError(f"Dryer {dryer} prend max {config['chariots']} chariots")
 
     ep = db.query(EtapeProduction).filter(
-        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
-    ).first()
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production",
+        EtapeProduction.dryer == dryer, EtapeProduction.statut != statuses.TERMINE,
+        EtapeProduction.date_debut >= today_start(), EtapeProduction.date_debut < tomorrow_start()
+    ).order_by(EtapeProduction.id.desc()).first()
+    if not ep:
+        # Jour sidéré : étape production non terminée la plus récente du lot (indépendante de la date)
+        ep = db.query(EtapeProduction).filter(
+            EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production",
+            EtapeProduction.statut != statuses.TERMINE
+        ).order_by(EtapeProduction.date_debut.desc(), EtapeProduction.id.desc()).first()
     if not ep:
         ep = EtapeProduction(lot_id=lot_id, etape="production", ordre=2, statut=statuses.EN_COURS)
         db.add(ep); db.flush()
-        if lot.statut == statuses.EN_MUSSERIE:
-            statuses.validate_transition(lot.statut, statuses.EN_PRODUCTION)
-            lot.statut = statuses.EN_PRODUCTION
 
     ep.statut = statuses.EN_COURS
     if not ep.date_debut:
@@ -401,33 +487,44 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
     ep.poids_entree = sum(d["quantite_totale"] for d in dryers_seen.values())
     ep.poids_sortie = max(0, ep.poids_entree - ep.dechets_production_kg)
     ep.total_claies = sum(d["total_claies"] for d in dryers_seen.values())
-    ep.dryer = None
-    ep.nbre_chariots = None
     ep.notes = " + ".join(f"Dryer {d['dryer']} ({d['nbre_chariots']} chariots)" for d in dryers_seen.values())
 
     db.commit(); db.refresh(ep)
     return {"etape": ep, "dryers": list(dryers_seen.values())}
 
 
-def cloturer_production(db: Session, lot_id: int) -> Optional[EtapeProduction]:
-    ep = db.query(EtapeProduction).filter(
+def cloturer_production(db: Session, lot_id: int) -> EtapeProduction:
+    eps = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
-    ).first()
-    if not ep:
+    ).all()
+    if not eps:
         raise ValueError(f"Aucune étape production pour le lot {lot_id}")
-    ep.statut = statuses.TERMINE
-    ep.date_fin = datetime.now()
-    db.commit(); db.refresh(ep)
-    return ep
+    main = None
+    for ep in eps:
+        if ep.statut != statuses.TERMINE:
+            ep.statut = statuses.TERMINE
+            ep.date_fin = datetime.now()
+            if main is None:
+                main = ep
+    if main is None:
+        main = eps[-1]
+    lot = db.get(models.Lot, lot_id)
+    if lot:
+        statuses.validate_transition(lot.statut, statuses.CONDITIONNE)
+        lot.statut = statuses.CONDITIONNE
+    db.commit(); db.refresh(main)
+    if lot: db.refresh(lot)
+    return main
 
 
 def get_dryers_production(db: Session, lot_id: int) -> list:
-    ep = db.query(EtapeProduction).filter(
+    eps = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
-    ).first()
-    if not ep:
+    ).all()
+    if not eps:
         return []
-    chariots = db.query(Chariot).filter(Chariot.etape_production_id == ep.id).order_by(Chariot.id).all()
+    ep_ids = [e.id for e in eps]
+    chariots = db.query(Chariot).filter(Chariot.etape_production_id.in_(ep_ids)).order_by(Chariot.id).all()
     dryers = {}
     for c in chariots:
         d = c.dryer
@@ -511,6 +608,11 @@ def valider_conditionnement(db: Session, lot_id: int,
         if etape_cond.statut == statuses.EN_ATTENTE:
             etape_cond.statut = statuses.EN_COURS
             etape_cond.date_debut = datetime.now()
+        if not etape_cond.poids_entree:
+            etape_production = db.query(EtapeProduction).filter(
+                EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
+            ).first()
+            etape_cond.poids_entree = etape_production.poids_sortie if etape_production else 0.0
 
     etape_cond.poids_sortie = total_flux
     etape_cond.operateur = responsable or etape_cond.operateur or ""
@@ -814,15 +916,25 @@ def get_stats_production(db: Session) -> dict:
         EtapeProduction.statut == statuses.EN_COURS
     ).scalar()
     aujourdhui = datetime.now().strftime("%Y-%m-%d")
-    prod_jour = db.query(func.coalesce(func.sum(EtapeProduction.poids_sortie), 0)).filter(
-        func.date(EtapeProduction.date_fin) == aujourdhui
-    ).scalar()
+
+    def sum_etapes_jour(etape: str, champ: str = "poids_sortie"):
+        col = getattr(EtapeProduction, champ)
+        return db.query(func.coalesce(func.sum(col), 0)).filter(
+            EtapeProduction.etape == etape,
+            func.date(EtapeProduction.date_fin) == aujourdhui
+        ).scalar()
+
+    prod_jour = sum_etapes_jour("production")
+    musserie_jour = sum_etapes_jour("musserie", "poids_sortie")
+    conditionnement_jour = sum_etapes_jour("conditionnement", "poids_sortie")
     return {
         "lots_suivi": lots_suivi,
         "etapes_terminees": etapes_terminees,
         "etapes_en_cours": etapes_en_cours,
         "rendement_moyen_frais_sec": get_rendement_moyen_global(db),
         "production_jour_kg": round(prod_jour, 1),
+        "musserie_jour_kg": round(musserie_jour, 1),
+        "conditionnement_jour_kg": round(conditionnement_jour, 1),
     }
 
 def get_production_mensuelle(db: Session) -> list:

@@ -243,6 +243,8 @@ class DashboardProduction(BaseModel):
     lots_suivi: int; etapes_terminees: int; etapes_en_cours: int
     rendement_moyen_frais_sec: Optional[float] = None
     production_jour_kg: float = 0.0
+    musserie_jour_kg: float = 0.0
+    conditionnement_jour_kg: float = 0.0
 
 # ── DEMANDE DE TRANSFERT CHAMBRE FROIDE ──
 
