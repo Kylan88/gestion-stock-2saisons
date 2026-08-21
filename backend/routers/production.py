@@ -130,3 +130,54 @@ def historique_conditionnement(lot_id: int = None, db: Session = Depends(get_db)
 @router.get("/anomalies")
 def detecter_anomalies(db: Session = Depends(get_db)):
     return crud.detecter_anomalies(db)
+
+
+# ── PRODUCTION / RENDEMENT (Entrées journalières) ──
+
+@router.get("/config", response_model=schemas.CompanySettingsResponse)
+def get_production_config(db: Session = Depends(get_db)):
+    """Récupère la config production (capacité dryer + types fruits)."""
+    return crud.get_company_settings(db)
+
+
+@router.put("/config", response_model=schemas.CompanySettingsResponse)
+def update_production_config(data: schemas.CompanySettingsUpdate, db: Session = Depends(get_db)):
+    """Met à jour la config production."""
+    return crud.update_company_settings(db, data.model_dump(exclude_unset=True))
+
+
+@router.post("/entries", response_model=schemas.ProductionEntryResponse)
+def create_production_entry(data: schemas.ProductionEntryCreate, db: Session = Depends(get_db)):
+    """Enregistre un lot de production (kg frais + nb dryers)."""
+    try:
+        return crud.create_production_entry(db, **data.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/entries", response_model=List[schemas.ProductionEntryResponse])
+def list_production_entries(
+    date_from: str = Query(None, description="Date début ISO"),
+    date_to: str = Query(None, description="Date fin ISO"),
+    fruit_type: str = Query(None),
+    saison_id: int = Query(None),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """Liste les entrées de production avec filtres."""
+    return crud.get_production_entries(db, date_from, date_to, fruit_type, saison_id, skip, limit)
+
+
+@router.delete("/entries/{entry_id}")
+def delete_production_entry(entry_id: int, db: Session = Depends(get_db)):
+    """Supprime une entrée de production."""
+    if not crud.delete_production_entry(db, entry_id):
+        raise HTTPException(404, "Entrée introuvable")
+    return {"ok": True}
+
+
+@router.get("/stats", response_model=schemas.ProductionStats)
+def get_production_stats(db: Session = Depends(get_db)):
+    """Stats globales : total kg frais, nb dryers, rendement moyen, par fruit."""
+    return crud.get_production_stats(db)

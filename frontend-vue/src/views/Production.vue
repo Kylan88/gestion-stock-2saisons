@@ -1,525 +1,422 @@
 <template>
   <div class="page">
-     <PageHeader title="Production" subtitle="Chargement des chariots et mise au séchoir — saisie journalière cumulative">
+    <PageHeader title="Production" subtitle="Entrées journalières — kg frais, dryers remplis, rendement pulpe">
       <template #actions>
-        <div class="tabs">
-          <button class="tab" :class="{ active: activeView === 'saisie' }" @click="activeView = 'saisie'">
-            Saisie
-          </button>
-          <button class="tab" :class="{ active: activeView === 'historique' }" @click="activeView = 'historique'; loadHistorique()">
-            Historique
-          </button>
-        </div>
+        <button class="btn btn-primary" @click="showConfig = true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          Config
+        </button>
+        <button class="btn btn-primary" @click="showForm = true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Nouvelle entrée
+        </button>
       </template>
     </PageHeader>
 
-    <!-- HISTORIQUE -->
-    <div v-if="activeView === 'historique'" class="anim-fade">
-      <LoadingSpinner v-if="loadingHist" />
-      <div v-else-if="historique.length === 0" class="empty">
-        <div class="empty-text">Aucune production enregistrée</div>
+    <!-- KPIs -->
+    <div class="kpi-grid anim-fade">
+      <div class="kpi-card">
+        <div class="kpi-label">Total kg frais</div>
+        <div class="kpi-value">{{ formatKg(stats.total_kg_frais) }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Dryers remplis</div>
+        <div class="kpi-value">{{ stats.total_dryers }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Rendement moyen</div>
+        <div class="kpi-value">{{ (stats.rendement_moyen * 100).toFixed(1) }}%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pulpe obtenue</div>
+        <div class="kpi-value">{{ formatKg(Object.values(stats.par_fruit).reduce((s, f) => s + (f.pulpe_obtenue_kg || 0), 0)) }}</div>
+      </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card anim-fade" style="margin-top:16px">
+      <div class="form-row" style="gap:16px; flex-wrap:wrap; margin-bottom:12px">
+        <div class="form-group" style="flex:1; min-width:180px">
+          <label>Date début</label>
+          <input type="date" v-model="filters.date_from" class="form-input" @change="loadEntries" />
+        </div>
+        <div class="form-group" style="flex:1; min-width:180px">
+          <label>Date fin</label>
+          <input type="date" v-model="filters.date_to" class="form-input" @change="loadEntries" />
+        </div>
+        <div class="form-group" style="flex:1; min-width:180px">
+          <label>Type fruit</label>
+          <select v-model="filters.fruit_type" class="form-input" @change="loadEntries">
+            <option value="">Tous</option>
+            <option v-for="ft in config.fruit_types" :key="ft" :value="ft">{{ ft }}</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1; min-width:180px">
+          <label>Saison</label>
+          <select v-model="filters.saison_id" class="form-input" @change="loadEntries">
+            <option value="">Toutes</option>
+            <option v-for="s in saisons" :key="s.id" :value="s.id">{{ s.nom }}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tableau des entrées -->
+    <div class="card anim-fade" style="margin-top:16px">
+      <LoadingSpinner v-if="loading" />
+      <div v-else-if="entries.length === 0" class="empty">
+        <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
+        <div class="empty-text">Aucune entrée de production</div>
+        <div class="empty-sub">Cliquez sur "Nouvelle entrée" pour commencer</div>
       </div>
       <div v-else class="table-wrap">
         <table class="table">
           <thead>
             <tr>
               <th>Date</th>
-              <th>Lot</th>
-              <th>Poids entrée</th>
-              <th>Poids sortie</th>
+              <th>Fruit</th>
+              <th>Kg frais</th>
+              <th>Dryers</th>
+              <th>Pulpe obtenue (kg)</th>
               <th>Rendement</th>
-              <th>Dryer</th>
-              <th>Chariots</th>
-              <th>Opérateur</th>
+              <th>Notes</th>
+              <th style="width:60px"></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="ep in historique" :key="ep.id">
-              <td>{{ formatDate(ep.date_debut) }}</td>
-              <td><strong>{{ ep.lot?.code_lot || ep.lot_id }}</strong></td>
-              <td>{{ ep.poids_entree }} kg</td>
-              <td>{{ ep.poids_sortie || '—' }} kg</td>
-              <td>{{ ep.rendement_pourcentage ? ep.rendement_pourcentage + '%' : '—' }}</td>
-              <td>{{ ep.dryer ? 'D' + ep.dryer : '—' }}</td>
-              <td>{{ ep.nbre_chariots || '—' }}</td>
-              <td>{{ ep.operateur || '—' }}</td>
+            <tr v-for="e in entries" :key="e.id">
+              <td>{{ formatDate(e.date) }}</td>
+              <td><span class="fruit-badge">{{ e.fruit_type }}</span></td>
+              <td>{{ formatKg(e.poids_frais_kg) }}</td>
+              <td><strong>{{ e.nb_dryers }}</strong></td>
+              <td>{{ formatKg(e.pulpe_obtenue_kg) }}</td>
+              <td><span class="rendement-badge" :class="rendementClass(e.rendement)">{{ (e.rendement * 100).toFixed(1) }}%</span></td>
+              <td>{{ e.notes || '—' }}</td>
+              <td>
+                <button class="btn btn-ghost btn-sm" @click="confirmDelete(e)" title="Supprimer">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- FORMULAIRE -->
-    <div v-else-if="activeView === 'saisie'">
-      <LoadingSpinner v-if="loading" />
-      <div v-else-if="lots.length === 0" class="empty anim-fade">
-        <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
-        <div class="empty-text">Aucun lot en attente de production</div>
+    <!-- Stats par fruit -->
+    <div v-if="Object.keys(stats.par_fruit).length > 0" class="card anim-fade" style="margin-top:16px">
+      <div class="card-header" style="margin-bottom:12px"><strong>Par type de fruit</strong></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Fruit</th>
+              <th>Entrées</th>
+              <th>Kg frais</th>
+              <th>Dryers</th>
+              <th>Pulpe (kg)</th>
+              <th>Rendement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(f, fruit) in stats.par_fruit" :key="fruit">
+              <td><span class="fruit-badge">{{ fruit }}</span></td>
+              <td>{{ f.entries }}</td>
+              <td>{{ formatKg(f.kg_frais) }}</td>
+              <td>{{ f.dryers }}</td>
+              <td>{{ formatKg(f.pulpe_obtenue_kg) }}</td>
+              <td><span class="rendement-badge" :class="rendementClass(f.rendement)">{{ (f.rendement * 100).toFixed(1) }}%</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
+    </div>
 
-      <div v-for="lot in lots" :key="lot.id" class="card anim-fade" style="margin-bottom:16px">
-        <div class="card-header" style="margin-bottom:0">
-          <div style="display:flex;align-items:center;gap:10px">
-            <strong>{{ lot.code_lot }}</strong>
-            <span style="color:var(--text-secondary);font-size:13px">{{ lot.type_fruit || lot.produit?.nom }}</span>
-            <StatusBadge :status="lot.statut" />
+    <!-- Modal Config -->
+    <div v-if="showConfig" class="modal-overlay" @click.self="showConfig = false">
+      <div class="modal" style="max-width:480px">
+        <div class="modal-header">
+          <h3>Configuration Production</h3>
+          <button class="modal-close" @click="showConfig = false">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Capacité dryer (kg pulpe)</label>
+            <input type="number" step="0.1" min="1" v-model.number="configForm.dryer_capacity_kg" class="form-input" />
           </div>
-          <div style="display:flex;gap:16px;font-size:13px">
-            <span style="color:var(--text-muted)">Reçu : <strong>{{ lot.poids_frais }} kg</strong></span>
-            <span style="color:var(--primary)">Restant : <strong>{{ lot.quantite_restante || lot.poids_frais }} kg</strong></span>
+          <div class="form-group">
+            <label>Types de fruits (séparés par virgule)</label>
+            <input type="text" v-model="configForm.fruit_types_str" class="form-input" placeholder="mangue, ananas, goyave" />
           </div>
         </div>
-
-        <!-- Musserie disponible pour production aujourd'hui -->
-        <div v-if="musserieData[lot.id] && musserieData[lot.id].length > 0" class="musserie-available">
-          <div class="musserie-available-title">Musserie du jour (à charger) :</div>
-          <div class="musserie-available-grid">
-            <div v-for="m in musserieData[lot.id]" :key="m.dryer" class="musserie-available-item">
-              <span class="musserie-dryer">Dryer {{ m.dryer }}</span>
-              <strong class="musserie-poids">{{ m.poids_sortie }} kg</strong>
-            </div>
-          </div>
-        </div>
-
-         <!-- Dryers déjà enregistrés -->
-         <div v-if="dryers[lot.id] && dryers[lot.id].length > 0" class="cumul-section">
-          <div class="cumul-section-title">Dryers enregistrés ({{ dryers[lot.id].length }})</div>
-          <div class="cumul-row">
-            <div v-for="d in dryers[lot.id]" :key="d.dryer" class="cumul-box">
-              <div class="cumul-box-header">Dryer {{ d.dryer }}</div>
-              <div class="cumul-box-body">
-                <div class="cumul-stat"><span>Chariots</span><strong>{{ d.nbre_chariots }}</strong></div>
-                <div class="cumul-stat"><span>Claies</span><strong>{{ d.total_claies }}</strong></div>
-                <div class="cumul-stat"><span>Production</span><strong>{{ d.quantite_totale }} kg</strong></div>
-              </div>
-              <div class="cumul-chariots">
-                <span v-for="c in d.chariots" :key="c.id" class="chariot-pill">
-                  C{{ c.numero_chariot }} {{ c.heure_remplissage }}→{{ c.heure_entree_sechoir }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div class="cumul-total">
-            <span>Total produit : <strong>{{ totalAllDryers(lot.id) }} kg</strong></span>
-            <span>Chariots : <strong>{{ totalChariots(lot.id) }}</strong></span>
-            <span>Claies : <strong>{{ totalClaies(lot.id) }}</strong></span>
-          </div>
-
-          <div class="cloture-row">
-            <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer la production' }}
-            </button>
-          </div>
-        </div>
-
-         <!-- Formulaire nouveau dryer -->
-         <div class="prod-form compact">
-           <div class="dryers-title" style="margin-top:12px">
-             {{ dryers[lot.id] && dryers[lot.id].length > 0 ? 'Ajouter un dryer' : 'Nouveau dryer' }}
-           </div>
-
-           <!-- Dryer + configuration -->
-           <div class="form-row">
-             <div class="form-group">
-               <label class="input-label">Dryer *</label>
-               <select v-model="f[lot.id].dryer" class="input compact" @change="onDryerChange(lot.id)">
-                 <option :value="1">Dryer 1 — 6 chariots, 42 claies/chariot</option>
-                 <option :value="2">Dryer 2 — 12 chariots, 20 claies/chariot</option>
-               </select>
-             </div>
-             <div class="form-group">
-               <label class="input-label">Nombre de chariots *</label>
-               <input type="number" v-model.number="f[lot.id].nbre_chariots" class="input compact" min="1" :max="maxChariots(lot.id)" @input="calcQté(lot.id)" />
-             </div>
-           </div>
-
-          <!-- Résumé calculé -->
-          <div v-if="f[lot.id].nbre_chariots && f[lot.id].dryer" class="prod-resume">
-            <div class="resume-item">
-              <span class="resume-label">Claies/chariot</span>
-              <span class="resume-val">{{ claiesPerChariot(lot.id) }}</span>
-            </div>
-            <div class="resume-item">
-              <span class="resume-label">Total claies</span>
-              <span class="resume-val">{{ totalClaies(lot.id) }}</span>
-            </div>
-            <div class="resume-item">
-              <span class="resume-label">Qté par claie</span>
-              <span class="resume-val">{{ kgParClaie(lot.id) }} kg</span>
-            </div>
-            <div class="resume-item resume-total">
-              <span class="resume-label">Qté totale</span>
-              <span class="resume-val">{{ qtéTotale(lot.id) }} kg</span>
-            </div>
-          </div>
-
-           <!-- Tableau chariots -->
-           <div v-if="f[lot.id].nbre_chariots > 0" class="chariot-table">
-             <div class="chariot-header">
-               <span class="ch-num">N° chariot</span>
-               <span class="ch-time">Heure remplissage</span>
-               <span class="ch-time">Heure entrée séchoir</span>
-               <span class="ch-action"></span>
-             </div>
-             <div v-for="i in f[lot.id].nbre_chariots" :key="i" class="chariot-row" :class="{ 'chariot-ok': f[lot.id].chariots[i-1].enregistre }">
-               <span class="ch-num">{{ i }}</span>
-               <input type="time" v-model="f[lot.id].chariots[i-1].heure_remplissage" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-               <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_sechoir" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-               <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm btn-outline" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_sechoir" @click="enregistrerChariot(lot.id, i-1)">Enreg.</button>
-               <span v-else class="ch-check">OK</span>
-             </div>
-           </div>
-
-           <!-- Opérateur + valider -->
-           <div class="form-row" style="margin-top:14px">
-             <div class="form-group" style="flex:2">
-               <label class="input-label">Opérateur</label>
-               <input v-model="f[lot.id].operateur" class="input compact" placeholder="Nom" />
-             </div>
-             <div class="form-group" style="flex:0">
-               <label class="input-label">&nbsp;</label>
-               <button class="btn btn-primary" :disabled="!canSubmit(lot.id) || saving" @click="enregistrer(lot)">
-                 {{ saving ? 'Enregistrement...' : 'Enregistrer ce dryer' }}
-               </button>
-             </div>
-           </div>
-
-          <!-- Clôturer -->
-          <div v-if="dryers[lot.id] && dryers[lot.id].length > 0" style="margin-top:12px;text-align:right">
-            <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer la production' }}
-            </button>
-          </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="showConfig = false">Annuler</button>
+          <button class="btn btn-primary" @click="saveConfig">Enregistrer</button>
         </div>
       </div>
     </div>
 
-    <ConfirmDialog
-      :show="!!confirmClotureLot"
-      title="Clôturer la production ?"
-      :message="'Terminer la production pour ' + (confirmClotureLot?.code_lot || '') + ' ? Cette action est irréversible.'"
-      confirmText="Clôturer"
-      variant="warning"
-      @confirm="cloturer(confirmClotureLot)"
-      @cancel="confirmClotureLot = null"
-    />
+    <!-- Modal Nouvelle entrée -->
+    <div v-if="showForm" class="modal-overlay" @click.self="showForm = false">
+      <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+          <h3>Nouvelle entrée de production</h3>
+          <button class="modal-close" @click="showForm = false">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label>Date</label>
+              <input type="date" v-model="form.date" class="form-input" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>Type fruit</label>
+              <select v-model="form.fruit_type" class="form-input">
+                <option value="" disabled>Sélectionner</option>
+                <option v-for="ft in config.fruit_types" :key="ft" :value="ft">{{ ft }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label>Poids frais (kg)</label>
+              <input type="number" step="0.1" min="0.1" v-model.number="form.poids_frais_kg" class="form-input" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>Nombre de dryers</label>
+              <input type="number" min="1" v-model.number="form.nb_dryers" class="form-input" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Saison</label>
+            <select v-model="form.saison_id" class="form-input">
+              <option value="">— Sans saison —</option>
+              <option v-for="s in saisons" :key="s.id" :value="s.id">{{ s.nom }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notes</label>
+            <textarea v-model="form.notes" class="form-input" rows="2" placeholder="Observations..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="showForm = false">Annuler</button>
+          <button class="btn btn-primary" @click="submitForm" :disabled="submitting">{{ submitting ? 'Enregistrement...' : 'Enregistrer' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Confirmation suppression -->
+    <div v-if="deleteConfirm" class="modal-overlay" @click.self="deleteConfirm = null">
+      <div class="modal" style="max-width:400px">
+        <div class="modal-header"><h3>Confirmer la suppression</h3></div>
+        <div class="modal-body">
+          <p>Supprimer l'entrée du {{ formatDate(deleteConfirm.date) }} ({{ formatKg(deleteConfirm.poids_frais_kg) }} kg, {{ deleteConfirm.fruit_type }}) ?</p>
+          <p class="text-warning">Cette action est irréversible.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="deleteConfirm = null">Annuler</button>
+          <button class="btn btn-danger" @click="executeDelete">Supprimer</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
-import { getLots, getProductionsEtapes, validerProduction, getDryersProduction, cloturerProduction, getHistoriqueProduction, getMusserieByDateDryer } from '../api'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useToastStore } from '../stores/toast'
-import LoadingSpinner from '../components/LoadingSpinner.vue'
-import StatusBadge from '../components/StatusBadge.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
-import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, TERMINE } from '../utils/statuses'
+import LoadingSpinner from '../components/LoadingSpinner.vue'
 
-const DRYER = { 1: { chariots: 6, claies: 42, kg_par_claie: 6.25 }, 2: { chariots: 12, claies: 20, kg_par_claie: 6.5 } }
+const toast = useToastStore()
 
-const showHistorique = ref(false)
-const historique = ref([])
-const loadingHist = ref(false)
-const confirmClotureLot = ref(null)
+// API
+const apiBase = '/api/production'
+
+async function api(path, options = {}) {
+  const res = await fetch(`${apiBase}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Erreur serveur' }))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+// State
+const loading = ref(false)
+const entries = ref([])
+const stats = ref({ total_kg_frais: 0, total_dryers: 0, rendement_moyen: 0, par_fruit: {} })
+const config = ref({ dryer_capacity_kg: 1500, fruit_types: ['mangue', 'ananas', 'goyave'] })
+const saisons = ref([])
+
+const filters = ref({ date_from: '', date_to: '', fruit_type: '', saison_id: '' })
+
+const showConfig = ref(false)
+const showForm = ref(false)
+const submitting = ref(false)
+const deleteConfirm = ref(null)
+
+const form = ref({
+  date: new Date().toISOString().split('T')[0],
+  fruit_type: '',
+  poids_frais_kg: null,
+  nb_dryers: 1,
+  saison_id: '',
+  notes: ''
+})
+
+const configForm = ref({
+  dryer_capacity_kg: 1500,
+  fruit_types_str: 'mangue, ananas, goyave'
+})
+
+// Computed
+const rendementClass = (r) => {
+  if (r >= 0.7) return 'rendement-good'
+  if (r >= 0.5) return 'rendement-warn'
+  return 'rendement-low'
+}
+
+// Loaders
+async function loadConfig() {
+  try {
+    const c = await api('/config')
+    config.value = c
+    configForm.value.dryer_capacity_kg = c.dryer_capacity_kg
+    configForm.value.fruit_types_str = (c.fruit_types || []).join(', ')
+  } catch (e) {
+    toast.error('Erreur config: ' + e.message)
+  }
+}
+
+async function loadSaisons() {
+  try {
+    const res = await fetch('/api/saisons')
+    if (res.ok) saisons.value = await res.json()
+  } catch {}
+}
+
+async function loadEntries() {
+  loading.value = true
+  try {
+    const params = new URLSearchParams()
+    if (filters.value.date_from) params.set('date_from', filters.value.date_from)
+    if (filters.value.date_to) params.set('date_to', filters.value.date_to)
+    if (filters.value.fruit_type) params.set('fruit_type', filters.value.fruit_type)
+    if (filters.value.saison_id) params.set('saison_id', filters.value.saison_id)
+    params.set('skip', '0')
+    params.set('limit', '200')
+    entries.value = await api(`/entries?${params.toString()}`)
+  } catch (e) {
+    toast.error('Erreur chargement: ' + e.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadStats() {
+  try {
+    stats.value = await api('/stats')
+  } catch (e) {
+    toast.error('Erreur stats: ' + e.message)
+  }
+}
+
+async function loadAll() {
+  await Promise.all([loadConfig(), loadSaisons(), loadEntries(), loadStats()])
+}
+
+// Actions
+async function saveConfig() {
+  try {
+    const fruitTypes = configForm.value.fruit_types_str.split(',').map(s => s.trim()).filter(Boolean)
+    await api('/config', { method: 'PUT', body: JSON.stringify({ dryer_capacity_kg: configForm.value.dryer_capacity_kg, fruit_types: fruitTypes }) })
+    toast.success('Configuration mise à jour')
+    showConfig.value = false
+    await Promise.all([loadConfig(), loadEntries(), loadStats()])
+  } catch (e) {
+    toast.error('Erreur: ' + e.message)
+  }
+}
+
+async function submitForm() {
+  if (!form.value.fruit_type || !form.value.poids_frais_kg) {
+    toast.error('Remplissez les champs obligatoires')
+    return
+  }
+  submitting.value = true
+  try {
+    await api('/entries', { method: 'POST', body: JSON.stringify(form.value) })
+    toast.success('Entrée enregistrée')
+    showForm.value = false
+    form.value = { date: new Date().toISOString().split('T')[0], fruit_type: '', poids_frais_kg: null, nb_dryers: 1, saison_id: '', notes: '' }
+    await Promise.all([loadEntries(), loadStats()])
+  } catch (e) {
+    toast.error('Erreur: ' + e.message)
+  } finally {
+    submitting.value = false
+  }
+}
+
+function confirmDelete(entry) {
+  deleteConfirm.value = entry
+}
+
+async function executeDelete() {
+  if (!deleteConfirm.value) return
+  try {
+    await api(`/entries/${deleteConfirm.value.id}`, { method: 'DELETE' })
+    toast.success('Entrée supprimée')
+    deleteConfirm.value = null
+    await Promise.all([loadEntries(), loadStats()])
+  } catch (e) {
+    toast.error('Erreur: ' + e.message)
+  }
+}
+
+function formatKg(v) {
+  return (v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 function formatDate(d) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(d).toLocaleDateString('fr-FR')
 }
 
-async function loadHistorique() {
-  loadingHist.value = true
-  try { historique.value = await getHistoriqueProduction() } finally { loadingHist.value = false }
-}
+// Init
+onMounted(loadAll)
 
-watch(showHistorique, (v) => { if (v) loadHistorique() })
-
-const lots = ref([])
-const loading = ref(true)
-const saving = ref(false)
-const cloturing = ref(false)
-const toast = useToastStore()
-const f = reactive({})
-const dryers = reactive({})
-const etapesData = reactive({})
-const musserieData = reactive({}) // { lotId: { dryer: { date: poids_sortie } } }
-const activeView = ref('saisie')
-
-function maxChariots(lotId) { return DRYER[f[lotId]?.dryer || 1].chariots }
-function claiesPerChariot(lotId) { return DRYER[f[lotId]?.dryer || 1].claies }
-function kgParClaie(lotId) { return DRYER[f[lotId]?.dryer || 1].kg_par_claie }
-function totalClaies(lotId) { return (f[lotId]?.nbre_chariots || 0) * claiesPerChariot(lotId) }
-function qtéTotale(lotId) { return Math.round(totalClaies(lotId) * kgParClaie(lotId) * 100) / 100 }
-function canSubmit(lotId) {
-  const d = f[lotId]
-  if (!d || !d.dryer || d.nbre_chariots <= 0) return false
-  return d.chariots.every(c => c.enregistre)
-}
-function onDryerChange(lotId) {
-  const d = f[lotId]
-  d.nbre_chariots = maxChariots(lotId)
-  rebuildChariots(lotId)
-}
-function rebuildChariots(lotId) {
-  const d = f[lotId]
-  const n = d.nbre_chariots || 0
-  while (d.chariots.length < n) d.chariots.push({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })
-  while (d.chariots.length > n) d.chariots.pop()
-}
-function calcQté(lotId) { rebuildChariots(lotId) }
-
-function enregistrerChariot(lotId, index) {
-  f[lotId].chariots[index].enregistre = true
-  toast.success(`Chariot ${index + 1} enregistré`)
-}
-
-function totalAllDryers(lotId) {
-  if (!dryers[lotId]) return 0
-  return dryers[lotId].reduce((sum, d) => sum + d.quantite_totale, 0)
-}
-
-function totalChariots(lotId) {
-  if (!dryers[lotId]) return 0
-  return dryers[lotId].reduce((sum, d) => sum + (d.nbre_chariots || 0), 0)
-}
-
-function getMusseriePoids(lotId, dryer) {
-  const data = musserieData[lotId]
-  if (!data) return 0
-  const entry = data.find(m => m.dryer === dryer)
-  return entry?.poids_sortie || 0
-}
-
-function initForm(lotId) {
-  if (!f[lotId]) {
-    const d = 1
-    const n = DRYER[d].chariots
-    f[lotId] = reactive({
-      dryer: d, nbre_chariots: n,
-      operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })),
-    })
-  }
-}
-
-function resetForm(lotId) {
-  if (f[lotId]) {
-    const d = 1
-    const n = DRYER[d].chariots
-    f[lotId].dryer = d
-    f[lotId].nbre_chariots = n
-    f[lotId].chariots = Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false }))
-    f[lotId].operateur = ''
-  }
-}
-
-async function loadDryers(lotId) {
-  const data = await getDryersProduction(lotId)
-  dryers[lotId] = data
-}
-
-async function loadMusserieForToday(lotId) {
-    const today = new Date().toISOString().split('T')[0]
-    try {
-      const data = await getMusserieByDateDryer(lotId, today)
-      musserieData[lotId] = data
-    } catch {
-      musserieData[lotId] = []
-    }
-  }
-
-  async function load() {
-    loading.value = true
-    try {
-      const raw = await getLots()
-      const filtered = raw.filter(l => [EN_MUSSERIE, EN_PRODUCTION].includes(toCanonical(l.statut)))
-      const result = []
-      for (const lot of filtered) {
-        const etapes = await getProductionsEtapes(lot.id)
-        const prodEtapes = etapes.filter(e => e.etape === 'production')
-        if (prodEtapes.length > 0 && prodEtapes.every(e => toCanonical(e.statut) === TERMINE)) {
-          continue
-        }
-        result.push(lot)
-        initForm(lot.id)
-        await loadDryers(lot.id)
-        await loadMusserieForToday(lot.id)
-      }
-      lots.value = result
-    } finally { loading.value = false }
-  }
-
-async function enregistrer(lot) {
-  saving.value = true
-  try {
-    await validerProduction(lot.id, {
-      dryer: f[lot.id].dryer,
-      nbre_chariots: f[lot.id].nbre_chariots,
-      quantite_totale: qtéTotale(lot.id),
-      operateur: f[lot.id].operateur || '',
-      chariots: f[lot.id].chariots.map(c => ({
-        numero_chariot: f[lot.id].chariots.indexOf(c) + 1,
-        heure_remplissage: c.heure_remplissage || '',
-        heure_entree_sechoir: c.heure_entree_sechoir || '',
-      })),
-    })
-    toast.success(`Dryer ${f[lot.id].dryer} enregistré`)
-    resetForm(lot.id)
-    await loadDryers(lot.id)
-  } finally { saving.value = false }
-}
-
-async function cloturer(lot) {
-  confirmClotureLot.value = null
-  cloturing.value = true
-  try {
-    await cloturerProduction(lot.id)
-    toast.success(`Production clôturée pour ${lot.code_lot}`)
-    await load()
-  } finally { cloturing.value = false }
-}
-
-onMounted(load)
+// Watch filtres
+watch(filters, loadEntries, { deep: true })
 </script>
 
 <style scoped>
-.prod-saisie { padding-top: 14px; }
-.prod-resume {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  padding: 12px 16px;
-  margin-bottom: 14px;
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-light);
-}
-.resume-item { display: flex; flex-direction: column; gap: 2px; }
-.resume-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
-.resume-val { font-size: 14px; font-weight: 700; color: var(--dark); }
-.resume-total { 
-  border-left: 2px solid var(--primary); 
-  padding-left: 12px; 
-}
-.resume-total .resume-val { color: var(--primary); }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 8px; }
+.kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; }
+.kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.kpi-value { font-size: 28px; font-weight: 700; color: var(--dark); font-family: 'Source Serif 4', Georgia, serif; }
 
-.dryer-selector {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 14px;
-}
+.fruit-badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; background: var(--primary-light); color: var(--primary); }
+.rendement-badge { font-weight: 700; font-size: 13px; }
+.rendement-good { color: var(--success); }
+.rendement-warn { color: var(--warning); }
+.rendement-low { color: var(--error); }
 
-.input-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  margin-bottom: 4px;
-}
+.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; backdrop-filter: blur(2px); animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal { background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 100%; max-height: 90vh; overflow-y: auto; animation: slideUp 0.25s var(--ease); }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.modal-header h3 { font-size: 16px; font-weight: 600; color: var(--dark); }
+.modal-close { background: none; border: none; font-size: 22px; color: var(--text-muted); cursor: pointer; line-height: 1; padding: 4px; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 20px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
 
-.input-hint {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.chariot-table { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 14px; }
-.chariot-header {
-  display: grid; grid-template-columns: 50px 1fr 1fr 110px;
-  padding: 8px 14px; background: var(--surface); font-size: 11px;
-  font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px;
-}
-.chariot-row {
-  display: grid; grid-template-columns: 50px 1fr 1fr 110px;
-  padding: 6px 14px; border-top: 1px solid var(--border-light);
-  align-items: center; font-size: 13px;
-}
-.ch-num { font-weight: 600; color: var(--dark); }
-.ch-input { font-size: 13px; }
-.ch-action { display: flex; align-items: center; justify-content: center; }
-.ch-check { font-weight: 700; color: var(--success); font-size: 13px; }
-.chariot-ok { background: var(--success-light); }
-
-.cumul-section { border-top: 1px solid var(--border-light); padding-top: 14px; margin-top: 14px; }
-.cumul-section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px; margin-bottom: 8px; }
-.cumul-row { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
-.cumul-box { flex: 1; min-width: 200px; background: var(--success-light); border: 1px solid rgba(22,101,32,0.2); border-radius: var(--radius-sm); overflow: hidden; }
-.cumul-box-header { padding: 6px 14px; font-weight: 700; font-size: 13px; color: #166534; background: rgba(22,101,32,0.08); border-bottom: 1px solid rgba(22,101,32,0.15); }
-.cumul-box-body { padding: 8px 14px; display: flex; flex-direction: column; gap: 4px; }
-.cumul-stat { display: flex; justify-content: space-between; font-size: 12px; }
-.cumul-stat span { color: #15803D; }
-.cumul-stat strong { color: #166534; }
-.cumul-chariots { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 14px; }
-.chariot-pill {
-  font-size: 10px; padding: 2px 8px; background: white; border: 1px solid var(--success);
-  border-radius: 99px; color: var(--text-muted);
-}
-
-.cumul-total {
-  display: flex; flex-wrap: wrap; gap: 12px 20px; padding: 10px 14px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  font-size: 13px; color: var(--text-secondary);
-}
-.cumul-total strong { color: var(--dark); }
-
-.cloture-row { margin-top: 12px; text-align: right; }
-
-.musserie-available {
-  margin-top: 12px; padding: 12px;
-  background: var(--info-light); border: 1px solid var(--info); border-radius: var(--radius-sm);
-}
-.musserie-available-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--info); letter-spacing: 0.3px; margin-bottom: 8px; }
-.musserie-available-grid { display: flex; gap: 16px; flex-wrap: wrap; }
-.musserie-available-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.musserie-dryer { color: var(--text-secondary); }
-.musserie-poids { color: var(--info); font-weight: 700; }
-
-.saisie-section { border-top: 1px solid var(--border-light); padding-top: 14px; margin-top: 14px; }
-.saisie-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px; margin-bottom: 10px; }
-
-.tabs {
-  display: flex;
-  gap: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-.tab {
-  padding: 6px 16px;
-  background: var(--surface);
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-  transition: all 0.2s;
-}
-.tab:hover { color: var(--primary); }
-.tab.active {
-  background: var(--primary);
-  color: white;
-  font-weight: 600;
-}
-
-@media (max-width: 768px) { 
-  .chariot-header, .chariot-row { grid-template-columns: 40px 1fr 1fr 80px; }
-  .dryer-selector { grid-template-columns: 1fr !important; }
-  .prod-resume { grid-template-columns: 1fr 1fr !important; }
-}
-
-/* Compact inputs for production flux */
-.compact .input {
-  min-height: 32px;
-  padding: 5px 10px;
-  font-size: 12px;
-}
-.compact .input-sm {
-  min-height: 28px;
-  padding: 3px 8px;
-  font-size: 11px;
-}
+.text-warning { color: var(--warning); font-size: 13px; margin-top: 8px; }
 </style>

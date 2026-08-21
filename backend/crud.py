@@ -1239,3 +1239,152 @@ def get_historique_conditionnement(db: Session, lot_id: int = None):
     if lot_id:
         q = q.filter(EtapeProduction.lot_id == lot_id)
     return q.order_by(EtapeProduction.date_debut.desc()).all()
+
+
+# ── PRODUCTION / RENDEMENT (Entrées journalières) ──
+
+def get_company_settings(db: Session) -> dict:
+    """Récupère la config production (capacité dryer + types fruits)."""
+    from models import CompanySettings
+    settings = db.query(CompanySettings).all()
+    result = {}
+    for s in settings:
+        try:
+            import json
+            result[s.key] = json.loads(s.value)
+        except Exception:
+            result[s.key] = s.value
+    defaults = {"dryer_capacity_kg": 1500.0, "fruit_types": ["mangue", "ananas", "goyave"]}
+    for k, v in defaults.items():
+        result.setdefault(k, v)
+    return result
+
+
+def update_company_settings(db: Session, data: dict) -> dict:
+    """Met à jour la config production."""
+    from models import CompanySettings
+    import json
+    for key, value in data.items():
+        s = db.query(CompanySettings).filter(CompanySettings.key == key).first()
+        if s:
+            s.value = json.dumps(value)
+        else:
+            s = CompanySettings(key=key, value=json.dumps(value))
+            db.add(s)
+    db.commit()
+    return get_company_settings(db)
+
+
+def create_production_entry(db: Session, **data) -> dict:
+    """Enregistre une entrée de production et calcule la pulpe et le rendement."""
+    from models import ProductionEntry
+    settings = get_company_settings(db)
+    dryer_cap = settings.get("dryer_capacity_kg", 1500.0)
+    nb_dryers = data.get("nb_dryers", 1)
+    poids_frais = data["poids_frais_kg"]
+    pulpe_obtenue = nb_dryers * dryer_cap
+    rendement = pulpe_obtenue / poids_frais if poids_frais > 0 else 0.0
+    entry = ProductionEntry(
+        date=data["date"],
+        fruit_type=data["fruit_type"],
+        poids_frais_kg=poids_frais,
+        nb_dryers=nb_dryers,
+        notes=data.get("notes", ""),
+        saison_id=data.get("saison_id"),
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return {
+        "id": entry.id,
+        "date": entry.date,
+        "fruit_type": entry.fruit_type,
+        "poids_frais_kg": entry.poids_frais_kg,
+        "nb_dryers": entry.nb_dryers,
+        "notes": entry.notes,
+        "saison_id": entry.saison_id,
+        "created_at": entry.created_at,
+        "updated_at": entry.updated_at,
+        "pulpe_obtenue_kg": round(pulpe_obtenue, 2),
+        "rendement": round(rendement, 4),
+    }
+
+
+def get_production_entries(db: Session, date_from: str = None, date_to: str = None,
+                            fruit_type: str = None, saison_id: int = None,
+                            skip: int = 0, limit: int = 100) -> list:
+    """Liste les entrées de production avec filtres."""
+    from models import ProductionEntry
+    settings = get_company_settings(db)
+    dryer_cap = settings.get("dryer_capacity_kg", 1500.0)
+    q = db.query(ProductionEntry)
+    if date_from:
+        q = q.filter(ProductionEntry.date >= date_from)
+    if date_to:
+        q = q.filter(ProductionEntry.date <= date_to)
+    if fruit_type:
+        q = q.filter(ProductionEntry.fruit_type == fruit_type)
+    if saison_id:
+        q = q.filter(ProductionEntry.saison_id == saison_id)
+    q = q.order_by(ProductionEntry.date.desc())
+    entries = q.offset(skip).limit(limit).all()
+    result = []
+    for e in entries:
+        pulpe = e.nb_dryers * dryer_cap
+        rend = pulpe / e.poids_frais_kg if e.poids_frais_kg > 0 else 0.0
+        result.append({
+            "id": e.id,
+            "date": e.date,
+            "fruit_type": e.fruit_type,
+            "poids_frais_kg": e.poids_frais_kg,
+            "nb_dryers": e.nb_dryers,
+            "notes": e.notes,
+            "saison_id": e.saison_id,
+            "created_at": e.created_at,
+            "updated_at": e.updated_at,
+            "pulpe_obtenue_kg": round(pulpe, 2),
+            "rendement": round(rend, 4),
+        })
+    return result
+
+
+def delete_production_entry(db: Session, entry_id: int) -> bool:
+    """Supprime une entrée de production."""
+    from models import ProductionEntry
+    entry = db.query(ProductionEntry).filter(ProductionEntry.id == entry_id).first()
+    if not entry:
+        return False
+    db.delete(entry)
+    db.commit()
+    return True
+
+
+def get_production_stats(db: Session) -> dict:
+    """Stats globales : total kg frais, nb dryers, rendement moyen, par fruit."""
+    from models import ProductionEntry
+    settings = get_company_settings(db)
+    dryer_cap = settings.get("dryer_capacity_kg", 1500.0)
+    entries = db.query(ProductionEntry).all()
+    if not entries:
+        return {"total_kg_frais": 0.0, "total_dryers": 0, "rendement_moyen": 0.0, "par_fruit": {}}
+    total_frais = sum(e.poids_frais_kg for e in entries)
+    total_dryers = sum(e.nb_dryers for e in entries)
+    total_pulpe = total_dryers * dryer_cap
+    rendement_moyen = total_pulpe / total_frais if total_frais > 0 else 0.0
+    par_fruit = {}
+    for e in entries:
+        if e.fruit_type not in par_fruit:
+            par_fruit[e.fruit_type] = {"kg_frais": 0.0, "dryers": 0, "entries": 0}
+        par_fruit[e.fruit_type]["kg_frais"] += e.poids_frais_kg
+        par_fruit[e.fruit_type]["dryers"] += e.nb_dryers
+        par_fruit[e.fruit_type]["entries"] += 1
+    for ft, d in par_fruit.items():
+        pulpe = d["dryers"] * dryer_cap
+        d["pulpe_obtenue_kg"] = round(pulpe, 2)
+        d["rendement"] = round(pulpe / d["kg_frais"], 4) if d["kg_frais"] > 0 else 0.0
+    return {
+        "total_kg_frais": round(total_frais, 2),
+        "total_dryers": total_dryers,
+        "rendement_moyen": round(rendement_moyen, 4),
+        "par_fruit": par_fruit,
+    }

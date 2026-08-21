@@ -287,3 +287,49 @@ class ReconditionnementResponse(BaseModel):
     type_source: str; nb_cartons_entree: int; nb_sachets_100g_sortie: int
     responsable: str; notes: str; statut: str
     class Config: from_attributes = True
+
+
+# ── PRODUCTION / RENDEMENT (Entrées journalières) ──
+
+class CompanySettingsBase(BaseModel):
+    dryer_capacity_kg: float = 1500.0
+    fruit_types: List[str] = ["mangue", "ananas", "goyave"]
+
+class CompanySettingsUpdate(BaseModel):
+    dryer_capacity_kg: Optional[float] = None
+    fruit_types: Optional[List[str]] = None
+
+class CompanySettingsResponse(CompanySettingsBase):
+    class Config: from_attributes = True
+
+
+class ProductionEntryCreate(ValidatedInput):
+    positive_fields = {"poids_frais_kg", "nb_dryers"}
+    date: datetime
+    fruit_type: str
+    poids_frais_kg: float
+    nb_dryers: int = 1
+    notes: str = ""
+    saison_id: Optional[int] = None
+
+class ProductionEntryResponse(BaseModel):
+    id: int
+    date: datetime
+    fruit_type: str
+    poids_frais_kg: float
+    nb_dryers: int
+    notes: str
+    saison_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    # Champs calculés
+    pulpe_obtenue_kg: float
+    rendement: float
+    class Config: from_attributes = True
+
+
+class ProductionStats(BaseModel):
+    total_kg_frais: float
+    total_dryers: int
+    rendement_moyen: float
+    par_fruit: dict

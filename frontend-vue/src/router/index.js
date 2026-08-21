@@ -5,6 +5,7 @@ import Dashboard from '../views/Dashboard.vue'
 import Lots from '../views/Lots.vue'
 import Musserie from '../views/Musserie.vue'
 import Production from '../views/Production.vue'
+import ProductionChariots from '../views/ProductionChariots.vue'
 import Conditionnement from '../views/Conditionnement.vue'
 import Stock from '../views/Stock.vue'
 import Produits from '../views/Produits.vue'
@@ -21,6 +22,7 @@ const routes = [
   { path: '/lots', name: 'Lots', component: Lots },
   { path: '/musserie', name: 'Musserie', component: Musserie },
   { path: '/production', name: 'Production', component: Production },
+  { path: '/production/chariots', name: 'ProductionChariots', component: ProductionChariots },
   { path: '/conditionnement', name: 'Conditionnement', component: Conditionnement },
   { path: '/stock', name: 'Stock', component: Stock },
   { path: '/stock/transfert', name: 'TransfertChambreFroid', component: TransfertChambreFroid },

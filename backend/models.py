@@ -247,3 +247,28 @@ class Reconditionnement(Base):
     statut = Column(String(20), default=statuses.TERMINE)
 
     lot = relationship("Lot")
+
+
+# ── PRODUCTION / RENDEMENT (Entrées journalières) ──
+
+class CompanySettings(Base):
+    __tablename__ = "company_settings"
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), nullable=False, unique=True)
+    value = Column(Text, nullable=False)
+    description = Column(Text, default="")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class ProductionEntry(Base):
+    __tablename__ = "production_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(DateTime, nullable=False)
+    fruit_type = Column(String(50), nullable=False)
+    poids_frais_kg = Column(Float, nullable=False)
+    nb_dryers = Column(Integer, nullable=False, default=1)
+    notes = Column(Text, default="")
+    saison_id = Column(Integer, nullable=True)
+    created_by_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
