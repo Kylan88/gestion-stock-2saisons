@@ -313,23 +313,24 @@ class ProductionEntryCreate(ValidatedInput):
     saison_id: Optional[int] = None
 
 class ProductionEntryResponse(BaseModel):
-    id: int
+    lot_id: int
+    code_lot: str
     date: datetime
     fruit_type: str
     poids_frais_kg: float
-    nb_dryers: int
-    notes: str
-    saison_id: Optional[int] = None
-    created_at: datetime
-    updated_at: datetime
-    # Champs calculés
     pulpe_obtenue_kg: float
+    nb_dryers: int
     rendement: float
+    rendement_global: float
+    dryers: Optional[str] = None
     class Config: from_attributes = True
 
 
 class ProductionStats(BaseModel):
     total_kg_frais: float
+    total_pulpe_kg: float
     total_dryers: int
     rendement_moyen: float
+    rendement_global: float
     par_fruit: dict
+    par_lot: dict = {}

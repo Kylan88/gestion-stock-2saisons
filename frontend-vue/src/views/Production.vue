@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <PageHeader title="Production" subtitle="Entrées journalières — kg frais, dryers remplis, rendement pulpe">
+    <PageHeader title="Production" subtitle="Rendement calculé automatiquement depuis la musserie">
       <template #actions>
         <button class="btn btn-primary" @click="showConfig = true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -8,30 +8,26 @@
           </svg>
           Config
         </button>
-        <button class="btn btn-primary" @click="showForm = true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Nouvelle entrée
-        </button>
       </template>
     </PageHeader>
 
     <!-- KPIs -->
     <div class="kpi-grid anim-fade">
       <div class="kpi-card">
-        <div class="kpi-label">Total kg frais</div>
+        <div class="kpi-label">Total kg frais (musserie)</div>
         <div class="kpi-value">{{ formatKg(stats.total_kg_frais) }}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total pulpe (kg)</div>
+        <div class="kpi-value">{{ formatKg(stats.total_pulpe_kg) }}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Dryers remplis</div>
         <div class="kpi-value">{{ stats.total_dryers }}</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Rendement moyen</div>
-        <div class="kpi-value">{{ (stats.rendement_moyen * 100).toFixed(1) }}%</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Pulpe obtenue</div>
-        <div class="kpi-value">{{ formatKg(Object.values(stats.par_fruit).reduce((s, f) => s + (f.pulpe_obtenue_kg || 0), 0)) }}</div>
+        <div class="kpi-label">Rendement global</div>
+        <div class="kpi-value">{{ (stats.rendement_global * 100).toFixed(1) }}%</div>
       </div>
     </div>
 
@@ -53,52 +49,41 @@
             <option v-for="ft in config.fruit_types" :key="ft" :value="ft">{{ ft }}</option>
           </select>
         </div>
-        <div class="form-group" style="flex:1; min-width:180px">
-          <label>Saison</label>
-          <select v-model="filters.saison_id" class="form-input" @change="loadEntries">
-            <option value="">Toutes</option>
-            <option v-for="s in saisons" :key="s.id" :value="s.id">{{ s.nom }}</option>
-          </select>
-        </div>
       </div>
     </div>
 
-    <!-- Tableau des entrées -->
+    <!-- Tableau des entrées (par lot/date depuis musserie) -->
     <div class="card anim-fade" style="margin-top:16px">
       <LoadingSpinner v-if="loading" />
       <div v-else-if="entries.length === 0" class="empty">
         <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
-        <div class="empty-text">Aucune entrée de production</div>
-        <div class="empty-sub">Cliquez sur "Nouvelle entrée" pour commencer</div>
+        <div class="empty-text">Aucune production calculée</div>
+        <div class="empty-sub">Effectuez des musseries terminées pour voir les rendements</div>
       </div>
       <div v-else class="table-wrap">
         <table class="table">
           <thead>
             <tr>
               <th>Date</th>
+              <th>Lot</th>
               <th>Fruit</th>
-              <th>Kg frais</th>
-              <th>Dryers</th>
+              <th>Kg frais (musserie)</th>
               <th>Pulpe obtenue (kg)</th>
-              <th>Rendement</th>
-              <th>Notes</th>
-              <th style="width:60px"></th>
+              <th>Dryers</th>
+              <th>Rendement jour</th>
+              <th>Rendement global lot</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="e in entries" :key="e.id">
+            <tr v-for="e in entries" :key="e.lot_id + '_' + e.date">
               <td>{{ formatDate(e.date) }}</td>
+              <td><strong>{{ e.code_lot }}</strong></td>
               <td><span class="fruit-badge">{{ e.fruit_type }}</span></td>
               <td>{{ formatKg(e.poids_frais_kg) }}</td>
-              <td><strong>{{ e.nb_dryers }}</strong></td>
               <td>{{ formatKg(e.pulpe_obtenue_kg) }}</td>
+              <td><strong>{{ e.nb_dryers }}</strong></td>
               <td><span class="rendement-badge" :class="rendementClass(e.rendement)">{{ (e.rendement * 100).toFixed(1) }}%</span></td>
-              <td>{{ e.notes || '—' }}</td>
-              <td>
-                <button class="btn btn-ghost btn-sm" @click="confirmDelete(e)" title="Supprimer">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                </button>
-              </td>
+              <td><span class="rendement-badge" :class="rendementClass(e.rendement_global)">{{ (e.rendement_global * 100).toFixed(1) }}%</span></td>
             </tr>
           </tbody>
         </table>
@@ -113,10 +98,10 @@
           <thead>
             <tr>
               <th>Fruit</th>
-              <th>Entrées</th>
+              <th>Jours</th>
               <th>Kg frais</th>
-              <th>Dryers</th>
               <th>Pulpe (kg)</th>
+              <th>Dryers</th>
               <th>Rendement</th>
             </tr>
           </thead>
@@ -125,9 +110,38 @@
               <td><span class="fruit-badge">{{ fruit }}</span></td>
               <td>{{ f.entries }}</td>
               <td>{{ formatKg(f.kg_frais) }}</td>
+              <td>{{ formatKg(f.pulpe_kg) }}</td>
               <td>{{ f.dryers }}</td>
-              <td>{{ formatKg(f.pulpe_obtenue_kg) }}</td>
               <td><span class="rendement-badge" :class="rendementClass(f.rendement)">{{ (f.rendement * 100).toFixed(1) }}%</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Stats par lot -->
+    <div v-if="Object.keys(stats.par_lot).length > 0" class="card anim-fade" style="margin-top:16px">
+      <div class="card-header" style="margin-bottom:12px"><strong>Par lot (cumulé)</strong></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Lot</th>
+              <th>Fruit</th>
+              <th>Kg frais cumulés</th>
+              <th>Pulpe cumulée (kg)</th>
+              <th>Dryers</th>
+              <th>Rendement global</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(l, key) in stats.par_lot" :key="key">
+              <td><strong>{{ l.code_lot }}</strong></td>
+              <td><span class="fruit-badge">{{ l.fruit_type }}</span></td>
+              <td>{{ formatKg(l.kg_frais) }}</td>
+              <td>{{ formatKg(l.pulpe_kg) }}</td>
+              <td>{{ l.dryers }}</td>
+              <td><span class="rendement-badge" :class="rendementClass(l.rendement_global)">{{ (l.rendement_global * 100).toFixed(1) }}%</span></td>
             </tr>
           </tbody>
         </table>
@@ -154,71 +168,6 @@
         <div class="modal-footer">
           <button class="btn btn-outline" @click="showConfig = false">Annuler</button>
           <button class="btn btn-primary" @click="saveConfig">Enregistrer</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal Nouvelle entrée -->
-    <div v-if="showForm" class="modal-overlay" @click.self="showForm = false">
-      <div class="modal" style="max-width:520px">
-        <div class="modal-header">
-          <h3>Nouvelle entrée de production</h3>
-          <button class="modal-close" @click="showForm = false">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-row">
-            <div class="form-group" style="flex:1">
-              <label>Date</label>
-              <input type="date" v-model="form.date" class="form-input" />
-            </div>
-            <div class="form-group" style="flex:1">
-              <label>Type fruit</label>
-              <select v-model="form.fruit_type" class="form-input">
-                <option value="" disabled>Sélectionner</option>
-                <option v-for="ft in config.fruit_types" :key="ft" :value="ft">{{ ft }}</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group" style="flex:1">
-              <label>Poids frais (kg)</label>
-              <input type="number" step="0.1" min="0.1" v-model.number="form.poids_frais_kg" class="form-input" />
-            </div>
-            <div class="form-group" style="flex:1">
-              <label>Nombre de dryers</label>
-              <input type="number" min="1" v-model.number="form.nb_dryers" class="form-input" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Saison</label>
-            <select v-model="form.saison_id" class="form-input">
-              <option value="">— Sans saison —</option>
-              <option v-for="s in saisons" :key="s.id" :value="s.id">{{ s.nom }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Notes</label>
-            <textarea v-model="form.notes" class="form-input" rows="2" placeholder="Observations..."></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline" @click="showForm = false">Annuler</button>
-          <button class="btn btn-primary" @click="submitForm" :disabled="submitting">{{ submitting ? 'Enregistrement...' : 'Enregistrer' }}</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal Confirmation suppression -->
-    <div v-if="deleteConfirm" class="modal-overlay" @click.self="deleteConfirm = null">
-      <div class="modal" style="max-width:400px">
-        <div class="modal-header"><h3>Confirmer la suppression</h3></div>
-        <div class="modal-body">
-          <p>Supprimer l'entrée du {{ formatDate(deleteConfirm.date) }} ({{ formatKg(deleteConfirm.poids_frais_kg) }} kg, {{ deleteConfirm.fruit_type }}) ?</p>
-          <p class="text-warning">Cette action est irréversible.</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline" @click="deleteConfirm = null">Annuler</button>
-          <button class="btn btn-danger" @click="executeDelete">Supprimer</button>
         </div>
       </div>
     </div>
@@ -251,26 +200,12 @@ async function api(path, options = {}) {
 // State
 const loading = ref(false)
 const entries = ref([])
-const stats = ref({ total_kg_frais: 0, total_dryers: 0, rendement_moyen: 0, par_fruit: {} })
+const stats = ref({ total_kg_frais: 0, total_pulpe_kg: 0, total_dryers: 0, rendement_moyen: 0, rendement_global: 0, par_fruit: {}, par_lot: {} })
 const config = ref({ dryer_capacity_kg: 1500, fruit_types: ['mangue', 'ananas', 'goyave'] })
-const saisons = ref([])
 
-const filters = ref({ date_from: '', date_to: '', fruit_type: '', saison_id: '' })
+const filters = ref({ date_from: '', date_to: '', fruit_type: '' })
 
 const showConfig = ref(false)
-const showForm = ref(false)
-const submitting = ref(false)
-const deleteConfirm = ref(null)
-
-const form = ref({
-  date: new Date().toISOString().split('T')[0],
-  fruit_type: '',
-  poids_frais_kg: null,
-  nb_dryers: 1,
-  saison_id: '',
-  notes: ''
-})
-
 const configForm = ref({
   dryer_capacity_kg: 1500,
   fruit_types_str: 'mangue, ananas, goyave'
@@ -295,13 +230,6 @@ async function loadConfig() {
   }
 }
 
-async function loadSaisons() {
-  try {
-    const res = await fetch('/api/saisons')
-    if (res.ok) saisons.value = await res.json()
-  } catch {}
-}
-
 async function loadEntries() {
   loading.value = true
   try {
@@ -309,7 +237,6 @@ async function loadEntries() {
     if (filters.value.date_from) params.set('date_from', filters.value.date_from)
     if (filters.value.date_to) params.set('date_to', filters.value.date_to)
     if (filters.value.fruit_type) params.set('fruit_type', filters.value.fruit_type)
-    if (filters.value.saison_id) params.set('saison_id', filters.value.saison_id)
     params.set('skip', '0')
     params.set('limit', '200')
     entries.value = await api(`/entries?${params.toString()}`)
@@ -329,7 +256,7 @@ async function loadStats() {
 }
 
 async function loadAll() {
-  await Promise.all([loadConfig(), loadSaisons(), loadEntries(), loadStats()])
+  await Promise.all([loadConfig(), loadEntries(), loadStats()])
 }
 
 // Actions
@@ -340,41 +267,6 @@ async function saveConfig() {
     toast.success('Configuration mise à jour')
     showConfig.value = false
     await Promise.all([loadConfig(), loadEntries(), loadStats()])
-  } catch (e) {
-    toast.error('Erreur: ' + e.message)
-  }
-}
-
-async function submitForm() {
-  if (!form.value.fruit_type || !form.value.poids_frais_kg) {
-    toast.error('Remplissez les champs obligatoires')
-    return
-  }
-  submitting.value = true
-  try {
-    await api('/entries', { method: 'POST', body: JSON.stringify(form.value) })
-    toast.success('Entrée enregistrée')
-    showForm.value = false
-    form.value = { date: new Date().toISOString().split('T')[0], fruit_type: '', poids_frais_kg: null, nb_dryers: 1, saison_id: '', notes: '' }
-    await Promise.all([loadEntries(), loadStats()])
-  } catch (e) {
-    toast.error('Erreur: ' + e.message)
-  } finally {
-    submitting.value = false
-  }
-}
-
-function confirmDelete(entry) {
-  deleteConfirm.value = entry
-}
-
-async function executeDelete() {
-  if (!deleteConfirm.value) return
-  try {
-    await api(`/entries/${deleteConfirm.value.id}`, { method: 'DELETE' })
-    toast.success('Entrée supprimée')
-    deleteConfirm.value = null
-    await Promise.all([loadEntries(), loadStats()])
   } catch (e) {
     toast.error('Erreur: ' + e.message)
   }
@@ -417,6 +309,4 @@ watch(filters, loadEntries, { deep: true })
 .modal-close:hover { color: var(--text); }
 .modal-body { padding: 20px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); }
-
-.text-warning { color: var(--warning); font-size: 13px; margin-top: 8px; }
 </style>
