@@ -40,18 +40,12 @@
 
             <div class="form-group">
               <label>Type de fruit *</label>
-              <select v-model="form.type_fruit" class="input">
-                <option value="">Sélectionner...</option>
-                <option v-for="ft in fruitTypes" :key="ft" :value="ft">{{ ft }}</option>
-              </select>
+              <input v-model="form.type_fruit" class="input" placeholder="Ex: Mangue Kent, Ananas, Banane..." />
             </div>
 
             <div class="form-group">
               <label>Fournisseur</label>
-              <select v-model="form.fournisseur_id" class="input">
-                <option value="">— Sans fournisseur —</option>
-                <option v-for="f in fournisseurs" :key="f.id" :value="f.id">{{ f.nom }}</option>
-              </select>
+              <input v-model="form.fournisseur_nom" class="input" placeholder="Nom du fournisseur" />
             </div>
           </div>
 
