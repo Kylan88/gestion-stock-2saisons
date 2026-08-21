@@ -249,3 +249,21 @@ export async function getAnomalies() {
   const { data } = await api.get('/production/anomalies')
   return data
 }
+
+// ── Production / Rendement ──
+export async function getProductionConfig() {
+  const { data } = await api.get('/production/config')
+  return data
+}
+export async function updateProductionConfig(payload) {
+  const { data } = await api.put('/production/config', payload)
+  return data
+}
+export async function getProductionEntries(params = {}) {
+  const { data } = await api.get('/production/entries', { params })
+  return data
+}
+export async function getProductionStats() {
+  const { data } = await api.get('/production/stats')
+  return data
+}
