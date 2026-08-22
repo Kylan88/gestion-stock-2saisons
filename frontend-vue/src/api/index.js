@@ -249,6 +249,10 @@ export async function getAnomalies() {
   const { data } = await api.get('/production/anomalies')
   return data
 }
+export async function getRappels(seuil_heures = 24) {
+  const { data } = await api.get('/production/rappels', { params: { seuil_heures } })
+  return data
+}
 
 // ── Production / Rendement ──
 export async function getProductionConfig() {

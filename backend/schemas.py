@@ -291,12 +291,19 @@ class ReconditionnementResponse(BaseModel):
 
 # ── PRODUCTION / RENDEMENT (Entrées journalières) ──
 
+DRYER_CAPACITY_D1 = 1575.0  # 6 chariots × 42 claies × 6.25 kg
+DRYER_CAPACITY_D2 = 1500.0  # 12 chariots × 20 claies × 6.25 kg
+
 class CompanySettingsBase(BaseModel):
     dryer_capacity_kg: float = 1500.0
+    dryer1_capacity_kg: float = DRYER_CAPACITY_D1
+    dryer2_capacity_kg: float = DRYER_CAPACITY_D2
     fruit_types: List[str] = ["mangue", "ananas", "goyave"]
 
 class CompanySettingsUpdate(BaseModel):
     dryer_capacity_kg: Optional[float] = None
+    dryer1_capacity_kg: Optional[float] = None
+    dryer2_capacity_kg: Optional[float] = None
     fruit_types: Optional[List[str]] = None
 
 class CompanySettingsResponse(CompanySettingsBase):
@@ -316,21 +323,30 @@ class ProductionEntryResponse(BaseModel):
     lot_id: int
     code_lot: str
     date: datetime
+    dryer: int
     fruit_type: str
-    poids_frais_kg: float
+    fruits_murs_kg: float
+    dechets_lavage_kg: float
+    dechets_production_kg: float
+    retour_non_mur_kg: float
+    frais_total_kg: float
+    pulpe_capacity_kg: float
     pulpe_obtenue_kg: float
-    nb_dryers: int
     rendement: float
+    # compat legacy
+    poids_frais_kg: float
+    nb_dryers: int = 1
     rendement_global: float
-    dryers: Optional[str] = None
     class Config: from_attributes = True
 
 
 class ProductionStats(BaseModel):
     total_kg_frais: float
     total_pulpe_kg: float
+    total_pulpe_capacity_kg: float
     total_dryers: int
     rendement_moyen: float
     rendement_global: float
     par_fruit: dict
     par_lot: dict = {}
+    par_dryer: dict = {}

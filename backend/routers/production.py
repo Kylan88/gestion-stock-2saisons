@@ -132,6 +132,12 @@ def detecter_anomalies(db: Session = Depends(get_db)):
     return crud.detecter_anomalies(db)
 
 
+@router.get("/rappels")
+def get_rappels(seuil_heures: int = Query(24, ge=1, le=168), db: Session = Depends(get_db)):
+    """Lots bloqués à une étape depuis > seuil_heures (musserie d'hier sans chariots aujourd'hui, etc.)."""
+    return crud.get_rappels(db, seuil_heures)
+
+
 # ── PRODUCTION / RENDEMENT (Calculé automatiquement depuis la musserie) ──
 
 @router.get("/config", response_model=schemas.CompanySettingsResponse)

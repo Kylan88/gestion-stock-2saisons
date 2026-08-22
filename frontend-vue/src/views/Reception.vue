@@ -40,7 +40,10 @@
 
             <div class="form-group">
               <label>Type de fruit *</label>
-              <input v-model="form.type_fruit" class="input" placeholder="Ex: Mangue Kent, Ananas, Banane..." />
+              <input v-model="form.type_fruit" class="input" list="fruit-types-list" placeholder="Ex: mangue kent, ananas..." autocomplete="off" />
+              <datalist id="fruit-types-list">
+                <option v-for="ft in fruitTypes" :key="ft" :value="ft" />
+              </datalist>
             </div>
 
             <div class="form-group">
@@ -75,7 +78,7 @@
           </div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button class="btn btn-ghost" @click="closeForm()">Annuler</button>
-            <button class="btn btn-primary" :disabled="!canSave || saving" @click="save">
+            <button class="btn btn-primary" :disabled="saving" @click="save">
               <span v-if="saving">Enregistrement...</span>
               <span v-else>Créer le lot</span>
             </button>
@@ -171,7 +174,7 @@ const form = reactive({
 const today = new Date().toISOString().split('T')[0]
 
 const canSave = computed(() => {
-  return form.code_lot.length >= 3 && form.type_fruit && form.poids_frais > 0
+  return form.code_lot.trim().length >= 3 && form.type_fruit.trim().length > 0 && Number(form.poids_frais) > 0
 })
 
 function formatPoids(kg) {
@@ -226,25 +229,27 @@ async function load() {
 }
 
 async function save() {
-  if (!form.code_lot || !form.type_fruit || !form.poids_frais) {
-    toast.warning('Veuillez remplir le code lot, le type de fruit et le poids')
+  if (!form.code_lot.trim() || !form.type_fruit.trim() || !(Number(form.poids_frais) > 0)) {
+    toast.warning('Veuillez remplir le code lot, le type de fruit et le poids (>0)')
     return
   }
   saving.value = true
   try {
     const payload = {
-      code_lot: form.code_lot,
-      type_fruit: form.type_fruit,
-      fournisseur_id: form.fournisseur_id || null,
-      fournisseur_nom: fournisseurs.value.find(f => f.id == form.fournisseur_id)?.nom || '',
-      poids_frais: form.poids_frais || 0,
+      code_lot: form.code_lot.trim(),
+      type_fruit: form.type_fruit.trim(),
+      fournisseur_nom: (form.fournisseur_nom || '').trim(),
+      poids_frais: Number(form.poids_frais),
       date_reception: form.date_reception ? new Date(form.date_reception).toISOString() : undefined,
-      notes: form.notes,
+      notes: (form.notes || '').trim(),
     }
     await createLot(payload)
     toast.success('Lot créé avec succès')
     closeForm()
     await load()
+  } catch (e) {
+    // erreur déjà affichée par l'intercepteur api, on laisse le formulaire ouvert
+    console.error(e)
   } finally {
     saving.value = false
   }

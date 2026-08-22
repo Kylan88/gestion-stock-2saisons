@@ -11,7 +11,8 @@
           </button>
         </div>
       </template>
-    </PageHeader>
+     </PageHeader>
+    <RappelsBanner />
 
     <!-- HISTORIQUE -->
     <div v-if="activeView === 'historique'" class="anim-fade">
@@ -113,21 +114,22 @@
           </div>
         </div>
 
-         <!-- Formulaire nouveau dryer -->
-         <div class="prod-form compact">
-           <div class="dryers-title" style="margin-top:12px">
-             {{ dryers[lot.id] && dryers[lot.id].length > 0 ? 'Ajouter un dryer' : 'Nouveau dryer' }}
-           </div>
+          <!-- Formulaire nouveau dryer : caché si pas de musserie aujourd'hui -->
+         <div v-if="availableDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune musserie aujourd'hui pour ce lot — effectuer la musserie d'abord.</div>
+         <div v-else class="prod-form compact">
+            <div class="dryers-title" style="margin-top:12px">
+              {{ dryers[lot.id] && dryers[lot.id].length > 0 ? 'Ajouter un dryer' : 'Nouveau dryer' }}
+            </div>
 
-           <!-- Dryer + configuration -->
-           <div class="form-row">
-             <div class="form-group">
-               <label class="input-label">Dryer *</label>
-               <select v-model="f[lot.id].dryer" class="input compact" @change="onDryerChange(lot.id)">
-                 <option :value="1">Dryer 1 — 6 chariots, 42 claies/chariot</option>
-                 <option :value="2">Dryer 2 — 12 chariots, 20 claies/chariot</option>
-               </select>
-             </div>
+            <!-- Dryer + configuration (uniquement dryers du jour) -->
+            <div class="form-row">
+              <div class="form-group">
+                <label class="input-label">Dryer *</label>
+                <select v-model="f[lot.id].dryer" class="input compact" @change="onDryerChange(lot.id)">
+                  <option v-if="isDryerAvailable(lot.id,1)" :value="1">Dryer 1 — 6 chariots, 42 claies/chariot (1575 kg)</option>
+                  <option v-if="isDryerAvailable(lot.id,2)" :value="2">Dryer 2 — 12 chariots, 20 claies/chariot (1500 kg)</option>
+                </select>
+              </div>
              <div class="form-group">
                <label class="input-label">Nombre de chariots *</label>
                <input type="number" v-model.number="f[lot.id].nbre_chariots" class="input compact" min="1" :max="maxChariots(lot.id)" @input="calcQté(lot.id)" />
@@ -154,22 +156,23 @@
             </div>
           </div>
 
-           <!-- Tableau chariots -->
+            <!-- Tableau chariots -->
            <div v-if="f[lot.id].nbre_chariots > 0" class="chariot-table">
-             <div class="chariot-header">
-               <span class="ch-num">N° chariot</span>
-               <span class="ch-time">Heure remplissage</span>
-               <span class="ch-time">Heure entrée séchoir</span>
-               <span class="ch-action"></span>
-             </div>
-             <div v-for="i in f[lot.id].nbre_chariots" :key="i" class="chariot-row" :class="{ 'chariot-ok': f[lot.id].chariots[i-1].enregistre }">
-               <span class="ch-num">{{ i }}</span>
-               <input type="time" v-model="f[lot.id].chariots[i-1].heure_remplissage" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-               <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_sechoir" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-               <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm btn-outline" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_sechoir" @click="enregistrerChariot(lot.id, i-1)">Enreg.</button>
-               <span v-else class="ch-check">OK</span>
-             </div>
-           </div>
+              <div class="chariot-header">
+                <span>Chariot</span>
+                <span>Remplissage</span>
+                <span>Entrée séchoir</span>
+                <span></span>
+              </div>
+              <div class="chariot-progress"><div class="chariot-progress-fill" :style="{width: (f[lot.id].chariots.filter(c=>c.enregistre).length / f[lot.id].nbre_chariots * 100) + '%'}"></div></div>
+              <div v-for="i in f[lot.id].nbre_chariots" :key="i" class="chariot-row" :class="{ 'chariot-ok': f[lot.id].chariots[i-1].enregistre }">
+                <span class="ch-num">{{ i }}</span>
+                <input type="time" v-model="f[lot.id].chariots[i-1].heure_remplissage" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
+                <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_sechoir" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
+                <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm" :class="f[lot.id].chariots[i-1].heure_remplissage && f[lot.id].chariots[i-1].heure_entree_sechoir ? 'btn-primary' : 'btn-outline'" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_sechoir" @click="enregistrerChariot(lot.id, i-1)">✓ Valider</button>
+                <span v-else class="ch-check">✓ Fait</span>
+              </div>
+            </div>
 
            <!-- Opérateur + valider -->
            <div class="form-row" style="margin-top:14px">
@@ -215,6 +218,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
+import RappelsBanner from '../components/RappelsBanner.vue'
 import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, TERMINE } from '../utils/statuses'
 
 const DRYER = { 1: { chariots: 6, claies: 42, kg_par_claie: 6.25 }, 2: { chariots: 12, claies: 20, kg_par_claie: 6.5 } }
@@ -292,14 +296,29 @@ function getMusseriePoids(lotId, dryer) {
   return entry?.poids_sortie || 0
 }
 
+function availableDryers(lotId) {
+  return (musserieData[lotId] || []).map(m => m.dryer)
+}
+function isDryerAvailable(lotId, dryer) {
+  return availableDryers(lotId).includes(dryer)
+}
+
 function initForm(lotId) {
   if (!f[lotId]) {
-    const d = 1
+    const avail = availableDryers(lotId)
+    const d = avail.length ? avail[0] : 1
     const n = DRYER[d].chariots
     f[lotId] = reactive({
       dryer: d, nbre_chariots: n,
       operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })),
     })
+  } else {
+    // corrige si dryer actuel n'est plus disponible
+    const avail = availableDryers(lotId)
+    if (avail.length && !avail.includes(f[lotId].dryer)) {
+      f[lotId].dryer = avail[0]
+      onDryerChange(lotId)
+    }
   }
 }
 
@@ -341,20 +360,21 @@ async function loadMusserieForToday(lotId) {
         if (prodEtapes.length > 0 && prodEtapes.every(e => toCanonical(e.statut) === TERMINE)) {
           continue
         }
-        result.push(lot)
+        await loadMusserieForToday(lot.id)
         initForm(lot.id)
         await loadDryers(lot.id)
-        await loadMusserieForToday(lot.id)
+        result.push(lot)
       }
       lots.value = result
     } finally { loading.value = false }
   }
 
 async function enregistrer(lot) {
+  const currentDryer = f[lot.id].dryer
   saving.value = true
   try {
     await validerProduction(lot.id, {
-      dryer: f[lot.id].dryer,
+      dryer: currentDryer,
       nbre_chariots: f[lot.id].nbre_chariots,
       quantite_totale: qtéTotale(lot.id),
       operateur: f[lot.id].operateur || '',
@@ -364,9 +384,20 @@ async function enregistrer(lot) {
         heure_entree_sechoir: c.heure_entree_sechoir || '',
       })),
     })
-    toast.success(`Dryer ${f[lot.id].dryer} enregistré`)
+    toast.success(`Dryer ${currentDryer} enregistré`)
+    // bascule auto vers le prochain dryer disponible du jour (si musserie validée)
+    const avail = availableDryers(lot.id)
+    const next = avail.find(d => d !== currentDryer && !dryers[lot.id]?.some(x => x.dryer === d && x.chariots?.length))
+    // fallback : prochain dans la liste
+    const fallbackNext = avail.find(d => d !== currentDryer)
+    const target = next ?? fallbackNext
     resetForm(lot.id)
     await loadDryers(lot.id)
+    if (target) {
+      f[lot.id].dryer = target
+      onDryerChange(lot.id)
+      toast.success(`Basculé sur Dryer ${target} (musserie du jour)`)
+    }
   } finally { saving.value = false }
 }
 
@@ -427,22 +458,19 @@ onMounted(load)
   margin-top: 2px;
 }
 
-.chariot-table { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 14px; }
-.chariot-header {
-  display: grid; grid-template-columns: 50px 1fr 1fr 110px;
-  padding: 8px 14px; background: var(--surface); font-size: 11px;
-  font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px;
-}
-.chariot-row {
-  display: grid; grid-template-columns: 50px 1fr 1fr 110px;
-  padding: 6px 14px; border-top: 1px solid var(--border-light);
-  align-items: center; font-size: 13px;
-}
-.ch-num { font-weight: 600; color: var(--dark); }
-.ch-input { font-size: 13px; }
-.ch-action { display: flex; align-items: center; justify-content: center; }
-.ch-check { font-weight: 700; color: var(--success); font-size: 13px; }
-.chariot-ok { background: var(--success-light); }
+.chariot-table { border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; margin-bottom:14px; background:white}
+.chariot-header{ display:grid; grid-template-columns:52px 1fr 1fr 108px; padding:10px 14px; background:var(--dark); color:white; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em}
+.chariot-row{ display:grid; grid-template-columns:52px 1fr 1fr 108px; padding:8px 14px; border-top:1px solid var(--border-light); align-items:center; font-size:13px; gap:8px; transition:background 0.15s}
+.chariot-row:hover{ background:var(--surface)}
+.ch-num{ display:flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:var(--surface); border:1px solid var(--border); font-weight:700; font-size:11px; color:var(--dark)}
+.chariot-ok .ch-num{ background:var(--success); color:white; border-color:var(--success)}
+.ch-input{ font-size:13px; border-radius:8px; text-align:center}
+.ch-input:focus{ border-color:var(--primary)}
+.ch-action{ display:flex; align-items:center; justify-content:center}
+.ch-check{ display:inline-flex; align-items:center; gap:4px; font-weight:700; color:var(--success); font-size:12px; background:var(--success-light); padding:4px 10px; border-radius:99px; border:1px solid var(--success)}
+.chariot-ok{ background:rgba(22,101,32,0.04)}
+.chariot-progress{ height:4px; background:var(--border-light); border-radius:99px; overflow:hidden; margin:0 14px 10px}
+.chariot-progress-fill{ height:100%; background:linear-gradient(90deg,var(--primary),var(--success)); transition:width 0.3s}
 
 .cumul-section { border-top: 1px solid var(--border-light); padding-top: 14px; margin-top: 14px; }
 .cumul-section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px; margin-bottom: 8px; }

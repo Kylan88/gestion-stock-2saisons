@@ -22,6 +22,8 @@
       <template #meta><div class="flow-metric"><strong>{{ lots.length }}</strong><span>lots actifs</span></div></template>
     </WorkflowFrame>
 
+    <RappelsBanner />
+
     <div v-if="activeView === 'historique'" class="anim-fade" key="historique">
       <LoadingSpinner v-if="loadingHist" />
       <div v-if="!loadingHist && historique.length === 0" class="empty">
@@ -60,9 +62,18 @@
         <div class="empty-text">Aucun lot en attente de musserie</div>
       </div>
 
-<div v-for="lot in lots" :key="lot.id" class="card lot-card anim-fade">
+      <!-- Navigation rapide lots -->
+      <div v-if="lots.length > 1" class="lot-nav">
+        <span class="lot-nav-label">Aller à :</span>
+        <button v-for="lot in lots" :key="lot.id" class="lot-nav-pill" :class="{active: expandedLotId === lot.id}" @click="scrollToLot(lot.id)">
+          {{ lot.code_lot }} <small>({{ resteATraiter(lot) }}kg)</small>
+        </button>
+        <button class="lot-nav-pill ghost" @click="expandedLotId = expandedLotId ? null : lots[0]?.id">{{ expandedLotId ? 'Tout réduire' : 'Tout ouvrir' }}</button>
+      </div>
+
+ <div v-for="lot in lots" :key="lot.id" class="card lot-card anim-fade" :id="'lot-'+lot.id">
         <!-- Header lot -->
-        <div class="lot-header">
+        <div class="lot-header" @click="expandedLotId = expandedLotId === lot.id ? null : lot.id" style="cursor:pointer">
           <div class="lot-header-left">
             <strong class="lot-code">{{ lot.code_lot }}</strong>
             <span class="lot-fruit">{{ lot.type_fruit || lot.produit?.nom }}</span>
@@ -71,8 +82,10 @@
           <div class="lot-header-right">
             <span class="lot-recap"><strong>{{ lot.poids_frais }}</strong> kg reçu</span>
             <span class="lot-recap reste">Reste : <strong>{{ resteATraiter(lot) }} kg</strong></span>
+            <span class="expand-icon">{{ expandedLotId === lot.id ? '▲' : '▼' }}</span>
           </div>
         </div>
+        <template v-if="expandedLotId === lot.id">
 
         <!-- Barre de progression -->
         <div class="lot-progress">
@@ -203,11 +216,12 @@
 
               <button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px"
                 :disabled="!f[lot.id][d].fruits_murs_kg || saving[d]" @click="enregistrer(lot, d)">
-{{ saving[d] ? '...' : 'Enreg.' }}
+ {{ saving[d] ? '...' : 'Enreg.' }}
 </button>
               </div>
             </div>
         </div>
+        </template>
       </div>
     </div>
   </div>
@@ -221,6 +235,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
+import RappelsBanner from '../components/RappelsBanner.vue'
 import { toCanonical, RECEPTION, EN_MUSSERIE, TERMINE } from '../utils/statuses'
 
 const lots = ref([])
@@ -231,6 +246,7 @@ const cloturing = ref(false)
 const toast = useToastStore()
 const f = reactive({})
 const bilanJ = reactive({})
+const expandedLotId = ref(null)
 
 const showHistorique = ref(false)
 const historique = ref([])
@@ -366,6 +382,11 @@ function recalcAll(lotId) {
   recalc(lotId, 2)
 }
 
+function scrollToLot(lotId) {
+  expandedLotId.value = lotId
+  nextTick(() => document.getElementById('lot-'+lotId)?.scrollIntoView({behavior:'smooth', block:'start'}))
+}
+
 async function load() {
   loading.value = true
   try {
@@ -378,6 +399,7 @@ async function load() {
       recalcAll(lot.id)
     }
     lots.value = filtered
+    if (filtered.length && !expandedLotId.value) expandedLotId.value = filtered[0].id
   } finally { loading.value = false }
 }
 
@@ -452,7 +474,13 @@ onMounted(load)
 .flow-metric strong { font-family: 'DM Serif Display', Georgia, serif; font-size: 25px; line-height: 0.9; color: var(--lime); }
 .flow-metric span { margin-top: 4px; color: #C6D8CC; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 
-.lot-card { margin-bottom: 20px; }
+.lot-nav{ position:sticky; top:0; z-index:2; display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:10px 12px; margin-bottom:14px; background:var(--surface); border:1px solid var(--border-light); border-radius:var(--radius-md)}
+.lot-nav-label{ font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em}
+.lot-nav-pill{ padding:6px 12px; border:1px solid var(--border); border-radius:99px; background:white; font-size:12px; font-weight:600; cursor:pointer}
+.lot-nav-pill.active{ background:var(--primary); color:white; border-color:var(--primary)}
+.lot-nav-pill.ghost{ background:transparent; border-style:dashed}
+.expand-icon{ font-size:11px; color:var(--text-muted)}
+.lot-card { margin-bottom: 12px; }
 .lot-header {
   display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 12px; border-bottom: 1px solid var(--border-light);
