@@ -19,6 +19,11 @@
 
     <RappelsBanner />
     <LoadingSpinner v-if="loading" />
+    <div v-else-if="error" class="card" style="background:#fef2f2;border-color:#fecaca;display:flex;align-items:center;gap:16px;margin-bottom:24px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <span style="flex:1;font-size:13px;color:#991b1b">{{ error }}</span>
+      <button class="btn btn-secondary btn-sm" @click="load">Réessayer</button>
+    </div>
     <div v-else-if="error" class="error-state anim-fade">
       <p class="error-message">{{ error }}</p>
       <button class="btn btn-outline btn-sm" style="margin-top:12px" @click="load">Réessayer</button>
@@ -76,44 +81,12 @@
         </div>
       </div>
 
-      <!-- KPIs -->
-      <div class="kpi-row">
-        <div class="kpi-card kpi-main">
-          <div class="kpi-icon-dark">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-          </div>
-          <div class="kpi-data">
-            <div class="kpi-value">{{ stats.total_produits }}</div>
-            <div class="kpi-label">Produits</div>
-          </div>
-        </div>
-        <div class="kpi-card kpi-main">
-          <div class="kpi-icon-dark">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-          </div>
-          <div class="kpi-data">
-            <div class="kpi-value">{{ stats.total_lots_actifs }}</div>
-            <div class="kpi-label">Lots Actifs</div>
-          </div>
-        </div>
-        <div class="kpi-card kpi-main">
-          <div class="kpi-icon-dark">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-          </div>
-          <div class="kpi-data">
-            <div class="kpi-value">{{ formatNum(stats.valeur_stock) }} F</div>
-            <div class="kpi-label">Valeur Stock</div>
-          </div>
-        </div>
-        <div class="kpi-card kpi-main">
-          <div class="kpi-icon-dark">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          </div>
-          <div class="kpi-data">
-            <div class="kpi-value">{{ formatNum(stats.rendement_moyen || 0) }}%</div>
-            <div class="kpi-label">Rendement Moyen</div>
-          </div>
-        </div>
+      <!-- KPIs — identique 2saisons-app StatCard -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;margin-bottom:32px">
+        <StatCard title="Produits" :value="stats.total_produits" status="neutral" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>' />
+        <StatCard title="Lots Actifs" :value="stats.total_lots_actifs" status="info" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' />
+        <StatCard title="Valeur Stock" :value="formatNum(stats.valeur_stock) + ' F'" status="warning" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>' />
+        <StatCard title="Rendement Moyen" :value="formatNum(stats.rendement_moyen || 0) + '%'" status="success" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' />
       </div>
 
       <!-- Charts row -->
@@ -208,6 +181,7 @@ import { getDashboardStats, getDashboardProduction, getAlertesStockBas, getDashb
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import RappelsBanner from '../components/RappelsBanner.vue'
+import StatCard from '../components/StatCard.vue'
 import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const loading = ref(true)
@@ -308,7 +282,7 @@ const donutSegments = computed(() => {
   const enStock = stats.value.lots_en_stock || 0
   const circumference = 2 * Math.PI * 48
   const segments = [
-    { count: enStock, color: '#165B3D' },
+    { count: enStock, color: '#00853E' },
     { count: enConditionnement, color: '#7C3AED' },
     { count: enProduction, color: '#2563EB' },
     { count: enMusserie, color: '#D97706' },
@@ -324,7 +298,7 @@ const donutSegments = computed(() => {
 })
 
 const donutLegend = computed(() => [
-  { label: 'En stock', count: stats.value.lots_en_stock || 0, color: '#165B3D' },
+  { label: 'En stock', count: stats.value.lots_en_stock || 0, color: '#00853E' },
   { label: 'Conditionnement', count: lotsConditionnement.value.length, color: '#7C3AED' },
   { label: 'Production', count: lotsProduction.value.length, color: '#2563EB' },
   { label: 'Musserie', count: lotsMusserie.value.length, color: '#D97706' },
@@ -363,7 +337,7 @@ onMounted(load)
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 22px;
   margin-bottom: 26px; padding: 26px 28px; overflow: hidden; position: relative;
   border: 1px solid rgba(22, 91, 61, 0.15); border-radius: var(--radius-xl);
-  background: linear-gradient(112deg, #0C3424 0%, #165B3D 58%, #247A53 100%);
+  background: linear-gradient(112deg, #002211 0%, #00853E 58%, #007335 100%);
   box-shadow: 0 18px 35px rgba(11, 46, 32, 0.16);
 }
 .dashboard-hero::after {

@@ -694,6 +694,83 @@ def _calc_total_flux(lot) -> float:
     poids_fitini = round(((lot.fitini_fê_cartons or 0) * 6 + (lot.fitini_fê_sachets or 0)) * (lot.fitini_fê_poids_sachet or 2.5), 2)
     return round(poids_export + poids_local + poids_dechets + poids_rhum + poids_fitini, 2)
 
+
+# ── CONDITIONNEMENT PAR DRYER J+1 ──
+
+def get_conditionnement_dryers_disponibles(db: Session, lot_id: int, target_date: str = None) -> list:
+    """Dryers dont la production a été faite la veille (J-1) → conditionnement dispo aujourd'hui (J)."""
+    from datetime import timedelta
+    from models import EtapeProduction
+    target = date_type.fromisoformat(target_date) if target_date else date_type.today()
+    veille = target - timedelta(days=1)
+    rows = db.query(EtapeProduction.dryer).filter(
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production",
+        EtapeProduction.statut == statuses.TERMINE,
+        func.date(EtapeProduction.date_fin) == veille
+    ).distinct().all()
+    # fallback si date_fin null → date_debut
+    if not rows:
+        rows = db.query(EtapeProduction.dryer).filter(
+            EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production",
+            func.date(EtapeProduction.date_debut) == veille
+        ).distinct().all()
+    return [r[0] for r in rows if r[0]]
+
+def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) -> dict:
+    """Valide le conditionnement pour 1 dryer à J+1 (vérifie production veille)."""
+    from models import ConditionnementEntry, EtapeProduction
+    from datetime import timedelta
+    lot = get_lot(db, lot_id)
+    if not lot:
+        raise ValueError(f"Lot {lot_id} introuvable")
+    today = date_type.today()
+    veille = today - timedelta(days=1)
+    # vérifie production veille pour ce dryer
+    prod = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production",
+        EtapeProduction.dryer == dryer,
+        func.date(EtapeProduction.date_fin) == veille
+    ).first()
+    if not prod:
+        prod = db.query(EtapeProduction).filter(
+            EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production",
+            EtapeProduction.dryer == dryer,
+            func.date(EtapeProduction.date_debut) == veille
+        ).first()
+    if not prod:
+        raise ValueError(f"Pas de production D{dryer} hier ({veille}) pour {lot.code_lot} — conditionnement impossible aujourd'hui")
+    # crée ou cumule l'entrée du jour pour ce dryer
+    entry = db.query(ConditionnementEntry).filter(
+        ConditionnementEntry.lot_id == lot_id, ConditionnementEntry.dryer == dryer,
+        func.date(ConditionnementEntry.date) == today
+    ).first()
+    if not entry:
+        entry = ConditionnementEntry(lot_id=lot_id, dryer=dryer, date=datetime.now())
+        db.add(entry); db.flush()
+    for k in ["export_cartons","export_sachets","export_poids_sachet","local_cartons","local_sachets","local_poids_sachet","dechets_cartons","dechets_sachets","dechets_poids_sachet","rhum_cartons","rhum_sachets","rhum_poids_sachet","fitini_fê_cartons","fitini_fê_sachets","fitini_fê_poids_sachet","responsable","notes"]:
+        if k in data and data[k] is not None:
+            if k.endswith("cartons") or k.endswith("sachets"):
+                setattr(entry, k, (getattr(entry, k) or 0) + int(data[k]))
+            elif k in ("responsable","notes"):
+                setattr(entry, k, data[k] or getattr(entry, k))
+            else:
+                setattr(entry, k, float(data[k]))
+    db.commit(); db.refresh(entry)
+    # aussi cumul global lot (compat)
+    for k in ["export_cartons","export_sachets","local_cartons","local_sachets","dechets_cartons","dechets_sachets","rhum_cartons","rhum_sachets","fitini_fê_cartons","fitini_fê_sachets"]:
+        if k in data and data[k]:
+            setattr(lot, k, (getattr(lot, k) or 0) + int(data[k]))
+    db.commit(); db.refresh(lot)
+    return {"entry": entry, "lot": lot}
+
+def get_conditionnement_entries_dryer(db: Session, lot_id: int = None, date_str: str = None, dryer: int = None):
+    from models import ConditionnementEntry
+    q = db.query(ConditionnementEntry)
+    if lot_id: q = q.filter(ConditionnementEntry.lot_id == lot_id)
+    if date_str: q = q.filter(func.date(ConditionnementEntry.date) == date_type.fromisoformat(date_str))
+    if dryer: q = q.filter(ConditionnementEntry.dryer == dryer)
+    return q.order_by(ConditionnementEntry.date.desc()).all()
+
 # ── ZONES DE STOCKAGE ──
 
 def get_zones_stockage(db: Session, actif: bool = True) -> List[ZoneStockage]:

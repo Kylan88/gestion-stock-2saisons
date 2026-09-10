@@ -17,8 +17,13 @@
 
     <LoadingSpinner v-if="loading" />
     <template v-else>
+      <div v-if="zones.length" class="stock-summary card" style="display:flex;gap:24px;align-items:center;padding:16px 20px;margin-bottom:18px">
+        <div><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Stock total</div><strong style="font-size:20px">{{ formatKg(zones.reduce((s,z)=>s+zoneTotal(z),0)) }} kg</strong></div>
+        <div style="flex:1"></div>
+        <div style="font-size:12px;color:var(--text-muted)">{{ zones.length }} chambres froides · {{ Object.values(stocksByZone).flat().length }} lots stockés</div>
+      </div>
       <div class="zones-grid">
-        <div v-for="zone in zones" :key="zone.id" class="card anim-fade">
+        <div v-for="zone in zones" :key="zone.id" class="card anim-fade zone-card">
           <div class="card-header">
             <div style="display:flex;align-items:center;gap:10px">
               <div class="zone-icon-wrap" :class="zone.type_zone === 'froid' ? 'zone-froid' : 'zone-ambiant'">
@@ -27,20 +32,22 @@
               </div>
               <div>
                 <h3>{{ zone.nom }}</h3>
-                <span style="font-size:11px;color:var(--text-muted)">{{ zone.capacite_kg }} kg max</span>
+                <span style="font-size:11px;color:var(--text-muted)">{{ (stocksByZone[zone.id] || []).length }} lot(s) · {{ formatKg(zoneTotal(zone)) }} kg</span>
               </div>
             </div>
             <StatusBadge :status="zone.actif ? 'disponible' : 'périmé'" />
           </div>
-          <div class="zone-capacity">
-            <div class="zone-capacity-head"><span>Occupation</span><strong>{{ formatKg(zoneTotal(zone)) }} / {{ formatKg(zone.capacite_kg) }} kg</strong></div>
-            <div class="zone-capacity-track"><span :style="{ width: zoneCapacityPercent(zone) + '%' }"></span></div>
-          </div>
           <div v-if="(stocksByZone[zone.id] || []).length" class="zone-stocks">
             <div v-for="s in stocksByZone[zone.id]" :key="s.id" class="stock-row">
               <div class="stock-info">
-                <span class="stock-produit">{{ s.produit?.nom }}</span>
-                <span v-if="s.lot" class="stock-lot">{{ s.lot.code_lot }}</span>
+                <div class="stock-icon" :class="s.produit?.nom?.toLowerCase().includes('export') ? 'icon-export' : s.produit?.nom?.toLowerCase().includes('local') ? 'icon-local' : 'icon-default'">{{ (s.produit?.nom||'?').charAt(0) }}</div>
+                <div>
+                  <div class="stock-produit">{{ s.produit?.nom }}</div>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <span v-if="s.lot" class="stock-lot">{{ s.lot.code_lot }}</span>
+                    <span style="font-size:10px;color:var(--text-muted)">{{ s.date_entree?.slice(0,10) }}</span>
+                  </div>
+                </div>
               </div>
               <div class="stock-qte">
                 <strong>{{ s.quantite }} kg</strong>
@@ -48,7 +55,11 @@
               </div>
             </div>
           </div>
-          <div v-else class="stock-empty">Aucun stock</div>
+          <div v-else class="stock-empty">
+            <div style="font-size:22px;color:var(--border)">—</div>
+            <div>Aucun stock dans {{ zone.nom }}</div>
+            <div style="font-size:11px;color:var(--text-muted)">Les lots transférés depuis le conditionnement apparaîtront ici</div>
+          </div>
         </div>
       </div>
     </template>
@@ -82,10 +93,6 @@ function doPrint() { window.print() }
 function zoneTotal(zone) {
   return (stocksByZone[zone.id] || []).reduce((total, stock) => total + Number(stock.quantite || 0), 0)
 }
-function zoneCapacityPercent(zone) {
-  if (!zone.capacite_kg) return 0
-  return Math.min(100, Math.round((zoneTotal(zone) / zone.capacite_kg) * 100))
-}
 function formatKg(value) { return Number(value || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) }
 
 onMounted(load)
@@ -95,27 +102,23 @@ onMounted(load)
 .flow-metric { display: flex; flex-direction: column; }
 .flow-metric strong { font-family: 'DM Serif Display', Georgia, serif; font-size: 25px; line-height: 0.9; color: var(--lime); }
 .flow-metric span { margin-top: 4px; color: #C6D8CC; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-.zones-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 18px; }
-.zones-grid > .card { position: relative; overflow: hidden; }
-.zones-grid > .card::after { content: ''; position: absolute; width: 120px; height: 120px; border-radius: 50%; right: -55px; top: -60px; background: var(--primary-50); z-index: 0; }
-.zones-grid > .card > * { position: relative; z-index: 1; }
-.zone-icon-wrap {
-  width: 40px; height: 40px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; font-size: 18px;
-}
-.zone-froid { background: #EFF6FF; }
+.zones-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.zones-grid > .card.zone-card { position: relative; overflow: hidden; border-top:3px solid var(--primary)}
+.zones-grid > .card.zone-card::after { content: ''; position: absolute; width: 120px; height: 120px; border-radius: 50%; right: -55px; top: -60px; background: var(--primary-50); z-index: 0; }
+.zones-grid > .card.zone-card > * { position: relative; z-index: 1; }
+.zone-icon-wrap { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink:0}
+.zone-froid { background: #EFF6FF; color:var(--info)}
 .zone-ambiant { background: var(--primary-50); }
-.zone-capacity { padding: 11px 0 3px; }
-.zone-capacity-head { display: flex; justify-content: space-between; gap: 10px; color: var(--text-muted); font-size: 10px; font-weight: 700; }
-.zone-capacity-head strong { color: var(--dark); font-size: 10px; }
-.zone-capacity-track { height: 6px; margin-top: 7px; overflow: hidden; border-radius: 99px; background: var(--border-light); }
-.zone-capacity-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary), var(--lime)); transition: width 0.45s var(--ease); }
-.zone-stocks { border-top: 1px solid var(--border-light); margin-top: 12px; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
-.stock-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 13px; }
-.stock-info { display: flex; align-items: center; gap: 8px; }
-.stock-produit { font-weight: 500; }
-.stock-lot { font-size: 11px; color: var(--text-muted); background: var(--surface); padding: 2px 8px; border-radius: 4px; }
+.zone-stocks { border-top: 1px solid var(--border-light); margin-top: 14px; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.stock-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; font-size: 13px; background:var(--surface); border:1px solid var(--border-light); border-radius:var(--radius-sm)}
+.stock-row:hover{ border-color:var(--border); background:white}
+.stock-info { display: flex; align-items: center; gap: 10px; }
+.stock-icon{ width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; flex-shrink:0}
+.icon-export{ background:#DBEAFE; color:var(--info)} .icon-local{ background:#DCFCE7; color:#00853E} .icon-default{ background:var(--primary-50); color:var(--primary)}
+.stock-produit { font-weight: 600; font-size:13px}
+.stock-lot { font-size: 11px; color: var(--text-muted); background: white; padding: 2px 8px; border-radius: 4px; border:1px solid var(--border-light)}
 .stock-qte { text-align: right; display: flex; flex-direction: column; gap: 1px; }
-.stock-empty { color: var(--text-muted); font-size: 13px; text-align: center; padding: 16px 0; border-top: 1px solid var(--border-light); margin-top: 12px; }
+.stock-empty { color: var(--text-muted); font-size: 13px; text-align: center; padding: 24px 0; border-top: 1px solid var(--border-light); margin-top: 12px; display:flex; flex-direction:column; gap:4px; align-items:center}
+.stock-summary{ border-left:3px solid var(--primary)}
 @media (max-width: 768px) { .zones-grid { grid-template-columns: 1fr !important; } }
 </style>

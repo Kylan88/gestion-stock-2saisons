@@ -510,12 +510,12 @@ onMounted(load)
 .cumul-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px; margin-bottom: 10px; }
 .cumul-row { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .cumul-box { flex: 1; min-width: 280px; background: var(--success-light); border: 1px solid rgba(22,101,32,0.2); border-radius: var(--radius-sm); overflow: hidden; }
-.cumul-box-header { padding: 8px 14px; font-weight: 700; font-size: 13px; color: #166534; background: rgba(22,101,32,0.08); border-bottom: 1px solid rgba(22,101,32,0.15); }
+.cumul-box-header { padding: 8px 14px; font-weight: 700; font-size: 13px; color: #00853E; background: rgba(22,101,32,0.08); border-bottom: 1px solid rgba(22,101,32,0.15); }
 .cumul-box-body { padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
 .cumul-stat { display: flex; justify-content: space-between; font-size: 12px; }
-.cumul-stat span { color: #15803D; }
-.cumul-stat strong { color: #166534; }
-.cumul-box-footer { padding: 8px 14px; border-top: 1px solid rgba(22,101,32,0.15); display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #166534; }
+.cumul-stat span { color: var(--success); }
+.cumul-stat strong { color: #00853E; }
+.cumul-box-footer { padding: 8px 14px; border-top: 1px solid rgba(22,101,32,0.15); display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #00853E; }
 .badge-rendement { background: var(--primary); color: white; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; }
 
 .cumul-total {
@@ -540,8 +540,8 @@ onMounted(load)
 .resume-item { display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--surface); border-radius: var(--radius-sm); border: 1px solid var(--border-light); }
 .resume-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
 .resume-value { font-size: 13px; font-weight: 700; }
-.resume-value.text-error { color: #DC2626; }
-.resume-value.text-success { color: #166534; }
+.resume-value.text-error { color: var(--error); }
+.resume-value.text-success { color: #00853E; }
 .resume-value.text-warning { color: #D97706; }
 
 /* Saisie section */

@@ -476,11 +476,11 @@ onMounted(load)
 .cumul-section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px; margin-bottom: 8px; }
 .cumul-row { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .cumul-box { flex: 1; min-width: 200px; background: var(--success-light); border: 1px solid rgba(22,101,32,0.2); border-radius: var(--radius-sm); overflow: hidden; }
-.cumul-box-header { padding: 6px 14px; font-weight: 700; font-size: 13px; color: #166534; background: rgba(22,101,32,0.08); border-bottom: 1px solid rgba(22,101,32,0.15); }
+.cumul-box-header { padding: 6px 14px; font-weight: 700; font-size: 13px; color: #00853E; background: rgba(22,101,32,0.08); border-bottom: 1px solid rgba(22,101,32,0.15); }
 .cumul-box-body { padding: 8px 14px; display: flex; flex-direction: column; gap: 4px; }
 .cumul-stat { display: flex; justify-content: space-between; font-size: 12px; }
-.cumul-stat span { color: #15803D; }
-.cumul-stat strong { color: #166534; }
+.cumul-stat span { color: var(--success); }
+.cumul-stat strong { color: #00853E; }
 .cumul-chariots { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 14px; }
 .chariot-pill {
   font-size: 10px; padding: 2px 8px; background: white; border: 1px solid var(--success);

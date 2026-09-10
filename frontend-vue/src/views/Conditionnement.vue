@@ -57,19 +57,28 @@
         <div class="empty-text">Aucun lot en attente de conditionnement</div>
       </div>
 
-      <div v-for="lot in lots" :key="lot.id" class="card lot-card anim-fade">
+      <div v-if="lots.length > 1" class="lot-nav">
+        <span class="lot-nav-label">Aller à :</span>
+        <button v-for="lot in lots" :key="lot.id" class="lot-nav-pill" :class="{active: expandedLotId === lot.id}" @click="scrollToLot(lot.id)">{{ lot.code_lot }}</button>
+        <button class="lot-nav-pill ghost" @click="expandedLotId = expandedLotId ? null : lots[0]?.id">{{ expandedLotId ? 'Tout réduire' : 'Tout ouvrir' }}</button>
+      </div>
+
+      <div v-for="lot in lots" :key="lot.id" class="card lot-card anim-fade" :id="'cond-lot-'+lot.id">
         <!-- Header lot -->
-        <div class="lot-header">
+        <div class="lot-header" @click="expandedLotId = expandedLotId === lot.id ? null : lot.id" style="cursor:pointer">
           <div class="lot-header-left">
             <strong class="lot-code">{{ lot.code_lot }}</strong>
             <span class="lot-fruit">{{ lot.type_fruit || lot.produit?.nom }}</span>
             <StatusBadge :status="lot.statut" />
+            <span style="font-size:11px;color:var(--text-muted)">J+1</span>
           </div>
           <div class="lot-header-right">
-            <span class="lot-recap">Production : <strong>{{ refEntree(lot) }} kg</strong></span>
+            <span class="lot-recap">Réf : <strong>{{ refEntree(lot) }} kg</strong></span>
             <span class="lot-recap reste">Reste : <strong>{{ resteConditionnement(lot) }} kg</strong></span>
+            <span class="expand-icon">{{ expandedLotId === lot.id ? '▲' : '▼' }}</span>
           </div>
         </div>
+        <template v-if="expandedLotId === lot.id">
 
         <!-- Barre de progression -->
         <div class="lot-progress">
@@ -79,9 +88,9 @@
           <span class="progress-label">{{ progressConditionnement(lot) }}% conditionné</span>
         </div>
 
-        <!-- Déjà conditionné -->
+         <!-- Déjà conditionné -->
         <div v-if="hasCumul(lot)" class="cumul-section">
-          <div class="cumul-section-title">Déjà conditionné</div>
+          <div class="cumul-section-title">Déjà conditionné (cumul lot)</div>
           <div class="flux-grid">
             <div v-for="flux in getFluxList(lot)" :key="'cum-'+flux.key" class="flux-card">
               <div class="flux-head" :style="{ borderColor: flux.color }">
@@ -95,12 +104,10 @@
               </div>
             </div>
           </div>
-
           <div class="cumul-total">
             <span>Total conditionné : <strong>{{ totalCumulPoids(lot) }} kg</strong></span>
             <span v-if="ecartCumul(lot) != null">Écart : <strong>{{ ecartCumul(lot) }}%</strong></span>
           </div>
-
           <div class="cloture-row">
             <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
               {{ cloturing ? 'Clôture...' : 'Clôturer le conditionnement' }}
@@ -108,65 +115,74 @@
           </div>
         </div>
 
-         <!-- Formulaire ajout journalier -->
-         <div class="saisie-section compact">
-           <div class="saisie-section-title">{{ hasCumul(lot) ? 'Ajouter la journée' : 'Premier conditionnement' }}</div>
-           <div class="flux-grid">
-             <div v-for="flux in getFluxList(lot)" :key="flux.key" class="flux-card">
-               <div class="flux-head" :style="{ borderColor: flux.color }">
-                 <span>{{ flux.label }}</span>
-                 <span class="flux-weight">{{ fluxPoids(lot.id, flux.key) }} kg</span>
-               </div>
-               <div class="flux-inputs">
-                 <div class="form-row-flux">
-                   <div class="form-group">
-                     <label class="input-label">Cartons</label>
-                     <input type="number" v-model.number="form[lot.id][flux.key + '_cartons']" class="input input-sm compact" min="0" @input="recalc(lot.id)" />
-                   </div>
-                   <div class="form-group">
-                     <label class="input-label">Sachets indiv.</label>
-                     <input type="number" v-model.number="form[lot.id][flux.key + '_sachets']" class="input input-sm compact" min="0" @input="recalc(lot.id)" />
-                   </div>
-                 </div>
-                 <div class="form-group">
-                   <label class="input-label">Poids/sachet</label>
-                   <input type="number" v-model.number="form[lot.id][flux.key + '_poids_sachet']" class="input input-sm compact" step="0.1" min="0" @input="recalc(lot.id)" />
-                 </div>
-               </div>
-             </div>
-           </div>
-
-           <div class="bilan-bar">
-             <span>Ajout : <strong>{{ totalPoids(lot.id) }} kg</strong></span>
-             <span>Écart : <strong>{{ ecartVal(lot.id) ?? '—' }}%</strong></span>
-           </div>
-
-           <div class="form-row" style="margin-top:14px">
-             <div class="form-group" style="flex:2">
-               <label class="input-label">Responsable</label>
-               <input v-model="form[lot.id].responsable" class="input compact" placeholder="Nom" />
-             </div>
-             <div class="form-group" style="flex:1">
-               <label class="input-label">Notes</label>
-               <input v-model="form[lot.id].notes" class="input compact" placeholder="Observations" />
-             </div>
-             <div class="form-group" style="flex:0">
-               <label class="input-label">&nbsp;</label>
-               <button class="btn btn-primary" :disabled="totalPoids(lot.id) <= 0 || saving" @click="enregistrer(lot)">
-                 {{ saving ? '...' : 'Enreg.' }}
-               </button>
-             </div>
-           </div>
-         </div>
-      </div>
-    </div>
+         <!-- Formulaire par dryer J+1 -->
+         <div v-if="!condDryersAvailable[lot.id] || condDryersAvailable[lot.id].length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune production hier — rien à conditionner aujourd'hui (J+1). Dryers disponibles demain selon production d'aujourd'hui.</div>
+         <div v-else class="saisie-section compact">
+            <div class="saisie-section-title">Conditionnement du jour — Dryer disponible J+1</div>
+            <div class="dryer-tabs" style="display:flex;gap:8px;margin-bottom:12px">
+              <button v-for="d in condDryersAvailable[lot.id]" :key="d" class="btn btn-sm" :class="activeCondDryer[lot.id]===d ? 'btn-primary' : 'btn-outline'" @click="activeCondDryer[lot.id]=d">Dryer {{ d }} · {{ d===1 ? '1575 kg' : '1500 kg' }}</button>
+            </div>
+            <div v-for="d in condDryersAvailable[lot.id]" :key="'form-'+d" v-show="activeCondDryer[lot.id]===d">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Saisie pour <strong>Dryer {{ d }}</strong> — production du {{ new Date(new Date().setDate(new Date().getDate()-1)).toLocaleDateString('fr-FR') }}</div>
+              <div class="flux-grid">
+                <div v-for="flux in getFluxList(lot)" :key="flux.key+'-'+d" class="flux-card">
+                  <div class="flux-head" :style="{ borderColor: flux.color }">
+                    <span>{{ flux.label }}</span>
+                    <span class="flux-weight">{{ fluxPoidsDryer(lot.id, d, flux.key) }} kg</span>
+                  </div>
+                  <div class="flux-inputs">
+                    <div class="form-row-flux">
+                      <div class="form-group">
+                        <label class="input-label">Cartons</label>
+                        <input type="number" v-model.number="form[lot.id][d][flux.key + '_cartons']" class="input input-sm compact" min="0" @input="recalcDryer(lot.id, d)" />
+                      </div>
+                      <div class="form-group">
+                        <label class="input-label">Sachets</label>
+                        <input type="number" v-model.number="form[lot.id][d][flux.key + '_sachets']" class="input input-sm compact" min="0" @input="recalcDryer(lot.id, d)" />
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="input-label">Poids/sachet</label>
+                      <input type="number" v-model.number="form[lot.id][d][flux.key + '_poids_sachet']" class="input input-sm compact" step="0.1" min="0" @input="recalcDryer(lot.id, d)" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="bilan-bar">
+                <span>Dryer {{ d }} — Ajout : <strong>{{ totalPoidsDryer(lot.id, d) }} kg</strong></span>
+                <span>Écart : <strong>{{ ecartValDryer(lot.id, d) ?? '—' }}%</strong></span>
+              </div>
+              <div class="form-row" style="margin-top:12px">
+                <div class="form-group" style="flex:2">
+                  <label class="input-label">Responsable</label>
+                  <input v-model="form[lot.id][d].responsable" class="input compact" placeholder="Nom" />
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label class="input-label">Notes</label>
+                  <input v-model="form[lot.id][d].notes" class="input compact" placeholder="Observations" />
+                </div>
+                <div class="form-group" style="flex:0">
+                  <label class="input-label">&nbsp;</label>
+                  <button class="btn btn-primary" :disabled="totalPoidsDryer(lot.id, d) <= 0 || saving" @click="enregistrerDryer(lot, d)">
+                    {{ saving ? '...' : 'Enreg. D' + d }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+       </div>
+     </div>
 
     <!-- TRANSFERT CF PANEL -->
-    <div v-if="!showHistorique && transfertLots.length > 0" class="transfert-panel">
-      <h2 class="transfert-title">Transfert Chambre Froide</h2>
+    <div v-if="activeView === 'saisie' && transfertLots.length > 0" class="transfert-panel">
+      <h2 class="transfert-title">Transfert Chambre Froide <span style="font-size:11px;color:var(--text-muted);font-weight:400">— lots conditionnés prêts</span></h2>
       <div v-for="lot in transfertLots" :key="'tf-'+lot.id" class="card lot-card anim-fade tf-card">
         <div class="tf-lot-header">
-          <strong class="lot-code">{{ lot.code_lot }}</strong>
+          <div style="display:flex;align-items:center;gap:10px">
+            <strong class="lot-code">{{ lot.code_lot }}</strong>
+            <StatusBadge :status="lot.statut" />
+          </div>
           <span class="tf-summary">
             {{ lot.export_cartons || 0 }} exp · {{ lot.local_cartons || 0 }} loc ·
             {{ lot['fitini_fê_cartons'] || 0 }} fit · {{ lot.dechets_cartons || 0 }} déc ·
@@ -174,29 +190,38 @@
           </span>
         </div>
 
+        <div v-if="zones.length === 0" class="field-error" style="padding:8px 14px;margin:0 14px 10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px">Aucune zone de stockage — créez une zone dans <router-link to="/stock">Stock</router-link> avant transfert.</div>
         <div class="tf-flux-grid">
           <template v-for="tf in transfertFluxes" :key="tf.key">
-        <div v-if="lot[tf.cartons_field] > 0" class="tf-flux-row">
-               <div class="tf-flux-head">
-                 <span class="tf-flux-label">{{ tf.label }}</span>
-                 <span class="tf-flux-dispo">{{ lot[tf.cartons_field] }} dispo</span>
-               </div>
-               <div class="tf-flux-inputs">
-                 <input type="number" v-model.number="transfertForm[lot.id][tf.key + '_cartons']" class="input input-sm compact" min="0" :max="lot[tf.cartons_field]" />
-                 <select v-model="transfertForm[lot.id][tf.key + '_zone_id']" class="input input-sm compact">
-                   <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.nom }}</option>
-                 </select>
-               </div>
-             </div>
+            <div v-if="lot[tf.cartons_field] > 0" class="tf-flux-row" :class="{'tf-error': (transfertForm[lot.id][tf.key + '_cartons']||0) > lot[tf.cartons_field]}">
+              <div class="tf-flux-head">
+                <span class="tf-flux-label">{{ tf.label }}</span>
+                <span class="tf-flux-dispo" :class="{'text-error': (transfertForm[lot.id][tf.key + '_cartons']||0) > lot[tf.cartons_field]}">{{ lot[tf.cartons_field] }} cartons dispo</span>
+              </div>
+              <div class="tf-flux-inputs">
+                <div style="flex:2">
+                  <input type="number" v-model.number="transfertForm[lot.id][tf.key + '_cartons']" class="input input-sm compact" min="0" :max="lot[tf.cartons_field]" :placeholder="'max '+lot[tf.cartons_field]" />
+                  <div v-if="(transfertForm[lot.id][tf.key + '_cartons']||0) > lot[tf.cartons_field]" class="field-error">Dépasse le stock (max {{ lot[tf.cartons_field] }})</div>
+                </div>
+                <select v-model="transfertForm[lot.id][tf.key + '_zone_id']" class="input input-sm compact" style="flex:1;min-height:32px" :disabled="zones.length===0">
+                  <option disabled value="">Choisir zone</option>
+                  <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.nom }}</option>
+                </select>
+              </div>
+            </div>
           </template>
         </div>
 
-<div class="tf-footer">
-           <div class="form-group"><label class="input-label">Responsable</label><input v-model="transfertForm[lot.id].responsable" class="input input-sm compact" placeholder="Nom" /></div>
-           <button class="btn btn-primary btn-sm" :disabled="savingTransfert || !canTransfert(lot.id)" @click="transférer(lot)">
-             {{ savingTransfert ? '...' : 'Transférer' }}
-           </button>
-         </div>
+        <div class="tf-footer">
+          <div class="form-group" style="flex:1">
+            <label class="input-label">Responsable *</label>
+            <input v-model="transfertForm[lot.id].responsable" class="input input-sm compact" placeholder="Nom du responsable" :class="{'input-error': transfertForm[lot.id].responsable && !transfertForm[lot.id].responsable.trim()}" />
+          </div>
+          <button class="btn btn-primary btn-sm" :disabled="savingTransfert || !canTransfert(lot.id) || hasTransfertError(lot.id)" @click="transférer(lot)">
+            {{ savingTransfert ? 'Transfert...' : 'Transférer en CF' }}
+          </button>
+        </div>
+        <div v-if="transfertError[lot.id]" class="field-error" style="padding:0 14px 10px">{{ transfertError[lot.id] }}</div>
       </div>
     </div>
 
@@ -213,8 +238,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
-import { getLots, getProductionsEtapes, validerConditionnement, cloturerConditionnement, getHistoriqueConditionnement, getZonesStock, creerDemandeTransfert, validerDemandeTransfert } from '../api'
+import { ref, reactive, onMounted, watch, nextTick } from 'vue'
+import { getLots, getProductionsEtapes, validerConditionnement, cloturerConditionnement, getHistoriqueConditionnement, getZonesStock, creerDemandeTransfert, validerDemandeTransfert, getConditionnementDryersDisponibles, validerConditionnementDryer } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -234,6 +259,9 @@ const refs = reactive({})
 const ecarts = reactive({})
 const toast = useToastStore()
 const confirmClotureLot = ref(null)
+const expandedLotId = ref(null)
+const condDryersAvailable = reactive({})
+const activeCondDryer = reactive({})
 
 const activeView = ref('saisie')
 const historique = ref([])
@@ -242,6 +270,7 @@ const loadingHist = ref(false)
 const transfertLots = ref([])
 const transfertForm = reactive({})
 const savingTransfert = ref(false)
+const transfertError = reactive({})
 
 const transfertFluxes = [
   { key: 'export', label: 'Export', cartons_field: 'export_cartons' },
@@ -262,7 +291,7 @@ async function loadHistorique() {
 }
 
 const allFluxes = [
-  { key: 'export', label: 'Export', color: '#165B3D' },
+  { key: 'export', label: 'Export', color: '#00853E' },
   { key: 'local', label: 'Local', color: '#0B2E20' },
   { key: 'fitini_fê', label: 'Fitini Fê', color: '#8B5CF6' },
   { key: 'dechets', label: 'Déchets', color: '#EF4444' },
@@ -296,6 +325,25 @@ function ecartVal(lotId) {
 }
 
 function recalc(lotId) { ecarts[lotId] = ecartVal(lotId) }
+function fluxPoidsDryer(lotId, dryer, key) {
+  const d = form[lotId]?.[dryer]
+  if (!d) return 0
+  const c = d[key + '_cartons'] || 0
+  const s = d[key + '_sachets'] || 0
+  const p = d[key + '_poids_sachet'] || 2.5
+  return Math.round(((c * 6) + s) * p * 100) / 100
+}
+function totalPoidsDryer(lotId, dryer) { return allFluxes.reduce((s, fl) => s + fluxPoidsDryer(lotId, dryer, fl.key), 0) }
+function ecartValDryer(lotId, dryer) {
+  const ref = refs[lotId] || 0
+  const total = totalPoidsDryer(lotId, dryer)
+  if (!ref || !total) return null
+  return Math.round(Math.abs(ref - total) / ref * 10000) / 100
+}
+function recalcDryer(lotId, dryer) {
+  const key = lotId + '_' + dryer
+  ecarts[key] = ecartValDryer(lotId, dryer)
+}
 
 function hasCumul(lot) {
   return (lot.export_cartons || 0) + (lot.local_cartons || 0) + (lot.dechets_cartons || 0) +
@@ -342,6 +390,19 @@ function progressConditionnement(lot) {
   return Math.min(100, Math.round((totalCumulPoids(lot) / ref) * 100))
 }
 
+function scrollToLot(lotId) {
+  expandedLotId.value = lotId
+  nextTick(() => document.getElementById('cond-lot-'+lotId)?.scrollIntoView({behavior:'smooth', block:'start'}))
+}
+async function loadCondDryers(lotId) {
+  try {
+    const avail = await getConditionnementDryersDisponibles(lotId)
+    condDryersAvailable[lotId] = avail
+    if (avail.length && !activeCondDryer[lotId]) activeCondDryer[lotId] = avail[0]
+  } catch { condDryersAvailable[lotId] = [] }
+}
+function isCondDryerAvailable(lotId, dryer) { return (condDryersAvailable[lotId] || []).includes(dryer) }
+
 async function load() {
   loading.value = true
   try {
@@ -356,22 +417,32 @@ async function load() {
       if (prodEtapes.length > 0 && prodEtapes.some(e => ['termine', 'en_cours'].includes(toCanonical(e.statut)))) {
         result.push(lot)
         if (!form[lot.id]) {
-          form[lot.id] = reactive({
-            export_cartons: 0, export_sachets: 0, export_poids_sachet: lot.export_poids_sachet || 2.5,
-            local_cartons: 0, local_sachets: 0, local_poids_sachet: lot.local_poids_sachet || 2.5,
-            fitini_fê_cartons: 0, fitini_fê_sachets: 0, fitini_fê_poids_sachet: lot['fitini_fê_poids_sachet'] || 2.5,
-            dechets_cartons: 0, dechets_sachets: 0, dechets_poids_sachet: lot.dechets_poids_sachet || 2.5,
-            rhum_cartons: 0, rhum_sachets: 0, rhum_poids_sachet: lot.rhum_poids_sachet || 2.5,
-            responsable: '', notes: '',
-          })
+          form[lot.id] = reactive({})
         }
+        // init per dryer forms for available dryers J+1
+        await loadCondDryers(lot.id)
+        const avail = condDryersAvailable[lot.id] || [1]
+        for (const d of avail) {
+          if (!form[lot.id][d]) {
+            form[lot.id][d] = reactive({
+              export_cartons: 0, export_sachets: 0, export_poids_sachet: lot.export_poids_sachet || 2.5,
+              local_cartons: 0, local_sachets: 0, local_poids_sachet: lot.local_poids_sachet || 2.5,
+              fitini_fê_cartons: 0, fitini_fê_sachets: 0, fitini_fê_poids_sachet: lot['fitini_fê_poids_sachet'] || 2.5,
+              dechets_cartons: 0, dechets_sachets: 0, dechets_poids_sachet: lot.dechets_poids_sachet || 2.5,
+              rhum_cartons: 0, rhum_sachets: 0, rhum_poids_sachet: lot.rhum_poids_sachet || 2.5,
+              responsable: '', notes: '',
+            })
+          }
+        }
+        if (!activeCondDryer[lot.id] && avail.length) activeCondDryer[lot.id] = avail[0]
         refs[lot.id] = etapesData.value[lot.id].find(e => e.etape === 'conditionnement')?.poids_entree
           || prodEtapes.reduce((sum, ep) => sum + (Number(ep.poids_sortie) || 0), 0)
           || 0
-        recalc(lot.id)
+        for (const d of avail) recalcDryer(lot.id, d)
       }
     }
     lots.value = result
+    if (result.length && !expandedLotId.value) expandedLotId.value = result[0].id
 
     transfertLots.value = raw.filter(l => {
       if (toCanonical(l.statut) !== CONDITIONNE) return false
@@ -400,6 +471,19 @@ async function enregistrer(lot) {
     await load()
   } finally { saving.value = false }
 }
+async function enregistrerDryer(lot, dryer) {
+  saving.value = true
+  try {
+    const payload = { dryer, ...form[lot.id][dryer] }
+    await validerConditionnementDryer(lot.id, payload)
+    toast.success(`Conditionnement D${dryer} enregistré pour ${lot.code_lot}`)
+    // bascule auto si autre dryer disponible
+    const avail = condDryersAvailable[lot.id] || []
+    const next = avail.find(d => d !== dryer)
+    if (next) activeCondDryer[lot.id] = next
+    await load()
+  } catch(e){ toast.error(e.message) } finally { saving.value = false }
+}
 
 async function cloturer(lot) {
   confirmClotureLot.value = null
@@ -414,24 +498,48 @@ async function cloturer(lot) {
 function canTransfert(lotId) {
   const d = transfertForm[lotId]
   if (!d) return false
+  if (!d.responsable || !d.responsable.trim()) return false
   return transfertFluxes.some(tf => (d[tf.key + '_cartons'] || 0) > 0 && d[tf.key + '_zone_id'])
+}
+function hasTransfertError(lotId) {
+  const lot = transfertLots.value.find(l => l.id === lotId)
+  const d = transfertForm[lotId]
+  if (!lot || !d) return false
+  return transfertFluxes.some(tf => (d[tf.key + '_cartons'] || 0) > (lot[tf.cartons_field] || 0))
 }
 
 async function transférer(lot) {
   const d = transfertForm[lot.id]
   if (!d) return
+  // validation front
+  for (const tf of transfertFluxes) {
+    const nb = d[tf.key + '_cartons'] || 0
+    if (nb > (lot[tf.cartons_field] || 0)) {
+      toast.error(`${tf.label}: ${nb} dépasse le stock (${lot[tf.cartons_field]})`)
+      return
+    }
+  }
+  if (!d.responsable || !d.responsable.trim()) {
+    toast.warning('Responsable requis pour le transfert')
+    return
+  }
   savingTransfert.value = true
+  transfertError[lot.id] = ''
   try {
     const lignes = []
     for (const tf of transfertFluxes) {
       const nb = d[tf.key + '_cartons'] || 0
       if (nb > 0) lignes.push({ type_flux: tf.key, nb_cartons: nb, zone_id: d[tf.key + '_zone_id'] })
     }
-    if (!lignes.length) return
-    const demande = await creerDemandeTransfert({ lot_id: lot.id, responsable: d.responsable, notes: d.notes, lignes })
+    if (!lignes.length) { toast.warning('Saisir au moins un flux'); return }
+    const demande = await creerDemandeTransfert({ lot_id: lot.id, responsable: d.responsable.trim(), lignes })
     await validerDemandeTransfert(demande.id)
     toast.success(`Transfert CF validé pour ${lot.code_lot}`)
     await load()
+  } catch(e) {
+    const msg = e.response?.data?.detail || e.message || 'Erreur transfert'
+    transfertError[lot.id] = msg
+    toast.error(msg)
   } finally { savingTransfert.value = false }
 }
 
@@ -466,7 +574,13 @@ onMounted(load)
 .flow-metric { display: flex; flex-direction: column; }
 .flow-metric strong { font-family: 'DM Serif Display', Georgia, serif; font-size: 25px; line-height: 0.9; color: var(--lime); }
 .flow-metric span { margin-top: 4px; color: #C6D8CC; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-.lot-card { margin-bottom: 20px; }
+.lot-nav{ position:sticky; top:0; z-index:2; display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:10px 12px; margin-bottom:14px; background:var(--surface); border:1px solid var(--border-light); border-radius:var(--radius-md)}
+.lot-nav-label{ font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em}
+.lot-nav-pill{ padding:6px 12px; border:1px solid var(--border); border-radius:99px; background:white; font-size:12px; font-weight:600; cursor:pointer}
+.lot-nav-pill.active{ background:var(--primary); color:white; border-color:var(--primary)}
+.lot-nav-pill.ghost{ background:transparent; border-style:dashed}
+.expand-icon{ font-size:11px; color:var(--text-muted)}
+.lot-card { margin-bottom: 12px; }
 .lot-header {
   display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 12px; border-bottom: 1px solid var(--border-light);

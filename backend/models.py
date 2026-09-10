@@ -272,3 +272,24 @@ class ProductionEntry(Base):
     created_by_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+# ── CONDITIONNEMENT PAR DRYER J+1 ──
+
+class ConditionnementEntry(Base):
+    __tablename__ = "conditionnement_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    lot_id = Column(Integer, ForeignKey("lots.id"), nullable=False)
+    date = Column(DateTime, nullable=False)  # date du conditionnement (= production veille +1)
+    dryer = Column(Integer, nullable=False)  # 1 ou 2
+    # 5 flux
+    export_cartons = Column(Integer, default=0); export_sachets = Column(Integer, default=0); export_poids_sachet = Column(Float, default=2.5)
+    local_cartons = Column(Integer, default=0); local_sachets = Column(Integer, default=0); local_poids_sachet = Column(Float, default=2.5)
+    dechets_cartons = Column(Integer, default=0); dechets_sachets = Column(Integer, default=0); dechets_poids_sachet = Column(Float, default=2.5)
+    rhum_cartons = Column(Integer, default=0); rhum_sachets = Column(Integer, default=0); rhum_poids_sachet = Column(Float, default=2.5)
+    fitini_fê_cartons = Column(Integer, default=0); fitini_fê_sachets = Column(Integer, default=0); fitini_fê_poids_sachet = Column(Float, default=2.5)
+    responsable = Column(String(100), default="")
+    notes = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.now)
+
+    lot = relationship("Lot")

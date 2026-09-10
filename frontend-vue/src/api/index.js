@@ -127,6 +127,20 @@ export async function cloturerConditionnement(lotId) {
   const { data } = await api.post(`/conditionnement/lots/${lotId}/cloturer`)
   return data
 }
+export async function getConditionnementDryersDisponibles(lotId, date = null) {
+  const params = { lot_id: lotId }
+  if (date) params.date = date
+  const { data } = await api.get('/conditionnement/dryers-disponibles', { params })
+  return data
+}
+export async function validerConditionnementDryer(lotId, payload) {
+  const { data } = await api.post(`/conditionnement/lots/${lotId}/dryer`, payload)
+  return data
+}
+export async function getConditionnementEntries(params = {}) {
+  const { data } = await api.get('/conditionnement/entries', { params })
+  return data
+}
 
 // ── Stock / Zones ──
 export async function getZonesStock(params = {}) {

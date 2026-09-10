@@ -253,7 +253,7 @@ watch(filters,loadEntries,{deep:true})
 .filter-item .input{ min-height:38px; background:white}
 .fruit-badge{ display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:700; background:var(--primary-light); color:var(--primary)}
 .dryer-badge{ display:inline-flex; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:800}
-.dryer1{ background:#DBEAFE; color:#1E40AF} .dryer2{ background:#FEF3C7; color:#92400E}
+.dryer1{ background:#DBEAFE; color:var(--info)} .dryer2{ background:#FEF3C7; color:var(--warning)}
 .rendement-badge{ font-weight:700; font-size:13px} .rendement-good{ color:var(--success)} .rendement-warn{ color:var(--warning)} .rendement-low{ color:var(--error)}
 .modal-overlay{ position:fixed; inset:0; background:rgba(15,23,42,0.4); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; backdrop-filter:blur(2px)}
 .modal{ background:var(--card); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); width:100%; max-height:90vh; overflow-y:auto}

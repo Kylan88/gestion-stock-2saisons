@@ -16,8 +16,7 @@ defineProps({ title: String, subtitle: String })
 
 <style scoped>
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-.page-title { position: relative; font-size: 30px; font-weight: 400; margin-bottom: 7px; }
-.page-title::before { content: ''; display: inline-block; width: 22px; height: 3px; margin: 0 9px 7px 0; border-radius: 99px; background: var(--lime); }
-.page-subtitle { color: var(--text-muted); font-size: 13px; max-width: 620px; }
+.page-title { font-family: 'Inter', sans-serif; font-size: 24px; font-weight: 700; color: #111827; margin-bottom: 4px; letter-spacing: -0.02em; }
+.page-subtitle { color: #6b7280; font-size: 14px; max-width: 620px; }
 .page-actions { display: flex; gap: 10px; flex-shrink: 0; }
 </style>

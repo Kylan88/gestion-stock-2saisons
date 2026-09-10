@@ -350,3 +350,25 @@ class ProductionStats(BaseModel):
     par_fruit: dict
     par_lot: dict = {}
     par_dryer: dict = {}
+
+
+# ── CONDITIONNEMENT PAR DRYER J+1 ──
+
+class ConditionnementEntryCreate(ValidatedInput):
+    dryer: int
+    export_cartons: int = 0; export_sachets: int = 0; export_poids_sachet: float = 2.5
+    local_cartons: int = 0; local_sachets: int = 0; local_poids_sachet: float = 2.5
+    dechets_cartons: int = 0; dechets_sachets: int = 0; dechets_poids_sachet: float = 2.5
+    rhum_cartons: int = 0; rhum_sachets: int = 0; rhum_poids_sachet: float = 2.5
+    fitini_fê_cartons: int = 0; fitini_fê_sachets: int = 0; fitini_fê_poids_sachet: float = 2.5
+    responsable: str = ""; notes: str = ""
+
+class ConditionnementEntryResponse(BaseModel):
+    id: int; lot_id: int; date: datetime; dryer: int
+    export_cartons: int; export_sachets: int; export_poids_sachet: float
+    local_cartons: int; local_sachets: int; local_poids_sachet: float
+    dechets_cartons: int; dechets_sachets: int; dechets_poids_sachet: float
+    rhum_cartons: int; rhum_sachets: int; rhum_poids_sachet: float
+    fitini_fê_cartons: int; fitini_fê_sachets: int; fitini_fê_poids_sachet: float
+    responsable: str; notes: str; created_at: datetime
+    class Config: from_attributes = True
