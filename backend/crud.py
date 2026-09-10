@@ -612,12 +612,17 @@ def valider_conditionnement(db: Session, lot_id: int,
     etape_cond.poids_sortie = total_flux
     etape_cond.operateur = responsable or etape_cond.operateur or ""
 
+    # référence = somme productions (pour compat test)
+    productions = db.query(EtapeProduction).filter(EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production").all()
+    reference = sum(ep.poids_sortie or 0.0 for ep in productions) if productions else etape_cond.poids_entree or 0.0
+
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
 
     return {
         "lot_id": lot_id,
         "code_lot": lot.code_lot,
         "total_flux": total_flux,
+        "reference": reference,
         "export_cartons": lot.export_cartons, "local_cartons": lot.local_cartons,
         "dechets_cartons": lot.dechets_cartons, "rhum_cartons": lot.rhum_cartons,
         "fitini_fê_cartons": lot.fitini_fê_cartons,
