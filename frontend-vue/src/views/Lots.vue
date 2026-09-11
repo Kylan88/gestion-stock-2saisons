@@ -148,24 +148,42 @@ function lotProgressPct(lot) {
   if (!lot.poids_frais) return 0
   const statut = toCanonical(lot.statut)
   const total = lot.poids_frais
+  const lotEtapes = etapes.value[lot.id] || []
 
-  // Progression par étape réelle
+  // Progression réelle basée sur les étapes si disponibles, sinon sur quantite_restante
   if (statut === RECEPTION) return 0
   if (statut === EN_MUSSERIE) {
-    // Progression musserie : basée sur quantite_restante si dispo
-    const restant = lot.quantite_restante || total
-    return Math.min(30, Math.round(((total - restant) / total) * 100))
+    const restant = lot.quantite_restante ?? total
+    const pctMusserie = total > 0 ? ((total - restant) / total) : 0
+    return Math.min(30, Math.round(pctMusserie * 30))
   }
   if (statut === EN_PRODUCTION) {
-    // Production : 30-60%
-    return 30 + Math.min(30, Math.round((total * 0.5 / total) * 100))
+    const base = 30
+    if (lotEtapes.length) {
+      const prod = lotEtapes.filter(e => e.etape === 'production')
+      if (prod.length) {
+        const done = prod.filter(e => e.statut === 'termine').length
+        const totalProd = prod.length
+        const enCours = prod.filter(e => e.statut === 'en_cours').length
+        const pct = totalProd > 0 ? (done + enCours * 0.5) / totalProd : 0
+        return base + Math.round(pct * 30)
+      }
+    }
+    return 45
   }
   if (statut === EN_CONDITIONNEMENT) {
-    return 60 + Math.min(25, 25)
+    const base = 60
+    if (lotEtapes.length) {
+      const cond = lotEtapes.filter(e => e.etape === 'conditionnement')
+      const done = cond.filter(e => e.statut === 'termine').length
+      if (cond.length) return base + Math.round((done / cond.length) * 25)
+      const ref = lot.poids_frais
+      const flux = (lot.export_cartons||0)+(lot.local_cartons||0)
+      if (ref > 0 && flux > 0) return base + Math.min(25, Math.round((flux / 10) * 5))
+    }
+    return 62
   }
-  if (statut === CONDITIONNE) {
-    return 85
-  }
+  if (statut === CONDITIONNE) return 88
   if (statut === EN_STOCK) return 100
   if (statut === EXPEDIE || statut === PERIME) return 100
   return 0
@@ -194,6 +212,12 @@ async function loadLots() {
     if (recherche.value) params.recherche = recherche.value
     if (filtreEtape.value) params.etape = filtreEtape.value
     lots.value = await getLots(params)
+    // pré-charger les étapes pour une progression réelle (sans bloquer l'affichage)
+    for (const lot of lots.value) {
+      if ([EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(lot.statut)) && !etapes.value[lot.id]) {
+        getProductionsEtapes(lot.id).then(data => { etapes.value[lot.id] = data }).catch(() => {})
+      }
+    }
   } finally { loading.value = false }
 }
 

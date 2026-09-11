@@ -298,8 +298,8 @@ def valider_musserie(db: Session, lot_id: int,
     if reste_kg is not None:
         lot.quantite_restante = round(max(0, reste_kg), 2)
     else:
-        delta = fruits_murs_kg + dechets_tri_kg - retour_non_mur_kg
-        lot.quantite_restante = round(max(0, base_restant - delta), 2)
+        # Lots : reste = reçu − Σ fruits_murs envoyés (sans déchets/retour, cf. consigne)
+        lot.quantite_restante = round(max(0, base_restant - fruits_murs_kg), 2)
     if statuses.normalize(lot.statut) == statuses.RECEPTION:
         lot.statut = statuses.EN_MUSSERIE
 

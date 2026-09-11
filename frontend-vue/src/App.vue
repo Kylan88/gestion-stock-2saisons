@@ -52,17 +52,47 @@
           <input
             type="text"
             class="search-input"
-            placeholder="Rechercher un lot..."
+            placeholder="Rechercher tout..."
             v-model="searchQuery"
+            @input="onSearchInput"
             @keydown.enter="goSearch"
+            @focus="onSearchFocus"
+            @blur="onSearchBlur"
           />
+          <div v-if="showSearchDropdown && searchResults" class="search-dropdown">
+            <div v-if="!hasAnyResults" class="search-empty">Aucun résultat pour "{{ searchQuery }}"</div>
+            <template v-else>
+              <div v-if="searchResults.lots?.length" class="search-group">
+                <div class="search-group-title">Lots ({{ searchResults.lots.length }})</div>
+                <button v-for="lot in searchResults.lots" :key="lot.id" class="search-item" @mousedown.prevent="goToLot(lot)">
+                  <span class="search-item-code">{{ lot.code_lot }}</span>
+                  <span class="search-item-sub">{{ lot.type_fruit }} · {{ lot.statut }}</span>
+                </button>
+              </div>
+              <div v-if="searchResults.produits?.length" class="search-group">
+                <div class="search-group-title">Produits</div>
+                <button v-for="p in searchResults.produits" :key="p.id" class="search-item" @mousedown.prevent="router.push('/produits')"><span>{{ p.nom }}</span></button>
+              </div>
+              <div v-if="searchResults.fournisseurs?.length" class="search-group">
+                <div class="search-group-title">Fournisseurs</div>
+                <button v-for="f in searchResults.fournisseurs" :key="f.id" class="search-item" @mousedown.prevent="router.push('/fournisseurs')"><span>{{ f.nom }}</span></button>
+              </div>
+              <div v-if="searchResults.zones?.length" class="search-group">
+                <div class="search-group-title">Zones</div>
+                <button v-for="z in searchResults.zones" :key="z.id" class="search-item" @mousedown.prevent="router.push('/stock')"><span>{{ z.nom }}</span><small>{{ z.type_zone }}</small></button>
+              </div>
+              <div v-if="searchResults.commandes?.length" class="search-group">
+                <div class="search-group-title">Commandes</div>
+                <button v-for="c in searchResults.commandes" :key="c.id" class="search-item" @mousedown.prevent="router.push('/commandes')"><span>{{ c.client_nom }}</span><small>{{ c.statut }}</small></button>
+              </div>
+            </template>
+          </div>
         </div>
         <div class="topbar-right">
           <button @click="toggleTheme" :title="themeStore.resolvedTheme === 'dark' ? 'Mode clair' : 'Mode sombre'" style="padding:8px;border-radius:8px;border:none;background:transparent;cursor:pointer;color:#6b7280">
             <svg v-if="themeStore.resolvedTheme === 'dark'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           </button>
-          <div class="topbar-status"><span class="topbar-status-dot"></span>Opérations en direct</div>
           <div class="topbar-avatar">2S</div>
         </div>
       </header>
@@ -84,6 +114,7 @@
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useThemeStore } from './stores/theme'
+import { globalSearch } from './api'
 const themeStore = useThemeStore()
 function toggleTheme() { themeStore.setThemeMode(themeStore.resolvedTheme === 'dark' ? 'light' : 'dark') }
 
@@ -91,11 +122,43 @@ const router = useRouter()
 const route = useRoute()
 const searchQuery = ref('')
 const sidebarOpen = ref(false)
+const searchResults = ref(null)
+const showSearchDropdown = ref(false)
+let searchTimeout = null
+const hasAnyResults = computed(() => {
+  if (!searchResults.value) return false
+  return (searchResults.value.lots?.length || searchResults.value.produits?.length || searchResults.value.fournisseurs?.length || searchResults.value.zones?.length || searchResults.value.commandes?.length)
+})
+
+async function doGlobalSearch() {
+  const q = searchQuery.value.trim()
+  if (q.length < 2) { searchResults.value = null; return }
+  try { searchResults.value = await globalSearch(q); showSearchDropdown.value = true } catch {}
+}
+function onSearchInput() {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(doGlobalSearch, 300)
+  if (searchQuery.value.trim().length >= 2) showSearchDropdown.value = true
+}
+function onSearchFocus() { if (searchResults.value && hasAnyResults.value) showSearchDropdown.value = true }
+function onSearchBlur() { setTimeout(() => showSearchDropdown.value = false, 200) }
+function goToLot(lot) {
+  showSearchDropdown.value = false
+  searchQuery.value = ''
+  searchResults.value = null
+  router.push({ path: '/lots', query: { q: lot.code_lot } })
+}
 
 function goSearch() {
-  if (!searchQuery.value.trim()) return
-  router.push({ path: '/lots', query: { q: searchQuery.value.trim() } })
+  const q = searchQuery.value.trim()
+  if (!q) return
+  if (searchResults.value && searchResults.value.lots?.length === 1) {
+    goToLot(searchResults.value.lots[0]); return
+  }
+  router.push({ path: '/lots', query: { q } })
+  showSearchDropdown.value = false
   searchQuery.value = ''
+  searchResults.value = null
 }
 
 const routeLabels = {
@@ -223,8 +286,8 @@ const navGroups = [
 .breadcrumb-current { color: #111827; font-weight: 600; }
 .breadcrumb-sep { color: #d1d5db; font-size: 12px; }
 
-.topbar-search { position: relative; flex: 0 1 320px; }
-.search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; }
+.topbar-search { position: relative; flex: 0 1 360px; }
+.search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af; z-index: 1; }
 .search-input {
   width: 100%; min-height: 36px; padding: 8px 14px 8px 36px; border: 1px solid #e5e7eb;
   border-radius: 8px; font-size: 13px; font-family: inherit;
@@ -232,6 +295,18 @@ const navGroups = [
 }
 .search-input:focus { border-color: #00853E; box-shadow: 0 0 0 2px rgba(0,133,62,0.15); }
 .search-input::placeholder { color: #9ca3af; }
+.search-dropdown { position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: white; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-height: 420px; overflow-y: auto; z-index: 50; padding: 8px; }
+.search-empty { padding: 16px; text-align: center; color: #6b7280; font-size: 13px; }
+.search-group { padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+.search-group:last-child { border-bottom: none; }
+.search-group-title { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 8px; }
+.search-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border: none; background: transparent; border-radius: 8px; cursor: pointer; text-align: left; font-size: 13px; }
+.search-item:hover { background: #f9fafb; }
+.search-item-code { font-weight: 600; color: #111827; }
+.search-item-sub { font-size: 11px; color: #6b7280; }
+:global(.dark) .search-dropdown { background: #1f2937; border-color: #374151; }
+:global(.dark) .search-item:hover { background: #374151; }
+:global(.dark) .search-group { border-color: #374151; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 .topbar-status { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 9999px; background: white; color: #374151; font-size: 11px; font-weight: 600; }
 .topbar-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }

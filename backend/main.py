@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 from routers import produits, mouvements, lots, commandes, dashboard
 from routers import production, stock_zones, rendements
-from routers import conditionnement, transfert
+from routers import conditionnement, transfert, search
 import crud
 import schemas
 
@@ -67,6 +67,7 @@ app.include_router(stock_zones.router)
 app.include_router(rendements.router)
 app.include_router(conditionnement.router)
 app.include_router(transfert.router)
+app.include_router(search.router)
 
 # ── Routes utilitaires ──
 

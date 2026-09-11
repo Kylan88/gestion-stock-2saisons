@@ -267,6 +267,10 @@ export async function getRappels(seuil_heures = 24) {
   const { data } = await api.get('/production/rappels', { params: { seuil_heures } })
   return data
 }
+export async function globalSearch(q) {
+  const { data } = await api.get('/search/', { params: { q } })
+  return data
+}
 
 // ── Production / Rendement ──
 export async function getProductionConfig() {
