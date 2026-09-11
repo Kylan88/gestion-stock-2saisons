@@ -227,8 +227,8 @@
 
     <ConfirmDialog
       :show="!!confirmClotureLot"
-      title="Clôturer le conditionnement ?"
-      :message="'Terminer le conditionnement pour ' + (confirmClotureLot?.code_lot || '') + ' ? Le lot passera en chambre froide. Cette action est irréversible.'"
+      :title="'Clôturer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
+      :message="'Terminer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryer ' + (activeCondDryer[confirmClotureLot?.id] || '?') + ' (production veille). Le lot passera en chambre froide. Cette action est irréversible.'"
       confirmText="Clôturer"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"

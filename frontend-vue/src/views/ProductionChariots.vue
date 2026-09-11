@@ -200,8 +200,8 @@
 
     <ConfirmDialog
       :show="!!confirmClotureLot"
-      title="Clôturer la production ?"
-      :message="'Terminer la production pour ' + (confirmClotureLot?.code_lot || '') + ' ? Cette action est irréversible.'"
+      :title="'Clôturer la production du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
+      :message="'Terminer la production du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — tous les dryers du jour (D' + (availableDryers(confirmClotureLot?.id) || []).join(', D') + ') seront clôturés. Cette action est irréversible.'"
       confirmText="Clôturer"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
