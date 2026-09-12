@@ -221,7 +221,7 @@ import PageHeader from '../components/PageHeader.vue'
 import RappelsBanner from '../components/RappelsBanner.vue'
 import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, TERMINE } from '../utils/statuses'
 
-const DRYER = { 1: { chariots: 6, claies: 42, kg_par_claie: 6.25 }, 2: { chariots: 12, claies: 20, kg_par_claie: 6.5 } }
+const DRYER = { 1: { chariots: 6, claies: 42, kg_par_claie: 6.25 }, 2: { chariots: 12, claies: 20, kg_par_claie: 6.25 } }
 
 const showHistorique = ref(false)
 const historique = ref([])

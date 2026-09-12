@@ -413,7 +413,7 @@ def get_musserie_by_date_dryer(db: Session, lot_id: int, date_str: str):
 
 DRYER_CONFIG = {
     1: {"chariots": 6, "claies": 42, "kg_par_claie": 6.25},
-    2: {"chariots": 12, "claies": 20, "kg_par_claie": 6.5},
+    2: {"chariots": 12, "claies": 20, "kg_par_claie": 6.25},
 }
 
 def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
@@ -640,7 +640,18 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "conditionnement"
     ).first()
     if not etape_cond:
-        raise ValueError(f"Aucune étape conditionnement pour le lot {lot.code_lot}")
+        # compat per dryer J+1 : vérifie ConditionnementEntry
+        from models import ConditionnementEntry
+        entries = db.query(ConditionnementEntry).filter(ConditionnementEntry.lot_id == lot_id).all()
+        if not entries:
+            raise ValueError(f"Aucune étape conditionnement pour le lot {lot.code_lot}")
+        # crée une étape globale si manquante
+        etape_cond = EtapeProduction(
+            lot_id=lot_id, etape="conditionnement", ordre=3,
+            statut=statuses.EN_COURS, date_debut=datetime.now(),
+            poids_entree=sum((e.export_cartons*6+e.export_sachets)*e.export_poids_sachet for e in entries)  # approx
+        )
+        db.add(etape_cond); db.flush()
 
     # Somme de TOUTES les étapes production terminées (multi-jours)
     productions = db.query(EtapeProduction).filter(
@@ -1256,38 +1267,39 @@ def get_reconditionnements(db: Session, lot_id: int = None):
 def detecter_anomalies(db: Session) -> list:
     from models import EtapeProduction, StockZone
     anomalies = []
-    lots = db.query(Lot).filter(Lot.statut.notin_(["expédié", "périmé"])).all()
+    lots = db.query(Lot).filter(Lot.statut.notin_([statuses.EXPEDIE, statuses.PERIME])).all()
     for lot in lots:
         etapes = get_etapes_lot(db, lot.id)
+        lot_statut_norm = statuses.normalize(lot.statut)
 
-        if lot.statut in [statuses.EN_PRODUCTION, statuses.CONDITIONNE, statuses.TERMINE]:
-            musserie = next((e for e in etapes if e.etape == "musserie"), None)
-            if not musserie or musserie.statut != "terminé":
+        if lot_statut_norm in [statuses.EN_PRODUCTION, statuses.EN_CONDITIONNEMENT, statuses.CONDITIONNE]:
+            musserie = next((e for e in etapes if e.etape == "musserie" and statuses.normalize(e.statut) == statuses.TERMINE), None)
+            if not musserie:
                 anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "production_sans_musserie",
                                   "message": f"{lot.code_lot} est en {lot.statut} mais n'a pas de musserie terminée",
                                   "severite": "error"})
 
-        if lot.statut in [statuses.CONDITIONNE, statuses.TERMINE]:
-            prod = next((e for e in etapes if e.etape == "production"), None)
-            if not prod or prod.statut != "terminé":
+        if lot_statut_norm in [statuses.EN_CONDITIONNEMENT, statuses.CONDITIONNE]:
+            prod = next((e for e in etapes if e.etape == "production" and statuses.normalize(e.statut) == statuses.TERMINE), None)
+            if not prod:
                 anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "conditionnement_sans_production",
                                   "message": f"{lot.code_lot} est en {lot.statut} mais la production n'est pas terminée",
                                   "severite": "error"})
 
-        if lot.statut == statuses.TERMINE:
-            cond = next((e for e in etapes if e.etape == "conditionnement"), None)
-            if not cond or cond.statut != "termine":
-                anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "termine_sans_conditionnement",
-                                  "message": f"{lot.code_lot} est terminé mais le conditionnement n'est pas fait",
+        if lot_statut_norm == statuses.EN_STOCK:
+            cond = next((e for e in etapes if e.etape == "conditionnement" and statuses.normalize(e.statut) == statuses.TERMINE), None)
+            if not cond:
+                anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "stock_sans_conditionnement",
+                                  "message": f"{lot.code_lot} est en stock mais le conditionnement n'est pas terminé",
                                   "severite": "warning"})
 
-            if lot.statut_transfert == statuses.EN_ATTENTE:
-                has_local = lot.local_cartons > 0
-                has_fitini = lot.fitini_fê_cartons > 0
-                if has_local or has_fitini:
-                    anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "pas_de_transfert",
-                                      "message": f"{lot.code_lot} a des cartons non transférés en chambre froide",
-                                      "severite": "warning"})
+        if lot.statut_transfert == statuses.EN_ATTENTE:
+            has_local = (lot.local_cartons or 0) > 0
+            has_fitini = (getattr(lot, "fitini_fê_cartons", 0) or 0) > 0
+            if has_local or has_fitini:
+                anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "pas_de_transfert",
+                                  "message": f"{lot.code_lot} a des cartons non transférés en chambre froide",
+                                  "severite": "warning"})
 
     return anomalies
 

@@ -8,6 +8,14 @@ import schemas
 
 router = APIRouter(prefix="/api/produits", tags=["Produits"])
 
+@router.get("/alertes/stock-bas", response_model=List[schemas.ProduitResponse])
+def alertes_stock_bas(db: Session = Depends(get_db)):
+    return crud.get_produits_stock_bas(db)
+
+@router.get("/alertes/rupture", response_model=List[schemas.ProduitResponse])
+def alertes_rupture(db: Session = Depends(get_db)):
+    return crud.get_produits_rupture(db)
+
 @router.get("/", response_model=List[schemas.ProduitResponse])
 def liste_produits(
     actif: bool = True,
@@ -42,11 +50,3 @@ def supprimer_produit(produit_id: int, db: Session = Depends(get_db)):
     ok = crud.delete_produit(db, produit_id)
     if not ok: raise HTTPException(404, f"Produit {produit_id} introuvable")
     return {"message": "Produit désactivé", "id": produit_id}
-
-@router.get("/alertes/stock-bas", response_model=List[schemas.ProduitResponse])
-def alertes_stock_bas(db: Session = Depends(get_db)):
-    return crud.get_produits_stock_bas(db)
-
-@router.get("/alertes/rupture", response_model=List[schemas.ProduitResponse])
-def alertes_rupture(db: Session = Depends(get_db)):
-    return crud.get_produits_rupture(db)

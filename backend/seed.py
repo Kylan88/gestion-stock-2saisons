@@ -8,7 +8,7 @@ import statuses
 
 DRYER_CONFIG = {
     1: {"chariots": 6, "claies": 42, "kg_par_claie": 6.25},
-    2: {"chariots": 12, "claies": 20, "kg_par_claie": 6.5},
+    2: {"chariots": 12, "claies": 20, "kg_par_claie": 6.25},
 }
 
 

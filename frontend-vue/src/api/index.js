@@ -115,10 +115,6 @@ export async function cloturerProduction(lotId) {
 }
 
 // ── Conditionnement ──
-export async function getConditionnements(params = {}) {
-  const { data } = await api.get('/conditionnement/lots', { params })
-  return data
-}
 export async function validerConditionnement(lotId, payload) {
   const { data } = await api.post(`/conditionnement/lots/${lotId}`, payload)
   return data

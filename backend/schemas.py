@@ -128,13 +128,19 @@ class EtapeProductionResponse(EtapeProductionBase):
 class MusserieCreate(ValidatedInput):
     non_negative_fields = {
         "fruits_murs_kg", "dechets_tri_kg", "dechets_lavage_kg", "retour_non_mur_kg",
-        "dechets_production_kg", "reste_kg",
+        "dechets_production_kg", "reste_kg", "retour_mure_kg", "quantite_acceptee_kg",
+        "quantite_transferee_kg", "stock_restant_kg", "stock_lendemain_kg",
     }
     fruits_murs_kg: float = 0.0
     dechets_tri_kg: float = 0.0
     dechets_lavage_kg: float = 0.0
     retour_non_mur_kg: float = 0.0
+    retour_mure_kg: float = 0.0
     dechets_production_kg: float = 0.0
+    quantite_acceptee_kg: float = 0.0
+    quantite_transferee_kg: float = 0.0
+    stock_restant_kg: float = 0.0
+    stock_lendemain_kg: float = 0.0
     operateur: str = ""
     dryer: int = 0
     reste_kg: Optional[float] = None

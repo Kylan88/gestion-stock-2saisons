@@ -29,7 +29,7 @@ def liste_statuts():
         statuses.RECEPTION,
         statuses.EN_MUSSERIE,
         statuses.EN_PRODUCTION,
-        statuses.EN_SECHAGE,
+        statuses.EN_CONDITIONNEMENT,
         statuses.CONDITIONNE,
         statuses.EN_STOCK,
         statuses.EXPEDIE,
