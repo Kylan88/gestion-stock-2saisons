@@ -185,7 +185,7 @@
           </div>
           <span class="tf-summary">
             {{ lot.export_cartons || 0 }} exp · {{ lot.local_cartons || 0 }} loc ·
-            {{ lot['fitini_fê_cartons'] || 0 }} fit · {{ lot.dechets_cartons || 0 }} déc ·
+            {{ lot['fitini_fe_cartons'] || 0 }} fit · {{ lot.dechets_cartons || 0 }} déc ·
             {{ lot.rhum_cartons || 0 }} rhum
           </span>
         </div>
@@ -275,7 +275,7 @@ const transfertError = reactive({})
 const transfertFluxes = [
   { key: 'export', label: 'Export', cartons_field: 'export_cartons' },
   { key: 'local', label: 'Local', cartons_field: 'local_cartons' },
-  { key: 'fitini_fê', label: 'Fitini Fê', cartons_field: 'fitini_fê_cartons' },
+  { key: 'fitini_fe', label: 'Fitini Fê', cartons_field: 'fitini_fe_cartons' },
   { key: 'dechets', label: 'Déchets', cartons_field: 'dechets_cartons' },
   { key: 'rhum', label: 'Rhum', cartons_field: 'rhum_cartons' },
 ]
@@ -293,7 +293,7 @@ async function loadHistorique() {
 const allFluxes = [
   { key: 'export', label: 'Export', color: '#00853E' },
   { key: 'local', label: 'Local', color: '#0B2E20' },
-  { key: 'fitini_fê', label: 'Fitini Fê', color: '#8B5CF6' },
+  { key: 'fitini_fe', label: 'Fitini Fê', color: '#8B5CF6' },
   { key: 'dechets', label: 'Déchets', color: '#EF4444' },
   { key: 'rhum', label: 'Rhum (mangue uniquement)', color: '#D97706' },
 ]
@@ -347,19 +347,19 @@ function recalcDryer(lotId, dryer) {
 
 function hasCumul(lot) {
   return (lot.export_cartons || 0) + (lot.local_cartons || 0) + (lot.dechets_cartons || 0) +
-         (lot.rhum_cartons || 0) + (lot['fitini_fê_cartons'] || 0) > 0
+         (lot.rhum_cartons || 0) + (lot['fitini_fe_cartons'] || 0) > 0
 }
 
 function getCumulCartons(lot, key) {
-  const field = key === 'fitini_fê' ? 'fitini_fê_cartons' : key + '_cartons'
+  const field = key === 'fitini_fe' ? 'fitini_fe_cartons' : key + '_cartons'
   return lot[field] || 0
 }
 function getCumulSachets(lot, key) {
-  const field = key === 'fitini_fê' ? 'fitini_fê_sachets' : key + '_sachets'
+  const field = key === 'fitini_fe' ? 'fitini_fe_sachets' : key + '_sachets'
   return lot[field] || 0
 }
 function getPoidsSachet(lot, key) {
-  const field = key === 'fitini_fê' ? 'fitini_fê_poids_sachet' : key + '_poids_sachet'
+  const field = key === 'fitini_fe' ? 'fitini_fe_poids_sachet' : key + '_poids_sachet'
   return lot[field] || 2.5
 }
 function cumulPoidsFlux(lot, key) {
@@ -427,7 +427,7 @@ async function load() {
             form[lot.id][d] = reactive({
               export_cartons: 0, export_sachets: 0, export_poids_sachet: lot.export_poids_sachet || 2.5,
               local_cartons: 0, local_sachets: 0, local_poids_sachet: lot.local_poids_sachet || 2.5,
-              fitini_fê_cartons: 0, fitini_fê_sachets: 0, fitini_fê_poids_sachet: lot['fitini_fê_poids_sachet'] || 2.5,
+              fitini_fe_cartons: 0, fitini_fe_sachets: 0, fitini_fe_poids_sachet: lot['fitini_fe_poids_sachet'] || 2.5,
               dechets_cartons: 0, dechets_sachets: 0, dechets_poids_sachet: lot.dechets_poids_sachet || 2.5,
               rhum_cartons: 0, rhum_sachets: 0, rhum_poids_sachet: lot.rhum_poids_sachet || 2.5,
               responsable: '', notes: '',

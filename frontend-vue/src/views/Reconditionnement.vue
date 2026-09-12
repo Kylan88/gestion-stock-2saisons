@@ -34,29 +34,29 @@
           </div>
         </div>
 
-        <div v-if="lot.fitini_fê_cartons > 0" class="recond-card">
+        <div v-if="lot.fitini_fe_cartons > 0" class="recond-card">
           <div class="recond-head" style="border-left-color:#8B5CF6">
             <span>Fitini Fê</span>
-            <span class="recond-avail">{{ lot.fitini_fê_cartons }} cartons</span>
+            <span class="recond-avail">{{ lot.fitini_fe_cartons }} cartons</span>
           </div>
           <div class="recond-body">
             <div class="form-group">
               <label>Cartons à transformer</label>
-              <input type="number" v-model.number="form[lot.id].fitini" class="input" min="0" :max="lot.fitini_fê_cartons" @input="calcRecond(lot.id)" />
+              <input type="number" v-model.number="form[lot.id].fitini" class="input" min="0" :max="lot.fitini_fe_cartons" @input="calcRecond(lot.id)" />
             </div>
             <div class="recond-result">
-              <span>Sachets 100g obtenus : <strong>{{ resultRecond(form[lot.id].fitini || 0, lot.fitini_fê_poids_sachet) }}</strong></span>
-              <span>Poids total : <strong>{{ ((resultRecond(form[lot.id].fitini || 0, lot.fitini_fê_poids_sachet) * 0.1)).toFixed(1) }} kg</strong></span>
+              <span>Sachets 100g obtenus : <strong>{{ resultRecond(form[lot.id].fitini || 0, lot.fitini_fe_poids_sachet) }}</strong></span>
+              <span>Poids total : <strong>{{ ((resultRecond(form[lot.id].fitini || 0, lot.fitini_fe_poids_sachet) * 0.1)).toFixed(1) }} kg</strong></span>
             </div>
           </div>
         </div>
 
-        <div v-if="lot.local_cartons === 0 && lot.fitini_fê_cartons === 0" class="no-flux">
+        <div v-if="lot.local_cartons === 0 && lot.fitini_fe_cartons === 0" class="no-flux">
           Aucun carton disponible pour le reconditionnement
         </div>
       </div>
 
-      <div v-if="lot.local_cartons > 0 || lot.fitini_fê_cartons > 0" class="form-row" style="margin-top:14px">
+      <div v-if="lot.local_cartons > 0 || lot.fitini_fe_cartons > 0" class="form-row" style="margin-top:14px">
         <div class="form-group" style="flex:1">
           <label>Responsable</label>
           <input v-model="form[lot.id].responsable" class="input" placeholder="Nom" />
@@ -120,7 +120,7 @@ async function load() {
   loading.value = true
   try {
     const raw = await getLots()
-    lots.value = raw.filter(l => toCanonical(l.statut) === CONDITIONNE && (l.local_cartons > 0 || l.fitini_fê_cartons > 0))
+    lots.value = raw.filter(l => toCanonical(l.statut) === CONDITIONNE && (l.local_cartons > 0 || l.fitini_fe_cartons > 0))
     for (const lot of lots.value) {
       form[lot.id] = reactive({ local: 0, fitini: 0, responsable: '' })
     }
@@ -137,8 +137,8 @@ async function valider(lot) {
       toast.success(`Reconditionnement local créé : ${resultRecond(d.local, lot.local_poids_sachet)} sachets 100g`)
     }
     if (d.fitini > 0) {
-      await creerReconditionnement({ lot_id: lot.id, type_source: 'fitini_fê', nb_cartons_entree: d.fitini, responsable: d.responsable })
-      toast.success(`Reconditionnement fitini fê créé : ${resultRecond(d.fitini, lot.fitini_fê_poids_sachet)} sachets 100g`)
+      await creerReconditionnement({ lot_id: lot.id, type_source: 'fitini_fe', nb_cartons_entree: d.fitini, responsable: d.responsable })
+      toast.success(`Reconditionnement fitini fê créé : ${resultRecond(d.fitini, lot.fitini_fe_poids_sachet)} sachets 100g`)
     }
     await load()
   } finally { saving.value = false }

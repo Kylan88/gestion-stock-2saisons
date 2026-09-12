@@ -538,7 +538,7 @@ def valider_conditionnement(db: Session, lot_id: int,
                             local_cartons: int = 0, local_sachets: int = 0, local_poids_sachet: float = 2.5,
                             dechets_cartons: int = 0, dechets_sachets: int = 0, dechets_poids_sachet: float = 2.5,
                             rhum_cartons: int = 0, rhum_sachets: int = 0, rhum_poids_sachet: float = 2.5,
-                            fitini_fê_cartons: int = 0, fitini_fê_sachets: int = 0, fitini_fê_poids_sachet: float = 2.5,
+                            fitini_fe_cartons: int = 0, fitini_fe_sachets: int = 0, fitini_fe_poids_sachet: float = 2.5,
                             responsable: str = "", notes: str = "") -> dict:
     lot = get_lot(db, lot_id)
     if not lot:
@@ -547,7 +547,7 @@ def valider_conditionnement(db: Session, lot_id: int,
     numeric_values = (
         export_cartons, export_sachets, export_poids_sachet, local_cartons, local_sachets,
         local_poids_sachet, dechets_cartons, dechets_sachets, dechets_poids_sachet, rhum_cartons,
-        rhum_sachets, rhum_poids_sachet, fitini_fê_cartons, fitini_fê_sachets, fitini_fê_poids_sachet,
+        rhum_sachets, rhum_poids_sachet, fitini_fe_cartons, fitini_fe_sachets, fitini_fe_poids_sachet,
     )
     if any(value < 0 for value in numeric_values):
         raise ValueError("Les quantités de conditionnement ne peuvent pas être négatives")
@@ -573,10 +573,10 @@ def valider_conditionnement(db: Session, lot_id: int,
     lot.rhum_sachets = (lot.rhum_sachets or 0) + rhum_sachets
     if rhum_poids_sachet != 2.5:
         lot.rhum_poids_sachet = rhum_poids_sachet
-    lot.fitini_fê_cartons = (lot.fitini_fê_cartons or 0) + fitini_fê_cartons
-    lot.fitini_fê_sachets = (lot.fitini_fê_sachets or 0) + fitini_fê_sachets
-    if fitini_fê_poids_sachet != 2.5:
-        lot.fitini_fê_poids_sachet = fitini_fê_poids_sachet
+    lot.fitini_fe_cartons = (lot.fitini_fe_cartons or 0) + fitini_fe_cartons
+    lot.fitini_fe_sachets = (lot.fitini_fe_sachets or 0) + fitini_fe_sachets
+    if fitini_fe_poids_sachet != 2.5:
+        lot.fitini_fe_poids_sachet = fitini_fe_poids_sachet
 
     if notes:
         lot.notes = (lot.notes + " | " if lot.notes else "") + notes
@@ -625,7 +625,7 @@ def valider_conditionnement(db: Session, lot_id: int,
         "reference": reference,
         "export_cartons": lot.export_cartons, "local_cartons": lot.local_cartons,
         "dechets_cartons": lot.dechets_cartons, "rhum_cartons": lot.rhum_cartons,
-        "fitini_fê_cartons": lot.fitini_fê_cartons,
+        "fitini_fe_cartons": lot.fitini_fe_cartons,
         "statut_lot": lot.statut,
     }
 
@@ -707,7 +707,7 @@ def _calc_total_flux(lot) -> float:
     poids_local = round(((lot.local_cartons or 0) * 6 + (lot.local_sachets or 0)) * (lot.local_poids_sachet or 2.5), 2)
     poids_dechets = round(((lot.dechets_cartons or 0) * 6 + (lot.dechets_sachets or 0)) * (lot.dechets_poids_sachet or 2.5), 2)
     poids_rhum = round(((lot.rhum_cartons or 0) * 6 + (lot.rhum_sachets or 0)) * (lot.rhum_poids_sachet or 2.5), 2)
-    poids_fitini = round(((lot.fitini_fê_cartons or 0) * 6 + (lot.fitini_fê_sachets or 0)) * (lot.fitini_fê_poids_sachet or 2.5), 2)
+    poids_fitini = round(((lot.fitini_fe_cartons or 0) * 6 + (lot.fitini_fe_sachets or 0)) * (lot.fitini_fe_poids_sachet or 2.5), 2)
     return round(poids_export + poids_local + poids_dechets + poids_rhum + poids_fitini, 2)
 
 
@@ -763,7 +763,7 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
     if not entry:
         entry = ConditionnementEntry(lot_id=lot_id, dryer=dryer, date=datetime.now())
         db.add(entry); db.flush()
-    for k in ["export_cartons","export_sachets","export_poids_sachet","local_cartons","local_sachets","local_poids_sachet","dechets_cartons","dechets_sachets","dechets_poids_sachet","rhum_cartons","rhum_sachets","rhum_poids_sachet","fitini_fê_cartons","fitini_fê_sachets","fitini_fê_poids_sachet","responsable","notes"]:
+    for k in ["export_cartons","export_sachets","export_poids_sachet","local_cartons","local_sachets","local_poids_sachet","dechets_cartons","dechets_sachets","dechets_poids_sachet","rhum_cartons","rhum_sachets","rhum_poids_sachet","fitini_fe_cartons","fitini_fe_sachets","fitini_fe_poids_sachet","responsable","notes"]:
         if k in data and data[k] is not None:
             if k.endswith("cartons") or k.endswith("sachets"):
                 setattr(entry, k, (getattr(entry, k) or 0) + int(data[k]))
@@ -773,7 +773,7 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
                 setattr(entry, k, float(data[k]))
     db.commit(); db.refresh(entry)
     # aussi cumul global lot (compat)
-    for k in ["export_cartons","export_sachets","local_cartons","local_sachets","dechets_cartons","dechets_sachets","rhum_cartons","rhum_sachets","fitini_fê_cartons","fitini_fê_sachets"]:
+    for k in ["export_cartons","export_sachets","local_cartons","local_sachets","dechets_cartons","dechets_sachets","rhum_cartons","rhum_sachets","fitini_fe_cartons","fitini_fe_sachets"]:
         if k in data and data[k]:
             setattr(lot, k, (getattr(lot, k) or 0) + int(data[k]))
     db.commit(); db.refresh(lot)
@@ -1065,7 +1065,7 @@ def creer_demande_transfert(db: Session, lot_id: int, lignes: list,
 
     FLUX_CONFIG = {
         "local": {"cartons_field": "local_cartons"},
-        "fitini_fê": {"cartons_field": "fitini_fê_cartons"},
+        "fitini_fe": {"cartons_field": "fitini_fe_cartons"},
         "export": {"cartons_field": "export_cartons"},
         "dechets": {"cartons_field": "dechets_cartons"},
         "rhum": {"cartons_field": "rhum_cartons"},
@@ -1118,7 +1118,7 @@ def valider_demande_transfert(db: Session, demande_id: int) -> "DemandeTransfert
 
     FLUX_CONFIG = {
         "local": {"label": "Local", "poids_field": "local_poids_sachet"},
-        "fitini_fê": {"label": "Fitini Fê", "poids_field": "fitini_fê_poids_sachet"},
+        "fitini_fe": {"label": "Fitini Fê", "poids_field": "fitini_fe_poids_sachet"},
         "export": {"label": "Export", "poids_field": "export_poids_sachet"},
         "dechets": {"label": "Déchets", "poids_field": "dechets_poids_sachet"},
         "rhum": {"label": "Rhum arrangé", "poids_field": "rhum_poids_sachet"},
@@ -1201,9 +1201,9 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
     if type_source == "local":
         disponible = lot.local_cartons
         poids_sachet = lot.local_poids_sachet
-    elif type_source == "fitini_fê":
-        disponible = lot.fitini_fê_cartons
-        poids_sachet = lot.fitini_fê_poids_sachet
+    elif type_source == "fitini_fe":
+        disponible = lot.fitini_fe_cartons
+        poids_sachet = lot.fitini_fe_poids_sachet
     else:
         raise ValueError(f"Type source inconnu : {type_source}")
 
@@ -1235,7 +1235,7 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
     if type_source == "local":
         lot.local_cartons -= nb_cartons_entree
     else:
-        lot.fitini_fê_cartons -= nb_cartons_entree
+        lot.fitini_fe_cartons -= nb_cartons_entree
 
     recond = Reconditionnement(
         lot_id=lot_id, type_source=type_source,
@@ -1295,7 +1295,7 @@ def detecter_anomalies(db: Session) -> list:
 
         if lot.statut_transfert == statuses.EN_ATTENTE:
             has_local = (lot.local_cartons or 0) > 0
-            has_fitini = (getattr(lot, "fitini_fê_cartons", 0) or 0) > 0
+            has_fitini = (getattr(lot, "fitini_fe_cartons", 0) or 0) > 0
             if has_local or has_fitini:
                 anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "pas_de_transfert",
                                   "message": f"{lot.code_lot} a des cartons non transférés en chambre froide",

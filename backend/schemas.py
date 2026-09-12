@@ -57,7 +57,7 @@ class LotBase(ValidatedInput):
         "quantite_initiale", "quantite_restante", "poids_frais", "poids_sec_final", "rendement_global",
         "export_cartons", "export_sachets", "export_poids_sachet", "local_cartons", "local_sachets",
         "local_poids_sachet", "dechets_cartons", "dechets_sachets", "dechets_poids_sachet", "rhum_cartons",
-        "rhum_sachets", "rhum_poids_sachet", "fitini_fê_cartons", "fitini_fê_sachets", "fitini_fê_poids_sachet",
+        "rhum_sachets", "rhum_poids_sachet", "fitini_fe_cartons", "fitini_fe_sachets", "fitini_fe_poids_sachet",
     }
     code_lot: str; type_fruit: str = ""; fournisseur_nom: str = ""
     produit_id: Optional[int] = None; fournisseur_id: Optional[int] = None
@@ -68,7 +68,7 @@ class LotBase(ValidatedInput):
     local_cartons: int = 0; local_sachets: int = 0; local_poids_sachet: float = 2.5
     dechets_cartons: int = 0; dechets_sachets: int = 0; dechets_poids_sachet: float = 2.5
     rhum_cartons: int = 0; rhum_sachets: int = 0; rhum_poids_sachet: float = 2.5
-    fitini_fê_cartons: int = 0; fitini_fê_sachets: int = 0; fitini_fê_poids_sachet: float = 2.5
+    fitini_fe_cartons: int = 0; fitini_fe_sachets: int = 0; fitini_fe_poids_sachet: float = 2.5
     statut_transfert: str = "en_attente"
     ecart_bilan_pourcentage: Optional[float] = None
     date_reception: datetime = Field(default_factory=datetime.now)
@@ -149,7 +149,7 @@ class ConditionnementCreate(ValidatedInput):
     non_negative_fields = {
         "export_cartons", "export_sachets", "export_poids_sachet", "local_cartons", "local_sachets",
         "local_poids_sachet", "dechets_cartons", "dechets_sachets", "dechets_poids_sachet", "rhum_cartons",
-        "rhum_sachets", "rhum_poids_sachet", "fitini_fê_cartons", "fitini_fê_sachets", "fitini_fê_poids_sachet",
+        "rhum_sachets", "rhum_poids_sachet", "fitini_fe_cartons", "fitini_fe_sachets", "fitini_fe_poids_sachet",
     }
     export_cartons: int = 0
     export_sachets: int = 0
@@ -163,9 +163,9 @@ class ConditionnementCreate(ValidatedInput):
     rhum_cartons: int = 0
     rhum_sachets: int = 0
     rhum_poids_sachet: float = 2.5
-    fitini_fê_cartons: int = 0
-    fitini_fê_sachets: int = 0
-    fitini_fê_poids_sachet: float = 2.5
+    fitini_fe_cartons: int = 0
+    fitini_fe_sachets: int = 0
+    fitini_fe_poids_sachet: float = 2.5
     responsable: str = ""
     notes: str = ""
 
@@ -366,7 +366,7 @@ class ConditionnementEntryCreate(ValidatedInput):
     local_cartons: int = 0; local_sachets: int = 0; local_poids_sachet: float = 2.5
     dechets_cartons: int = 0; dechets_sachets: int = 0; dechets_poids_sachet: float = 2.5
     rhum_cartons: int = 0; rhum_sachets: int = 0; rhum_poids_sachet: float = 2.5
-    fitini_fê_cartons: int = 0; fitini_fê_sachets: int = 0; fitini_fê_poids_sachet: float = 2.5
+    fitini_fe_cartons: int = 0; fitini_fe_sachets: int = 0; fitini_fe_poids_sachet: float = 2.5
     responsable: str = ""; notes: str = ""
 
 class ConditionnementEntryResponse(BaseModel):
@@ -375,6 +375,6 @@ class ConditionnementEntryResponse(BaseModel):
     local_cartons: int; local_sachets: int; local_poids_sachet: float
     dechets_cartons: int; dechets_sachets: int; dechets_poids_sachet: float
     rhum_cartons: int; rhum_sachets: int; rhum_poids_sachet: float
-    fitini_fê_cartons: int; fitini_fê_sachets: int; fitini_fê_poids_sachet: float
+    fitini_fe_cartons: int; fitini_fe_sachets: int; fitini_fe_poids_sachet: float
     responsable: str; notes: str; created_at: datetime
     class Config: from_attributes = True

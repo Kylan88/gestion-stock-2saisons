@@ -101,7 +101,7 @@
                   <div v-if="hasCartons(lot)" class="carton-summary">
                     <span v-if="lot.export_cartons > 0"><strong>{{ lot.export_cartons }}</strong> exp</span>
                     <span v-if="lot.local_cartons > 0"><strong>{{ lot.local_cartons }}</strong> loc</span>
-                    <span v-if="lot.fitini_fê_cartons > 0"><strong>{{ lot.fitini_fê_cartons }}</strong> fit</span>
+                    <span v-if="lot.fitini_fe_cartons > 0"><strong>{{ lot.fitini_fe_cartons }}</strong> fit</span>
                     <span v-if="lot.dechets_cartons > 0"><strong>{{ lot.dechets_cartons }}</strong> déc</span>
                     <span v-if="lot.rhum_cartons > 0"><strong>{{ lot.rhum_cartons }}</strong> rhum</span>
                   </div>
@@ -195,7 +195,7 @@ function getTraitePoids(lot) {
 }
 
 function hasCartons(lot) {
-  return (lot.export_cartons || 0) + (lot.local_cartons || 0) + (lot.dechets_cartons || 0) + (lot.rhum_cartons || 0) + (lot['fitini_fê_cartons'] || 0) > 0
+  return (lot.export_cartons || 0) + (lot.local_cartons || 0) + (lot.dechets_cartons || 0) + (lot.rhum_cartons || 0) + (lot['fitini_fe_cartons'] || 0) > 0
 }
 
 let debounceTimer = null

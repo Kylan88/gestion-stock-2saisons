@@ -42,15 +42,15 @@
             </div>
           </div>
 
-          <div v-if="lot.fitini_fê_cartons > 0" class="transfert-flux">
+          <div v-if="lot.fitini_fe_cartons > 0" class="transfert-flux">
             <div class="flux-info">
               <span class="flux-badge" style="background:#8B5CF6">Fitini Fê</span>
-              <span>{{ lot.fitini_fê_cartons }} cartons disponibles</span>
+              <span>{{ lot.fitini_fe_cartons }} cartons disponibles</span>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>Cartons à transférer</label>
-                <input type="number" v-model.number="form[lot.id].fitini_cartons" class="input" min="0" :max="lot.fitini_fê_cartons" />
+                <input type="number" v-model.number="form[lot.id].fitini_cartons" class="input" min="0" :max="lot.fitini_fe_cartons" />
               </div>
               <div class="form-group">
                 <label>Chambre froide</label>
@@ -61,7 +61,7 @@
             </div>
           </div>
 
-          <div v-if="lot.local_cartons === 0 && lot.fitini_fê_cartons === 0" class="no-flux">
+          <div v-if="lot.local_cartons === 0 && lot.fitini_fe_cartons === 0" class="no-flux">
             Aucun carton local ou fitini fê à transférer
           </div>
         </div>
@@ -155,7 +155,7 @@ async function valider(lot) {
     const d = form[lot.id]
     const lignes = []
     if (d.local_cartons > 0) lignes.push({ type_flux: 'local', nb_cartons: d.local_cartons, zone_id: d.local_zone_id })
-    if (d.fitini_cartons > 0) lignes.push({ type_flux: 'fitini_fê', nb_cartons: d.fitini_cartons, zone_id: d.fitini_zone_id })
+    if (d.fitini_cartons > 0) lignes.push({ type_flux: 'fitini_fe', nb_cartons: d.fitini_cartons, zone_id: d.fitini_zone_id })
 
     const demande = await creerDemandeTransfert({
       lot_id: lot.id, responsable: d.responsable, notes: d.notes, lignes,
