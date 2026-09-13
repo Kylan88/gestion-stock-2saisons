@@ -259,7 +259,12 @@ def valider_musserie(db: Session, lot_id: int,
                      dechets_tri_kg: float = 0.0,
                      dechets_lavage_kg: float = 0.0,
                      retour_non_mur_kg: float = 0.0,
+                     retour_mure_kg: float = 0.0,
                      dechets_production_kg: float = 0.0,
+                     quantite_acceptee_kg: float = 0.0,
+                     quantite_transferee_kg: float = 0.0,
+                     stock_restant_kg: float = 0.0,
+                     stock_lendemain_kg: float = 0.0,
                      operateur: str = "",
                      dryer: int = 0,
                      reste_kg: float = None) -> Optional[EtapeProduction]:
@@ -285,7 +290,12 @@ def valider_musserie(db: Session, lot_id: int,
     ep.dechets_tri_kg = (ep.dechets_tri_kg or 0) + dechets_tri_kg
     ep.dechets_lavage_kg = (ep.dechets_lavage_kg or 0) + dechets_lavage_kg
     ep.retour_non_mur_kg = (ep.retour_non_mur_kg or 0) + retour_non_mur_kg
+    ep.retour_mure_kg = (ep.retour_mure_kg or 0) + retour_mure_kg
     ep.dechets_production_kg = (ep.dechets_production_kg or 0) + dechets_production_kg
+    ep.quantite_acceptee_kg = (ep.quantite_acceptee_kg or 0) + quantite_acceptee_kg
+    ep.quantite_transferee_kg = (ep.quantite_transferee_kg or 0) + quantite_transferee_kg
+    ep.stock_restant_kg = quantite_transferee_kg if quantite_transferee_kg else (ep.stock_restant_kg or 0) + stock_restant_kg
+    ep.stock_lendemain_kg = quantite_transferee_kg if quantite_transferee_kg else (ep.stock_lendemain_kg or 0) + stock_lendemain_kg
 
     poids_sortie = max(0, ep.fruits_murs_kg - ep.retour_non_mur_kg - ep.dechets_lavage_kg - ep.dechets_production_kg)
     ep.poids_sortie = round(poids_sortie, 2)
@@ -739,6 +749,8 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
     lot = get_lot(db, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
+    if statuses.normalize(lot.statut) in (statuses.CONDITIONNE, statuses.EN_STOCK, statuses.EXPEDIE, statuses.PERIME):
+        raise ValueError(f"Conditionnement déjà clôturé pour {lot.code_lot} — saisie bloquée")
     today = date_type.today()
     veille = today - timedelta(days=1)
     # vérifie production veille pour ce dryer
@@ -1414,7 +1426,7 @@ def get_company_settings(db: Session) -> dict:
         "dryer_capacity_kg": 1500.0,
         "dryer1_capacity_kg": DRYER_CAPACITY[1],
         "dryer2_capacity_kg": DRYER_CAPACITY[2],
-        "fruit_types": ["mangue", "ananas", "goyave"],
+        "fruit_types": ["mangue kent", "mangue Brooks", "ananas", "banane"],
     }
     for k, v in defaults.items():
         result.setdefault(k, v)

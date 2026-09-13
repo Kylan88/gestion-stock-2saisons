@@ -71,7 +71,8 @@
         <button class="lot-nav-pill ghost" @click="expandedLotId = expandedLotId ? null : lots[0]?.id">{{ expandedLotId ? 'Tout réduire' : 'Tout ouvrir' }}</button>
       </div>
 
- <div v-for="lot in lots" :key="lot.id" class="card lot-card anim-fade" :id="'lot-'+lot.id">
+ <TransitionGroup name="lot-move" tag="div">
+      <div v-for="lot in lots" :key="lot.id" class="card lot-card anim-fade" :id="'lot-'+lot.id">
         <!-- Header lot -->
         <div class="lot-header" @click="expandedLotId = expandedLotId === lot.id ? null : lot.id" style="cursor:pointer">
           <div class="lot-header-left">
@@ -223,6 +224,7 @@
         </div>
         </template>
       </div>
+      </TransitionGroup>
     </div>
   </div>
 </template>
@@ -383,8 +385,18 @@ function recalcAll(lotId) {
 }
 
 function scrollToLot(lotId) {
+  // mettre en première position avec animation fluide
+  const idx = lots.value.findIndex(l => l.id === lotId)
+  if (idx > 0) {
+    const [lot] = lots.value.splice(idx, 1)
+    lots.value.unshift(lot)
+  }
   expandedLotId.value = lotId
-  nextTick(() => document.getElementById('lot-'+lotId)?.scrollIntoView({behavior:'smooth', block:'start'}))
+  nextTick(() => {
+    document.getElementById('lot-'+lotId)?.scrollIntoView({behavior:'smooth', block:'start'})
+    // fallback : scroll top page si lot déjà en haut
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  })
 }
 
 async function load() {
@@ -480,6 +492,10 @@ onMounted(load)
 .lot-nav-pill.active{ background:var(--primary); color:white; border-color:var(--primary)}
 .lot-nav-pill.ghost{ background:transparent; border-style:dashed}
 .expand-icon{ font-size:11px; color:var(--text-muted)}
+.lot-move-move { transition: transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94); }
+.lot-move-enter-active { transition: all 0.3s ease; }
+.lot-move-enter-from { opacity: 0; transform: translateY(-10px); }
+.lot-move-leave-active { position: absolute; }
 .lot-card { margin-bottom: 12px; }
 .lot-header {
   display: flex; justify-content: space-between; align-items: center;

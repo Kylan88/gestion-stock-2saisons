@@ -73,8 +73,6 @@
             <span style="font-size:11px;color:var(--text-muted)">J+1</span>
           </div>
           <div class="lot-header-right">
-            <span class="lot-recap">Réf : <strong>{{ refEntree(lot) }} kg</strong></span>
-            <span class="lot-recap reste">Reste : <strong>{{ resteConditionnement(lot) }} kg</strong></span>
             <span class="expand-icon">{{ expandedLotId === lot.id ? '▲' : '▼' }}</span>
           </div>
         </div>
@@ -115,8 +113,9 @@
           </div>
         </div>
 
-         <!-- Formulaire par dryer J+1 -->
-         <div v-if="!condDryersAvailable[lot.id] || condDryersAvailable[lot.id].length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune production hier — rien à conditionner aujourd'hui (J+1). Dryers disponibles demain selon production d'aujourd'hui.</div>
+         <!-- Formulaire par dryer J+1 — bloqué après clôture -->
+         <div v-if="toCanonical(lot.statut) === CONDITIONNE || toCanonical(lot.statut) === EN_STOCK" class="empty" style="padding:16px;margin-top:12px;background:#f0fdf4;border:1px solid #86efac">Conditionnement clôturé pour {{ lot.code_lot }} — saisie bloquée. Passez au transfert.</div>
+         <div v-else-if="!condDryersAvailable[lot.id] || condDryersAvailable[lot.id].length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune production hier — rien à conditionner aujourd'hui (J+1). Dryers disponibles demain selon production d'aujourd'hui.</div>
          <div v-else class="saisie-section compact">
             <div class="saisie-section-title">Conditionnement du jour — Dryer disponible J+1</div>
             <div class="dryer-tabs" style="display:flex;gap:8px;margin-bottom:12px">
@@ -174,61 +173,12 @@
        </div>
      </div>
 
-    <!-- TRANSFERT CF PANEL -->
-    <div v-if="activeView === 'saisie' && transfertLots.length > 0" class="transfert-panel">
-      <h2 class="transfert-title">Transfert Chambre Froide <span style="font-size:11px;color:var(--text-muted);font-weight:400">— lots conditionnés prêts</span></h2>
-      <div v-for="lot in transfertLots" :key="'tf-'+lot.id" class="card lot-card anim-fade tf-card">
-        <div class="tf-lot-header">
-          <div style="display:flex;align-items:center;gap:10px">
-            <strong class="lot-code">{{ lot.code_lot }}</strong>
-            <StatusBadge :status="lot.statut" />
-          </div>
-          <span class="tf-summary">
-            {{ lot.export_cartons || 0 }} exp · {{ lot.local_cartons || 0 }} loc ·
-            {{ lot['fitini_fe_cartons'] || 0 }} fit · {{ lot.dechets_cartons || 0 }} déc ·
-            {{ lot.rhum_cartons || 0 }} rhum
-          </span>
-        </div>
-
-        <div v-if="zones.length === 0" class="field-error" style="padding:8px 14px;margin:0 14px 10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px">Aucune zone de stockage — créez une zone dans <router-link to="/stock">Stock</router-link> avant transfert.</div>
-        <div class="tf-flux-grid">
-          <template v-for="tf in transfertFluxes" :key="tf.key">
-            <div v-if="lot[tf.cartons_field] > 0" class="tf-flux-row" :class="{'tf-error': (transfertForm[lot.id][tf.key + '_cartons']||0) > lot[tf.cartons_field]}">
-              <div class="tf-flux-head">
-                <span class="tf-flux-label">{{ tf.label }}</span>
-                <span class="tf-flux-dispo" :class="{'text-error': (transfertForm[lot.id][tf.key + '_cartons']||0) > lot[tf.cartons_field]}">{{ lot[tf.cartons_field] }} cartons dispo</span>
-              </div>
-              <div class="tf-flux-inputs">
-                <div style="flex:2">
-                  <input type="number" v-model.number="transfertForm[lot.id][tf.key + '_cartons']" class="input input-sm compact" min="0" :max="lot[tf.cartons_field]" :placeholder="'max '+lot[tf.cartons_field]" />
-                  <div v-if="(transfertForm[lot.id][tf.key + '_cartons']||0) > lot[tf.cartons_field]" class="field-error">Dépasse le stock (max {{ lot[tf.cartons_field] }})</div>
-                </div>
-                <select v-model="transfertForm[lot.id][tf.key + '_zone_id']" class="input input-sm compact" style="flex:1;min-height:32px" :disabled="zones.length===0">
-                  <option disabled value="">Choisir zone</option>
-                  <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.nom }}</option>
-                </select>
-              </div>
-            </div>
-          </template>
-        </div>
-
-        <div class="tf-footer">
-          <div class="form-group" style="flex:1">
-            <label class="input-label">Responsable *</label>
-            <input v-model="transfertForm[lot.id].responsable" class="input input-sm compact" placeholder="Nom du responsable" :class="{'input-error': transfertForm[lot.id].responsable && !transfertForm[lot.id].responsable.trim()}" />
-          </div>
-          <button class="btn btn-primary btn-sm" :disabled="savingTransfert || !canTransfert(lot.id) || hasTransfertError(lot.id)" @click="transférer(lot)">
-            {{ savingTransfert ? 'Transfert...' : 'Transférer en CF' }}
-          </button>
-        </div>
-        <div v-if="transfertError[lot.id]" class="field-error" style="padding:0 14px 10px">{{ transfertError[lot.id] }}</div>
-      </div>
-    </div>
+    <!-- TRANSFERT CF : voir page dédiée /stock/transfert — panel retiré ici -->
 
     <ConfirmDialog
       :show="!!confirmClotureLot"
       :title="'Clôturer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Terminer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryer ' + (activeCondDryer[confirmClotureLot?.id] || '?') + ' (production veille). Le lot passera en chambre froide. Cette action est irréversible.'"
+      :message="'Terminer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot passera en chambre froide. Cette action est irréversible.'"
       confirmText="Clôturer"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
@@ -246,7 +196,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
-import { toCanonical, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE } from '../utils/statuses'
+import { toCanonical, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const lots = ref([])
 const zones = ref([])
@@ -271,7 +221,7 @@ const transfertLots = ref([])
 const transfertForm = reactive({})
 const savingTransfert = ref(false)
 const transfertError = reactive({})
-
+// panel transfert retiré — voir /stock/transfert
 const transfertFluxes = [
   { key: 'export', label: 'Export', cartons_field: 'export_cartons' },
   { key: 'local', label: 'Local', cartons_field: 'local_cartons' },

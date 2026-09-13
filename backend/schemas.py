@@ -304,7 +304,7 @@ class CompanySettingsBase(BaseModel):
     dryer_capacity_kg: float = 1500.0
     dryer1_capacity_kg: float = DRYER_CAPACITY_D1
     dryer2_capacity_kg: float = DRYER_CAPACITY_D2
-    fruit_types: List[str] = ["mangue", "ananas", "goyave"]
+    fruit_types: List[str] = ["mangue kent", "mangue Brooks", "ananas", "banane"]
 
 class CompanySettingsUpdate(BaseModel):
     dryer_capacity_kg: Optional[float] = None

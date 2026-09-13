@@ -205,9 +205,9 @@ watch(showForm, (v) => {
 async function loadConfig() {
   try {
     const cfg = await getProductionConfig()
-    fruitTypes.value = cfg.fruit_types || ['Mangue', 'Ananas', 'Banane', 'Autre']
+    fruitTypes.value = cfg.fruit_types || ['mangue kent', 'mangue Brooks', 'ananas', 'banane']
   } catch (e) {
-    fruitTypes.value = ['Mangue', 'Ananas', 'Banane', 'Autre']
+    fruitTypes.value = ['mangue kent', 'mangue Brooks', 'ananas', 'banane']
   }
 }
 

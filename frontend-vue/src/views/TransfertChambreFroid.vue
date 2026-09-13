@@ -23,46 +23,28 @@
 
       <div v-else class="transfert-form">
         <div class="transfert-fluxes">
-          <div v-if="lot.local_cartons > 0" class="transfert-flux">
+          <div v-for="flux in getFluxesForLot(lot)" :key="flux.key" class="transfert-flux" :class="{'has-error': (form[lot.id][flux.key + '_cartons']||0) > lot[flux.field]}">
             <div class="flux-info">
-              <span class="flux-badge" style="background:#0B2E20">Local</span>
-              <span>{{ lot.local_cartons }} cartons disponibles</span>
+              <span class="flux-badge" :style="{background: flux.color}">{{ flux.label }}</span>
+              <span>{{ lot[flux.field] }} cartons disponibles</span>
+              <span v-if="(form[lot.id][flux.key + '_cartons']||0) > lot[flux.field]" class="field-error" style="margin-left:auto">Dépasse max {{ lot[flux.field] }}</span>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>Cartons à transférer</label>
-                <input type="number" v-model.number="form[lot.id].local_cartons" class="input" min="0" :max="lot.local_cartons" />
+                <input type="number" v-model.number="form[lot.id][flux.key + '_cartons']" class="input" min="0" :max="lot[flux.field]" :placeholder="'max ' + lot[flux.field]" />
               </div>
               <div class="form-group">
                 <label>Chambre froide</label>
-                <select v-model="form[lot.id].local_zone_id" class="input">
+                <select v-model="form[lot.id][flux.key + '_zone_id']" class="input">
+                  <option disabled value="">Choisir chambre</option>
                   <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.nom }}</option>
                 </select>
               </div>
             </div>
           </div>
-
-          <div v-if="lot.fitini_fe_cartons > 0" class="transfert-flux">
-            <div class="flux-info">
-              <span class="flux-badge" style="background:#8B5CF6">Fitini Fê</span>
-              <span>{{ lot.fitini_fe_cartons }} cartons disponibles</span>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Cartons à transférer</label>
-                <input type="number" v-model.number="form[lot.id].fitini_cartons" class="input" min="0" :max="lot.fitini_fe_cartons" />
-              </div>
-              <div class="form-group">
-                <label>Chambre froide</label>
-                <select v-model="form[lot.id].fitini_zone_id" class="input">
-                  <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.nom }}</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="lot.local_cartons === 0 && lot.fitini_fe_cartons === 0" class="no-flux">
-            Aucun carton local ou fitini fê à transférer
+          <div v-if="getFluxesForLot(lot).length === 0" class="no-flux">
+            Aucun carton à transférer pour ce lot
           </div>
         </div>
 
@@ -122,18 +104,30 @@ const saving = ref(false)
 const toast = useToastStore()
 const form = reactive({})
 
+const fluxConfig = [
+  { key: 'export', label: 'Export', field: 'export_cartons', color: '#00853E' },
+  { key: 'local', label: 'Local', field: 'local_cartons', color: '#0B2E20' },
+  { key: 'fitini_fe', label: 'Fitini Fê', field: 'fitini_fe_cartons', color: '#8B5CF6' },
+  { key: 'dechets', label: 'Déchets', field: 'dechets_cartons', color: '#ef4444' },
+  { key: 'rhum', label: 'Rhum', field: 'rhum_cartons', color: '#d97706' },
+]
+function getFluxesForLot(lot) {
+  return fluxConfig.filter(f => (lot[f.field] || 0) > 0)
+}
 function initForm(lotId, lot) {
-  form[lotId] = reactive({
-    local_cartons: 0, local_zone_id: 1,
-    fitini_cartons: 0, fitini_zone_id: 1,
-    responsable: '', notes: '',
-  })
+  const init = { responsable: '', notes: '' }
+  const defaultZone = zones.value[0]?.id || 1
+  for (const f of fluxConfig) {
+    init[f.key + '_cartons'] = lot[f.field] || 0
+    init[f.key + '_zone_id'] = defaultZone
+  }
+  form[lotId] = reactive(init)
 }
 
 function canSubmit(lotId) {
   const d = form[lotId]
-  if (!d) return false
-  return (d.local_cartons > 0 || d.fitini_cartons > 0)
+  if (!d || !d.responsable?.trim()) return false
+  return fluxConfig.some(f => (d[f.key + '_cartons'] || 0) > 0)
 }
 
 async function load() {
@@ -153,16 +147,24 @@ async function valider(lot) {
   saving.value = true
   try {
     const d = form[lot.id]
+    if (!d.responsable?.trim()) { toast.warning('Responsable requis'); return }
     const lignes = []
-    if (d.local_cartons > 0) lignes.push({ type_flux: 'local', nb_cartons: d.local_cartons, zone_id: d.local_zone_id })
-    if (d.fitini_cartons > 0) lignes.push({ type_flux: 'fitini_fe', nb_cartons: d.fitini_cartons, zone_id: d.fitini_zone_id })
-
+    for (const f of fluxConfig) {
+      const nb = d[f.key + '_cartons'] || 0
+      if (nb > 0) {
+        if (nb > (lot[f.field] || 0)) { toast.error(`${f.label}: ${nb} dépasse ${lot[f.field]}`); return }
+        lignes.push({ type_flux: f.key, nb_cartons: nb, zone_id: d[f.key + '_zone_id'] })
+      }
+    }
+    if (!lignes.length) { toast.warning('Saisir au moins un flux'); return }
     const demande = await creerDemandeTransfert({
-      lot_id: lot.id, responsable: d.responsable, notes: d.notes, lignes,
+      lot_id: lot.id, responsable: d.responsable.trim(), notes: d.notes, lignes,
     })
     await validerDemandeTransfert(demande.id)
     toast.success(`Transfert confirmé pour ${lot.code_lot}`)
     await load()
+  } catch(e) {
+    toast.error(e.response?.data?.detail || e.message)
   } finally { saving.value = false }
 }
 
