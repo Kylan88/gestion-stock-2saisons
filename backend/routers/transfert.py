@@ -49,7 +49,7 @@ def annuler_demande(demande_id: int, db: Session = Depends(get_db)):
 def creer_reconditionnement(data: schemas.ReconditionnementCreate, db: Session = Depends(get_db)):
     try:
         return crud.creer_reconditionnement(db, data.lot_id, data.type_source,
-                                            data.nb_cartons_entree, data.responsable, data.notes)
+                                            data.nb_cartons_entree, data.dechet_kg, data.nb_sachets_sortis, data.responsable, data.notes)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

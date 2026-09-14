@@ -1201,7 +1201,8 @@ def get_demande_transfert(db: Session, demande_id: int):
 # ── RECONDITIONNEMENT (sachets 100g) ──
 
 def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
-                            nb_cartons_entree: int, responsable: str = "",
+                            nb_cartons_entree: int, dechet_kg: float = 0.0,
+                            nb_sachets_sortis: int = 0, responsable: str = "",
                             notes: str = "") -> dict:
     from models import Reconditionnement, StockZone, Produit
     lot = get_lot(db, lot_id)
@@ -1226,23 +1227,37 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
 
     produit = db.query(Produit).filter(Produit.nom == f"Sachet 100g {type_source}").first()
     if not produit:
-        produit = Produit(nom=f"Sachet 100g {type_source}", unite_mesure="unité",
+        produit = Produit(nom=f"Sachet 100g {type_source}", unite_mesure="sachet 100g",
                           stock_actuel=0, categorie_id=None)
         db.add(produit); db.flush()
 
+    # stock initial (sachets)
     stock_exist = db.query(StockZone).filter(
         StockZone.lot_id == lot_id, StockZone.produit_id == produit.id,
         StockZone.date_sortie.is_(None)
     ).first()
+    stock_initial = stock_exist.sachets if stock_exist else 0
+    dechet_sachets = int(round(dechet_kg / 0.1)) if dechet_kg else 0
+    total_sachets = stock_initial + nb_sachets_100g - nb_sachets_sortis - dechet_sachets
+    total_kg = round(total_sachets * 0.1, 2)
+
     if stock_exist:
-        stock_exist.quantite += nb_sachets_100g * 0.1
-        stock_exist.sachets = (stock_exist.sachets or 0) + nb_sachets_100g
+        stock_exist.quantite = total_kg
+        stock_exist.sachets = total_sachets
     else:
         stock_new = StockZone(
             zone_id=1, lot_id=lot_id, produit_id=produit.id,
-            quantite=round(nb_sachets_100g * 0.1, 2), sachets=nb_sachets_100g,
+            quantite=total_kg, sachets=total_sachets,
         )
         db.add(stock_new)
+    # maj stock produit global (sachets)
+    produit.stock_actuel = (produit.stock_actuel or 0) + nb_sachets_100g - dechet_sachets - nb_sachets_sortis
+    # si sortis déjà comptés comme sortie stock, on ne double pas : on a déjà mis total_sachets, donc produit = sum StockZone
+    # recalc exact depuis StockZone pour ce produit
+    total_stock_produit = db.query(func.coalesce(func.sum(StockZone.sachets), 0)).filter(
+        StockZone.produit_id == produit.id, StockZone.date_sortie.is_(None)
+    ).scalar() or 0
+    produit.stock_actuel = float(total_stock_produit)
 
     if type_source == "local":
         lot.local_cartons -= nb_cartons_entree
@@ -1253,6 +1268,8 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
         lot_id=lot_id, type_source=type_source,
         nb_cartons_entree=nb_cartons_entree,
         nb_sachets_100g_sortie=nb_sachets_100g,
+        dechet_kg=dechet_kg or 0.0,
+        nb_sachets_sortis=nb_sachets_sortis or 0,
         responsable=responsable, notes=notes,
     )
     db.add(recond)
@@ -1262,7 +1279,11 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
         "id": recond.id, "lot_id": lot_id, "type_source": type_source,
         "nb_cartons_entree": nb_cartons_entree,
         "nb_sachets_100g_sortie": nb_sachets_100g,
-        "poids_total_kg": round(nb_sachets_100g * 0.1, 2),
+        "dechet_kg": dechet_kg,
+        "nb_sachets_sortis": nb_sachets_sortis,
+        "stock_initial_sachets": stock_initial,
+        "stock_final_sachets": total_sachets,
+        "poids_total_kg": total_kg,
     }
 
 

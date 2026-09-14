@@ -285,12 +285,15 @@ class ReconditionnementCreate(ValidatedInput):
     lot_id: int
     type_source: str
     nb_cartons_entree: int
+    dechet_kg: float = 0.0
+    nb_sachets_sortis: int = 0
     responsable: str = ""
     notes: str = ""
 
 class ReconditionnementResponse(BaseModel):
     id: int; lot_id: int; date_reconditionnement: datetime
     type_source: str; nb_cartons_entree: int; nb_sachets_100g_sortie: int
+    dechet_kg: float; nb_sachets_sortis: int
     responsable: str; notes: str; statut: str
     class Config: from_attributes = True
 

@@ -20,16 +20,26 @@
         <div v-if="lot.local_cartons > 0" class="recond-card">
           <div class="recond-head" style="border-left-color:#0F766E">
             <span>Local</span>
-            <span class="recond-avail">{{ lot.local_cartons }} cartons</span>
+            <span class="recond-avail">{{ lot.local_cartons }} cartons · Stock {{ stockInitial(lot.id,'local') }} sachets</span>
           </div>
           <div class="recond-body">
-            <div class="form-group">
-              <label>Cartons à transformer</label>
-              <input type="number" v-model.number="form[lot.id].local" class="input" min="0" :max="lot.local_cartons" @input="calcRecond(lot.id)" />
+            <div class="form-row">
+              <div class="form-group" style="flex:1">
+                <label>Cartons à transformer</label>
+                <input type="number" v-model.number="form[lot.id].local" class="input" min="0" :max="lot.local_cartons" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Déchet (kg)</label>
+                <input type="number" v-model.number="form[lot.id].local_dechet" class="input" step="0.1" min="0" placeholder="0" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Sortis (sachets)</label>
+                <input type="number" v-model.number="form[lot.id].local_sortis" class="input" min="0" placeholder="0" />
+              </div>
             </div>
             <div class="recond-result">
-              <span>Sachets 100g obtenus : <strong>{{ resultRecond(form[lot.id].local || 0, lot.local_poids_sachet) }}</strong></span>
-              <span>Poids total : <strong>{{ ((resultRecond(form[lot.id].local || 0, lot.local_poids_sachet) * 0.1)).toFixed(1) }} kg</strong></span>
+              <span>Obtenus : <strong>{{ resultRecond(form[lot.id].local || 0, lot.local_poids_sachet) }}</strong> sachets</span>
+              <span>En stock : <strong>{{ stockFinal(lot.id,'local', lot.local_poids_sachet) }}</strong> sachets</span>
             </div>
           </div>
         </div>
@@ -37,16 +47,26 @@
         <div v-if="lot.fitini_fe_cartons > 0" class="recond-card">
           <div class="recond-head" style="border-left-color:#8B5CF6">
             <span>Fitini Fê</span>
-            <span class="recond-avail">{{ lot.fitini_fe_cartons }} cartons</span>
+            <span class="recond-avail">{{ lot.fitini_fe_cartons }} cartons · Stock {{ stockInitial(lot.id,'fitini_fe') }} sachets</span>
           </div>
           <div class="recond-body">
-            <div class="form-group">
-              <label>Cartons à transformer</label>
-              <input type="number" v-model.number="form[lot.id].fitini" class="input" min="0" :max="lot.fitini_fe_cartons" @input="calcRecond(lot.id)" />
+            <div class="form-row">
+              <div class="form-group" style="flex:1">
+                <label>Cartons à transformer</label>
+                <input type="number" v-model.number="form[lot.id].fitini" class="input" min="0" :max="lot.fitini_fe_cartons" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Déchet (kg)</label>
+                <input type="number" v-model.number="form[lot.id].fitini_dechet" class="input" step="0.1" min="0" placeholder="0" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Sortis (sachets)</label>
+                <input type="number" v-model.number="form[lot.id].fitini_sortis" class="input" min="0" placeholder="0" />
+              </div>
             </div>
             <div class="recond-result">
-              <span>Sachets 100g obtenus : <strong>{{ resultRecond(form[lot.id].fitini || 0, lot.fitini_fe_poids_sachet) }}</strong></span>
-              <span>Poids total : <strong>{{ ((resultRecond(form[lot.id].fitini || 0, lot.fitini_fe_poids_sachet) * 0.1)).toFixed(1) }} kg</strong></span>
+              <span>Obtenus : <strong>{{ resultRecond(form[lot.id].fitini || 0, lot.fitini_fe_poids_sachet) }}</strong> sachets</span>
+              <span>En stock : <strong>{{ stockFinal(lot.id,'fitini_fe', lot.fitini_fe_poids_sachet) }}</strong> sachets</span>
             </div>
           </div>
         </div>
@@ -64,7 +84,7 @@
         <div class="form-group" style="flex:0">
           <label>&nbsp;</label>
           <button class="btn btn-primary" :disabled="!canSubmit(lot.id) || saving" @click="valider(lot)">
-            {{ saving ? 'Création...' : 'Créer le reconditionnement' }}
+            {{ saving ? 'Reconditionnement...' : 'Reconditionner' }}
           </button>
         </div>
       </div>
@@ -72,19 +92,23 @@
 
     <div v-if="historique.length > 0" style="margin-top:24px">
       <h2 style="font-size:16px;font-weight:600;margin-bottom:12px">Historique</h2>
-      <table class="table">
-        <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets 100g</th><th>Poids</th></tr></thead>
-        <tbody>
-          <tr v-for="r in historique" :key="r.id">
-            <td>{{ new Date(r.date_reconditionnement).toLocaleDateString() }}</td>
-            <td>{{ r.lot_id }}</td>
-            <td>{{ r.type_source }}</td>
-            <td>{{ r.nb_cartons_entree }}</td>
-            <td>{{ r.nb_sachets_100g_sortie }}</td>
-            <td>{{ (r.nb_sachets_100g_sortie * 0.1).toFixed(1) }} kg</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets</th><th>Déchet kg</th><th>Sortis</th><th>En stock</th></tr></thead>
+          <tbody>
+            <tr v-for="r in historique" :key="r.id">
+              <td>{{ new Date(r.date_reconditionnement).toLocaleDateString() }}</td>
+              <td>{{ r.lot_id }}</td>
+              <td>{{ r.type_source }}</td>
+              <td>{{ r.nb_cartons_entree }}</td>
+              <td>{{ r.nb_sachets_100g_sortie }}</td>
+              <td>{{ r.dechet_kg ?? 0 }}</td>
+              <td>{{ r.nb_sachets_sortis ?? 0 }}</td>
+              <td>{{ Math.max(0, (r.nb_sachets_100g_sortie || 0) - (r.nb_sachets_sortis || 0) - Math.round((r.dechet_kg||0)/0.1)) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -95,7 +119,7 @@ import { getLots, creerReconditionnement, getReconditionnements } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import PageHeader from '../components/PageHeader.vue'
-import { toCanonical, CONDITIONNE } from '../utils/statuses'
+import { toCanonical, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const lots = ref([])
 const historique = ref([])
@@ -103,11 +127,25 @@ const loading = ref(true)
 const saving = ref(false)
 const toast = useToastStore()
 const form = reactive({})
+const stocks = ref({})
 
 function resultRecond(cartons, poidsSachet) {
   return cartons * 6 * Math.round(poidsSachet / 0.1)
 }
-
+function stockInitial(lotId, type) {
+  const key = lotId + '_' + type
+  return stocks.value[key] ?? 0
+}
+function stockFinal(lotId, type, poidsSachet) {
+  const d = form[lotId]
+  if (!d) return stockInitial(lotId, type)
+  const cartons = type === 'local' ? (d.local || 0) : (d.fitini || 0)
+  const dechet = type === 'local' ? (d.local_dechet || 0) : (d.fitini_dechet || 0)
+  const sortis = type === 'local' ? (d.local_sortis || 0) : (d.fitini_sortis || 0)
+  const obtenus = resultRecond(cartons, poidsSachet)
+  const dechetSachets = Math.round(dechet / 0.1)
+  return Math.max(0, stockInitial(lotId, type) + obtenus - sortis - dechetSachets)
+}
 function calcRecond(lotId) {}
 
 function canSubmit(lotId) {
@@ -120,9 +158,16 @@ async function load() {
   loading.value = true
   try {
     const raw = await getLots()
-    lots.value = raw.filter(l => toCanonical(l.statut) === CONDITIONNE && (l.local_cartons > 0 || l.fitini_fe_cartons > 0))
+    lots.value = raw.filter(l => [CONDITIONNE, EN_STOCK].includes(toCanonical(l.statut)) && (l.local_cartons > 0 || l.fitini_fe_cartons > 0))
     for (const lot of lots.value) {
-      form[lot.id] = reactive({ local: 0, fitini: 0, responsable: '' })
+      form[lot.id] = reactive({ local: 0, local_dechet: 0, local_sortis: 0, fitini: 0, fitini_dechet: 0, fitini_sortis: 0, responsable: '' })
+      // stock initial
+      try {
+        const all = await getReconditionnements({ lot_id: lot.id })
+        // stock initial = dernier stock final si existant, sinon 0 (simplifié)
+        stocks.value[lot.id + '_local'] = 0
+        stocks.value[lot.id + '_fitini_fe'] = 0
+      } catch {}
     }
     historique.value = await getReconditionnements()
   } finally { loading.value = false }
@@ -133,12 +178,12 @@ async function valider(lot) {
   try {
     const d = form[lot.id]
     if (d.local > 0) {
-      await creerReconditionnement({ lot_id: lot.id, type_source: 'local', nb_cartons_entree: d.local, responsable: d.responsable })
-      toast.success(`Reconditionnement local créé : ${resultRecond(d.local, lot.local_poids_sachet)} sachets 100g`)
+      await creerReconditionnement({ lot_id: lot.id, type_source: 'local', nb_cartons_entree: d.local, dechet_kg: d.local_dechet || 0, nb_sachets_sortis: d.local_sortis || 0, responsable: d.responsable })
+      toast.success(`Reconditionnement local créé : ${resultRecond(d.local, lot.local_poids_sachet)} sachets`)
     }
     if (d.fitini > 0) {
-      await creerReconditionnement({ lot_id: lot.id, type_source: 'fitini_fe', nb_cartons_entree: d.fitini, responsable: d.responsable })
-      toast.success(`Reconditionnement fitini fê créé : ${resultRecond(d.fitini, lot.fitini_fe_poids_sachet)} sachets 100g`)
+      await creerReconditionnement({ lot_id: lot.id, type_source: 'fitini_fe', nb_cartons_entree: d.fitini, dechet_kg: d.fitini_dechet || 0, nb_sachets_sortis: d.fitini_sortis || 0, responsable: d.responsable })
+      toast.success(`Reconditionnement fitini fê créé : ${resultRecond(d.fitini, lot.fitini_fe_poids_sachet)} sachets`)
     }
     await load()
   } finally { saving.value = false }

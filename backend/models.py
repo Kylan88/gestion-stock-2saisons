@@ -247,6 +247,8 @@ class Reconditionnement(Base):
     type_source = Column(String(50), nullable=False)
     nb_cartons_entree = Column(Integer, nullable=False)
     nb_sachets_100g_sortie = Column(Integer, default=0)
+    dechet_kg = Column(Float, default=0.0)
+    nb_sachets_sortis = Column(Integer, default=0)
     responsable = Column(String(100), default="")
     notes = Column(Text, default="")
     statut = Column(String(20), default=statuses.TERMINE)
