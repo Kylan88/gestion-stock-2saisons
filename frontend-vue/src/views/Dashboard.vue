@@ -3,13 +3,13 @@
     <section class="dashboard-hero">
       <div>
         <span class="dashboard-eyebrow">VUE D'ENSEMBLE</span>
-        <h1 class="dashboard-title">Atelier de production</h1>
+        <h1 class="dashboard-title">Zone de production</h1>
         <p class="dashboard-subtitle">{{ todayDate }}</p>
       </div>
       <div class="dashboard-snapshot">
         <span class="snapshot-label">Stock chambre froide</span>
         <strong>{{ formatKg(stats.stock_froid_kg || 0) }} <small>kg</small></strong>
-        <span class="snapshot-meta"><i></i>{{ stats.lots_en_stock || 0 }} lots prêts</span>
+        <span class="snapshot-meta"><i></i>{{ stats.lots_en_stock || 0 }} lots ayant du stock</span>
       </div>
       <div class="dashboard-actions">
         <button class="btn btn-outline btn-sm" @click="load">↻ Actualiser</button>
@@ -81,11 +81,11 @@
         </div>
       </div>
 
-      <!-- KPIs — identique 2saisons-app StatCard -->
+      <!-- KPIs  -->
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;margin-bottom:32px">
         <StatCard title="Produits" :value="stats.total_produits" status="neutral" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>' />
         <StatCard title="Lots Actifs" :value="stats.total_lots_actifs" status="info" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' />
-        <StatCard title="Valeur Stock" :value="formatNum(stats.valeur_stock) + ' F'" status="warning" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>' />
+        <StatCard title="Valeur 100g" :value="formatNum(stats.valeur_stock) + ' F'" status="warning" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>' />
         <StatCard title="Rendement Moyen" :value="formatNum(stats.rendement_moyen || 0) + '%'" status="success" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' />
       </div>
 

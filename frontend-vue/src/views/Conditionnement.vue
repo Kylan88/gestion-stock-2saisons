@@ -107,7 +107,8 @@
             <span v-if="ecartCumul(lot) != null">Écart : <strong>{{ ecartCumul(lot) }}%</strong></span>
           </div>
           <div class="cloture-row">
-            <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
+            <span v-if="toCanonical(lot.statut) === CONDITIONNE" class="badge badge-success">Clôturé ✓ — voir transfert</span>
+            <button v-else class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
               {{ cloturing ? 'Clôture...' : 'Clôturer le conditionnement' }}
             </button>
           </div>
@@ -196,7 +197,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
-import { toCanonical, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
+import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const lots = ref([])
 const zones = ref([])
@@ -360,7 +361,7 @@ async function load() {
     zones.value = z.filter(zz => zz.actif)
 
     const result = []
-    const filtered = raw.filter(l => [EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
+    const filtered = raw.filter(l => [EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
     for (const lot of filtered) {
       etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
       const prodEtapes = etapesData.value[lot.id].filter(e => e.etape === 'production')

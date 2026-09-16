@@ -3,6 +3,13 @@
     <PageHeader title="Transfert Chambre Froide" subtitle="Envoyer les cartons conditionnés vers la chambre froide" />
 
     <LoadingSpinner v-if="loading" />
+    <div v-else-if="zones.length === 0" class="card anim-fade" style="padding:24px;text-align:center">
+      <div class="empty-text">Aucune chambre froide configurée</div>
+      <div style="font-size:12px;color:var(--text-muted);margin:6px 0 12px">Créez les 2 chambres froides pour activer le transfert</div>
+      <button class="btn btn-primary" :disabled="creatingZones" @click="seedZones">
+        {{ creatingZones ? 'Création...' : 'Créer Chambre Froide 1 + 2' }}
+      </button>
+    </div>
     <div v-else-if="lots.length === 0" class="empty anim-fade">
       <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
       <div class="empty-text">Aucun lot terminé en attente de transfert</div>
@@ -89,7 +96,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getLots, getZonesStock, creerDemandeTransfert, validerDemandeTransfert, getDemandesTransfert } from '../api'
+import { getLots, getZonesStock, createZoneStock, creerDemandeTransfert, validerDemandeTransfert, getDemandesTransfert } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -114,9 +121,21 @@ const fluxConfig = [
 function getFluxesForLot(lot) {
   return fluxConfig.filter(f => (lot[f.field] || 0) > 0)
 }
+const creatingZones = ref(false)
+async function seedZones() {
+  creatingZones.value = true
+  try {
+    await createZoneStock({ nom: 'Chambre Froide 1', type_zone: 'froid', capacite_kg: 0, actif: true })
+    await createZoneStock({ nom: 'Chambre Froide 2', type_zone: 'froid', capacite_kg: 0, actif: true })
+    toast.success('Chambres froides créées')
+    await load()
+  } catch(e) {
+    toast.error(e.response?.data?.detail || e.message)
+  } finally { creatingZones.value = false }
+}
 function initForm(lotId, lot) {
   const init = { responsable: '', notes: '' }
-  const defaultZone = zones.value[0]?.id || 1
+  const defaultZone = zones.value[0]?.id ?? ''
   for (const f of fluxConfig) {
     init[f.key + '_cartons'] = lot[f.field] || 0
     init[f.key + '_zone_id'] = defaultZone
@@ -127,7 +146,8 @@ function initForm(lotId, lot) {
 function canSubmit(lotId) {
   const d = form[lotId]
   if (!d || !d.responsable?.trim()) return false
-  return fluxConfig.some(f => (d[f.key + '_cartons'] || 0) > 0)
+  if (zones.value.length === 0) return false
+  return fluxConfig.some(f => (d[f.key + '_cartons'] || 0) > 0 && d[f.key + '_zone_id'])
 }
 
 async function load() {

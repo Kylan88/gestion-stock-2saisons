@@ -143,6 +143,10 @@ export async function getZonesStock(params = {}) {
   const { data } = await api.get('/stock/zones', { params })
   return data
 }
+export async function createZoneStock(payload) {
+  const { data } = await api.post('/stock/zones', payload)
+  return data
+}
 export async function getStock(params = {}) {
   const { data } = await api.get('/stock/stock', { params })
   return data

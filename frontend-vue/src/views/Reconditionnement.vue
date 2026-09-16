@@ -33,12 +33,12 @@
                 <input type="number" v-model.number="form[lot.id].local_dechet" class="input" step="0.1" min="0" placeholder="0" />
               </div>
               <div class="form-group" style="flex:1">
-                <label>Sortis (sachets)</label>
-                <input type="number" v-model.number="form[lot.id].local_sortis" class="input" min="0" placeholder="0" />
+                <label>Sortis — réellement obtenus</label>
+                <input type="number" v-model.number="form[lot.id].local_sortis" class="input" min="0" placeholder="Ex : 142 (1 carton ≠ toujours 150)" />
               </div>
             </div>
             <div class="recond-result">
-              <span>Obtenus : <strong>{{ resultRecond(form[lot.id].local || 0, lot.local_poids_sachet) }}</strong> sachets</span>
+              <span>Estimation : <strong>{{ resultRecond(form[lot.id].local || 0, lot.local_poids_sachet) }}</strong> sachets</span>
               <span>En stock : <strong>{{ stockFinal(lot.id,'local', lot.local_poids_sachet) }}</strong> sachets</span>
             </div>
           </div>
@@ -60,12 +60,12 @@
                 <input type="number" v-model.number="form[lot.id].fitini_dechet" class="input" step="0.1" min="0" placeholder="0" />
               </div>
               <div class="form-group" style="flex:1">
-                <label>Sortis (sachets)</label>
-                <input type="number" v-model.number="form[lot.id].fitini_sortis" class="input" min="0" placeholder="0" />
+                <label>Sortis — réellement obtenus</label>
+                <input type="number" v-model.number="form[lot.id].fitini_sortis" class="input" min="0" placeholder="Ex : 142 (1 carton ≠ toujours 150)" />
               </div>
             </div>
             <div class="recond-result">
-              <span>Obtenus : <strong>{{ resultRecond(form[lot.id].fitini || 0, lot.fitini_fe_poids_sachet) }}</strong> sachets</span>
+              <span>Estimation : <strong>{{ resultRecond(form[lot.id].fitini || 0, lot.fitini_fe_poids_sachet) }}</strong> sachets</span>
               <span>En stock : <strong>{{ stockFinal(lot.id,'fitini_fe', lot.fitini_fe_poids_sachet) }}</strong> sachets</span>
             </div>
           </div>
@@ -90,21 +90,23 @@
       </div>
     </div>
 
-    <div v-if="historique.length > 0" style="margin-top:24px">
+    <div style="margin-top:24px">
       <h2 style="font-size:16px;font-weight:600;margin-bottom:12px">Historique</h2>
-      <div class="table-wrap">
+      <div v-if="historique.length === 0" class="empty">
+        <div class="empty-text">Aucun reconditionnement enregistré</div>
+      </div>
+      <div v-else class="table-wrap">
         <table class="table">
-          <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets</th><th>Déchet kg</th><th>Sortis</th><th>En stock</th></tr></thead>
+          <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets</th><th>Déchet kg</th><th>Sortis</th></tr></thead>
           <tbody>
             <tr v-for="r in historique" :key="r.id">
-              <td>{{ new Date(r.date_reconditionnement).toLocaleDateString() }}</td>
-              <td>{{ r.lot_id }}</td>
+              <td>{{ formatDateHist(r.date_reconditionnement) }}</td>
+              <td><strong>{{ lotCode(r.lot_id) }}</strong></td>
               <td>{{ r.type_source }}</td>
               <td>{{ r.nb_cartons_entree }}</td>
               <td>{{ r.nb_sachets_100g_sortie }}</td>
               <td>{{ r.dechet_kg ?? 0 }}</td>
               <td>{{ r.nb_sachets_sortis ?? 0 }}</td>
-              <td>{{ Math.max(0, (r.nb_sachets_100g_sortie || 0) - (r.nb_sachets_sortis || 0) - Math.round((r.dechet_kg||0)/0.1)) }}</td>
             </tr>
           </tbody>
         </table>
@@ -132,6 +134,13 @@ const stocks = ref({})
 function resultRecond(cartons, poidsSachet) {
   return cartons * 6 * Math.round(poidsSachet / 0.1)
 }
+function formatDateHist(d) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+function lotCode(lotId) {
+  return lots.value.find(l => Number(l.id) === Number(lotId))?.code_lot || ('Lot #' + lotId)
+}
 function stockInitial(lotId, type) {
   const key = lotId + '_' + type
   return stocks.value[key] ?? 0
@@ -139,12 +148,10 @@ function stockInitial(lotId, type) {
 function stockFinal(lotId, type, poidsSachet) {
   const d = form[lotId]
   if (!d) return stockInitial(lotId, type)
-  const cartons = type === 'local' ? (d.local || 0) : (d.fitini || 0)
   const dechet = type === 'local' ? (d.local_dechet || 0) : (d.fitini_dechet || 0)
   const sortis = type === 'local' ? (d.local_sortis || 0) : (d.fitini_sortis || 0)
-  const obtenus = resultRecond(cartons, poidsSachet)
   const dechetSachets = Math.round(dechet / 0.1)
-  return Math.max(0, stockInitial(lotId, type) + obtenus - sortis - dechetSachets)
+  return Math.max(0, stockInitial(lotId, type) + sortis - dechetSachets)
 }
 function calcRecond(lotId) {}
 

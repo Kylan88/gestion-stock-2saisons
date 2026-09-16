@@ -35,16 +35,12 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Stock min</label>
-              <input type="number" v-model.number="form.stock_min" class="input" step="0.1" min="0" />
+              <label>Cartons</label>
+              <input type="number" v-model.number="form.stock_min" class="input" step="1" min="0" placeholder="Nombre de cartons" />
             </div>
             <div class="form-group">
               <label>Stock actuel</label>
               <input type="number" v-model.number="form.stock_actuel" class="input" step="0.1" min="0" />
-            </div>
-            <div class="form-group">
-              <label>Prix unitaire (FCFA)</label>
-              <input type="number" v-model.number="form.prix_unitaire" class="input" min="0" />
             </div>
           </div>
           <div style="display:flex;gap:10px">
@@ -62,15 +58,14 @@
         </div>
         <div class="table-wrap anim-fade">
           <table>
-            <thead><tr><th>Nom</th><th>Catégorie</th><th>Stock</th><th>Min</th><th>Prix</th><th>Statut</th><th></th></tr></thead>
+            <thead><tr><th>Nom</th><th>Catégorie</th><th>Stock</th><th>Cartons</th><th>Statut</th><th></th></tr></thead>
             <tbody>
               <tr v-for="p in paginatedProduits" :key="p.id">
                 <td><strong>{{ p.nom }}</strong></td>
                 <td>{{ p.categorie?.nom || '—' }}</td>
                 <td>{{ p.stock_actuel }} {{ p.unite_mesure }}</td>
                 <td>{{ p.stock_min }}</td>
-                <td>{{ Number(p.prix_unitaire).toLocaleString() }} F</td>
-                <td><StatusBadge :status="p.stock_actuel <= 0 ? 'rupture' : p.stock_actuel <= p.stock_min ? 'stock bas' : 'disponible'" /></td>
+                <td><StatusBadge :status="p.stock_actuel > 0 ? 'disponible' : 'rupture'" /></td>
                 <td>
                   <button class="btn btn-ghost btn-sm" @click="openEdit(p)" aria-label="Modifier le produit">✎</button>
                 </td>
@@ -115,10 +110,10 @@ const showConfirm = ref(false)
 const firstInput = ref(null)
 const errors = reactive({ nom: '' })
 
-const form = reactive({ nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0, prix_unitaire: 0 })
+const form = reactive({ nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0 })
 
 function resetForm() {
-  Object.assign(form, { nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0, prix_unitaire: 0 })
+  Object.assign(form, { nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0 })
   editingId.value = null
   errors.nom = ''
 }
@@ -131,7 +126,7 @@ function openCreate() {
 
 function openEdit(p) {
   editingId.value = p.id
-  Object.assign(form, { nom: p.nom, categorie_id: p.categorie?.id || '', unite_mesure: p.unite_mesure || 'kg', stock_min: p.stock_min, stock_actuel: p.stock_actuel, prix_unitaire: p.prix_unitaire })
+  Object.assign(form, { nom: p.nom, categorie_id: p.categorie?.id || '', unite_mesure: p.unite_mesure || 'kg', stock_min: p.stock_min, stock_actuel: p.stock_actuel })
   showForm.value = true
   nextTick(() => firstInput.value?.focus())
 }
@@ -176,8 +171,8 @@ async function save() {
 function confirmDelete() { showConfirm.value = false }
 
 function doExport() {
-  const headers = ['Nom', 'Catégorie', 'Prix Unitaire', 'Stock Actuel', 'Stock Min', 'Unité']
-  const rows = filteredProduits.value.map(p => [p.nom, p.categorie?.nom || '', p.prix_unitaire, p.stock_actuel, p.stock_min, p.unite_mesure])
+  const headers = ['Nom', 'Catégorie', 'Stock Actuel', 'Cartons', 'Unité']
+  const rows = filteredProduits.value.map(p => [p.nom, p.categorie?.nom || '', p.stock_actuel, p.stock_min, p.unite_mesure])
   exportCsv(headers, rows, 'produits.csv')
 }
 

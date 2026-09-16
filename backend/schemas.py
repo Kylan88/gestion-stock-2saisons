@@ -204,7 +204,7 @@ class StockZoneResponse(StockZoneBase):
 class LigneCommandeBase(ValidatedInput):
     positive_fields = {"quantite"}
     non_negative_fields = {"prix_unitaire"}
-    produit_id: int; lot_id: Optional[int] = None; quantite: float; prix_unitaire: float = 0.0
+    produit_id: int; lot_id: Optional[int] = None; quantite: float; unite: str = "carton"; prix_unitaire: float = 0.0
 class CommandeBase(BaseModel):
     client_nom: str; client_contact: str = ""; date_livraison_prevue: Optional[datetime] = None
     notes: str = ""; statut: str = "en_attente"

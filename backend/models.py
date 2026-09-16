@@ -205,6 +205,7 @@ class LigneCommande(Base):
     produit_id = Column(Integer, ForeignKey("produits.id"), nullable=False)
     lot_id = Column(Integer, ForeignKey("lots.id"), nullable=True)
     quantite = Column(Float, nullable=False)
+    unite = Column(String(10), default="carton")
     prix_unitaire = Column(Float, default=0.0)
 
     commande = relationship("Commande", back_populates="lignes")
