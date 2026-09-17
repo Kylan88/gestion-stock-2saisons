@@ -740,16 +740,7 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
     etape_cond.poids_sortie = total_flux
     etape_cond.rendement_pourcentage = lot.rendement_global
 
-    # transition souple : en_musserie/en_production/en_conditionnement -> conditionne (évite le 400 si l'étape intermédiaire a été sautée)
-    if statuses.normalize(lot.statut) != statuses.CONDITIONNE:
-        # on tente la transition canonique, sinon on force si le lot a bien un historique production/conditionnement
-        try:
-            statuses.validate_transition(lot.statut, statuses.CONDITIONNE)
-        except ValueError:
-            if statuses.normalize(lot.statut) in (statuses.EN_MUSSERIE, statuses.EN_PRODUCTION, statuses.EN_CONDITIONNEMENT):
-                pass  # on autorise la montée directe
-            else:
-                raise
+    statuses.validate_transition(lot.statut, statuses.CONDITIONNE)
     lot.statut = statuses.CONDITIONNE
 
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
@@ -865,9 +856,6 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
         last = sorted(all_entries, key=lambda e: e.date)[-1]
         for key in ["export","local","dechets","rhum","fitini_fe"]:
             setattr(lot, f"{key}_poids_sachet", getattr(last, f"{key}_poids_sachet") or 2.5)
-    # promotion statut : première saisie conditionnement fait passer le lot en en_conditionnement
-    if statuses.normalize(lot.statut) in (statuses.EN_MUSSERIE, statuses.EN_PRODUCTION):
-        lot.statut = statuses.EN_CONDITIONNEMENT
     db.commit(); db.refresh(lot)
     return {"entry": entry, "lot": lot, "is_update": is_update}
 
