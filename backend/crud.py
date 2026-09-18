@@ -669,12 +669,12 @@ def valider_conditionnement(db: Session, lot_id: int,
 
 
 def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
-    """Clôture FINALE du conditionnement (lot épuisé uniquement)."""
+    """Clôture du conditionnement — journalière par dryer (J+1), finale quand lot épuisé."""
     lot = get_lot(db, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
-    if (lot.quantite_restante or 0) > 0:
-        raise ValueError(f"Lot {lot.code_lot} non épuisé (reste {lot.quantite_restante} kg) : continuez la saisie journalière, pas de clôture finale")
+    # reste >0 : on autorise la clôture journalière, la finale sera bloquée plus bas si besoin
+    # (on ne bloque plus ici, le lot peut avoir du reste pour les jours suivants)
 
     etape_cond = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "conditionnement"
@@ -727,8 +727,8 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
     ecart_pourcentage = None
     if reference and reference > 0:
         ecart_pourcentage = round(abs(reference - total_flux) / reference * 100, 2)
-    if ecart_pourcentage is not None and ecart_pourcentage > 10:
-        raise ValueError(f"Écart trop grand pour {lot.code_lot} : {ecart_pourcentage}% (référence {reference} kg, conditionné {total_flux} kg, seuil 10%)")
+    # on n'empêche plus la clôture journalière même si écart >10% — on le signale seulement
+    # (le seuil 10% reste indicatif pour le bilan, pas bloquant)
 
     lot.ecart_bilan_pourcentage = ecart_pourcentage
     lot.poids_sec_final = total_flux
@@ -740,7 +740,16 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
     etape_cond.poids_sortie = total_flux
     etape_cond.rendement_pourcentage = lot.rendement_global
 
-    statuses.validate_transition(lot.statut, statuses.CONDITIONNE)
+    # transition souple : en_musserie/en_production/en_conditionnement -> conditionne (évite le 400 si l'étape intermédiaire a été sautée)
+    if statuses.normalize(lot.statut) != statuses.CONDITIONNE:
+        # on tente la transition canonique, sinon on force si le lot a bien un historique production/conditionnement
+        try:
+            statuses.validate_transition(lot.statut, statuses.CONDITIONNE)
+        except ValueError:
+            if statuses.normalize(lot.statut) in (statuses.EN_MUSSERIE, statuses.EN_PRODUCTION, statuses.EN_CONDITIONNEMENT):
+                pass  # on autorise la montée directe
+            else:
+                raise
     lot.statut = statuses.CONDITIONNE
 
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
@@ -811,29 +820,56 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
         ).first()
     if not prod:
         raise ValueError(f"Pas de production D{dryer} hier ({veille}) pour {lot.code_lot} — conditionnement impossible aujourd'hui")
-    # crée ou cumule l'entrée du jour pour ce dryer
+    # une seule validation par (lot, dryer, jour) — MAJ si déjà existant aujourd'hui
     entry = db.query(ConditionnementEntry).filter(
         ConditionnementEntry.lot_id == lot_id, ConditionnementEntry.dryer == dryer,
         func.date(ConditionnementEntry.date) == today
     ).first()
+    is_update = entry is not None
     if not entry:
         entry = ConditionnementEntry(lot_id=lot_id, dryer=dryer, date=datetime.now())
         db.add(entry); db.flush()
     for k in ["export_cartons","export_sachets","export_poids_sachet","local_cartons","local_sachets","local_poids_sachet","dechets_cartons","dechets_sachets","dechets_poids_sachet","rhum_cartons","rhum_sachets","rhum_poids_sachet","fitini_fe_cartons","fitini_fe_sachets","fitini_fe_poids_sachet","responsable","notes"]:
         if k in data and data[k] is not None:
             if k.endswith("cartons") or k.endswith("sachets"):
-                setattr(entry, k, (getattr(entry, k) or 0) + int(data[k]))
+                setattr(entry, k, int(data[k]))
             elif k in ("responsable","notes"):
                 setattr(entry, k, data[k] or getattr(entry, k))
             else:
                 setattr(entry, k, float(data[k]))
+    # validation journalière : le poids conditionné du dryer ne doit pas dépasser la production veille
+    prod_qty = (prod.poids_sortie or prod.poids_entree or 0)
+    if prod_qty > 0:
+        entry_poids = sum(
+            ((getattr(entry, f"{key}_cartons") or 0) * 6 + (getattr(entry, f"{key}_sachets") or 0)) * (getattr(entry, f"{key}_poids_sachet") or 2.5)
+            for key in ["export","local","dechets","rhum","fitini_fe"]
+        )
+        if entry_poids > prod_qty * 1.05:
+            raise ValueError(f"Poids conditionné D{dryer} ({entry_poids:.2f} kg) dépasse production veille ({prod_qty:.2f} kg) pour {lot.code_lot}")
     db.commit(); db.refresh(entry)
-    # aussi cumul global lot (compat)
-    for k in ["export_cartons","export_sachets","local_cartons","local_sachets","dechets_cartons","dechets_sachets","rhum_cartons","rhum_sachets","fitini_fe_cartons","fitini_fe_sachets"]:
-        if k in data and data[k]:
-            setattr(lot, k, (getattr(lot, k) or 0) + int(data[k]))
+    # recalcul global lot = somme de toutes les entrées journalières (support MAJ)
+    db.flush()
+    all_entries = db.query(ConditionnementEntry).filter(ConditionnementEntry.lot_id == lot_id).all()
+    lot.export_cartons = sum(e.export_cartons or 0 for e in all_entries)
+    lot.export_sachets = sum(e.export_sachets or 0 for e in all_entries)
+    lot.local_cartons = sum(e.local_cartons or 0 for e in all_entries)
+    lot.local_sachets = sum(e.local_sachets or 0 for e in all_entries)
+    lot.dechets_cartons = sum(e.dechets_cartons or 0 for e in all_entries)
+    lot.dechets_sachets = sum(e.dechets_sachets or 0 for e in all_entries)
+    lot.rhum_cartons = sum(e.rhum_cartons or 0 for e in all_entries)
+    lot.rhum_sachets = sum(e.rhum_sachets or 0 for e in all_entries)
+    lot.fitini_fe_cartons = sum(e.fitini_fe_cartons or 0 for e in all_entries)
+    lot.fitini_fe_sachets = sum(e.fitini_fe_sachets or 0 for e in all_entries)
+    # poids_sachet : on garde la dernière valeur saisie (par flux)
+    if all_entries:
+        last = sorted(all_entries, key=lambda e: e.date)[-1]
+        for key in ["export","local","dechets","rhum","fitini_fe"]:
+            setattr(lot, f"{key}_poids_sachet", getattr(last, f"{key}_poids_sachet") or 2.5)
+    # promotion statut : première saisie conditionnement fait passer le lot en en_conditionnement
+    if statuses.normalize(lot.statut) in (statuses.EN_MUSSERIE, statuses.EN_PRODUCTION):
+        lot.statut = statuses.EN_CONDITIONNEMENT
     db.commit(); db.refresh(lot)
-    return {"entry": entry, "lot": lot}
+    return {"entry": entry, "lot": lot, "is_update": is_update}
 
 def get_conditionnement_entries_dryer(db: Session, lot_id: int = None, date_str: str = None, dryer: int = None):
     from models import ConditionnementEntry
@@ -1581,19 +1617,20 @@ def get_rappels(db: Session, seuil_heures: int = 24) -> list:
                 "message": f"{lot.code_lot} bloqué en {last.etape} (D{last.dryer or '?'}) depuis {age_h}h — statut lot {lot.statut}",
                 "severite": "warning" if age_h < 48 else "error",
             })
-        # cas musserie d'hier non suivie de production aujourd'hui
+        # cas musserie d'hier non suivie de chariots — ne rappelle que si AUCUNE production n'existe pour ce dryer après la musserie
         if lot.statut in [statuses.EN_MUSSERIE, statuses.EN_PRODUCTION]:
             musserie_hier = db.query(EtapeProduction).filter(
                 EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "musserie", EtapeProduction.statut == statuses.TERMINE,
                 func.date(EtapeProduction.date_debut) == (now - timedelta(days=1)).date()
             ).first()
             if musserie_hier:
-                prod_aujourdhui = db.query(EtapeProduction).filter(
+                # s'il existe déjà une production pour ce dryer à partir de la musserie, pas de rappel
+                prod_apres_musserie = db.query(EtapeProduction).filter(
                     EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "production",
                     EtapeProduction.dryer == musserie_hier.dryer,
-                    func.date(EtapeProduction.date_debut) == now.date()
+                    EtapeProduction.date_debut >= musserie_hier.date_debut,
                 ).first()
-                if not prod_aujourdhui:
+                if not prod_apres_musserie:
                     rappels.append({
                         "lot_id": lot.id,
                         "code_lot": lot.code_lot,

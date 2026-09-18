@@ -17,16 +17,12 @@
         <div class="form-card">
           <div class="form-row">
             <div class="form-group">
-              <label>Nom *</label>
-              <input ref="firstInput" v-model="form.nom" class="input" :class="{ 'input-error': errors.nom }" />
-              <span v-if="errors.nom" class="field-error">{{ errors.nom }}</span>
-            </div>
-            <div class="form-group">
-              <label>Catégorie</label>
-              <select v-model="form.categorie_id" class="input">
+              <label>Catégorie *</label>
+              <select ref="firstInput" v-model="form.categorie_id" class="input" :class="{ 'input-error': errors.nom }">
                 <option value="">Sélectionner...</option>
                 <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.nom }}</option>
               </select>
+              <span v-if="errors.nom" class="field-error">{{ errors.nom }}</span>
             </div>
             <div class="form-group">
               <label>Unité</label>
@@ -53,17 +49,20 @@
       <EmptyState v-if="filteredProduits.length === 0" :text="recherche ? 'Aucun résultat' : 'Aucun produit'" />
 
       <div v-else>
-        <div class="filters">
+        <div class="filters" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
           <input v-model="recherche" class="input" placeholder="Rechercher un produit..." style="max-width:260px" />
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer">
+            <input type="checkbox" v-model="showZeroStock" /> Afficher stock 0
+          </label>
+          <span v-if="!showZeroStock" style="font-size:11px;color:var(--text-muted)">— masqués quand stock = 0</span>
         </div>
         <div class="table-wrap anim-fade">
           <table>
-            <thead><tr><th>Nom</th><th>Catégorie</th><th>Stock</th><th>Cartons</th><th>Statut</th><th></th></tr></thead>
+            <thead><tr><th>Catégorie</th><th>Stock</th><th>Cartons</th><th>Statut</th><th></th></tr></thead>
             <tbody>
               <tr v-for="p in paginatedProduits" :key="p.id">
-                <td><strong>{{ p.nom }}</strong></td>
-                <td>{{ p.categorie?.nom || '—' }}</td>
-                <td>{{ p.stock_actuel }} {{ p.unite_mesure }}</td>
+                <td><strong>{{ p.categorie?.nom || p.nom }}</strong></td>
+                <td>{{ fmt2(p.stock_actuel) }} {{ p.unite_mesure }}</td>
                 <td>{{ p.stock_min }}</td>
                 <td><StatusBadge :status="p.stock_actuel > 0 ? 'disponible' : 'rupture'" /></td>
                 <td>
@@ -71,6 +70,15 @@
                 </td>
               </tr>
             </tbody>
+            <tfoot>
+              <tr style="font-weight:700;background:var(--surface);border-top:2px solid var(--border)">
+                <td>Totaux ({{ filteredProduits.length }})</td>
+                <td>{{ fmt2(totalStock) }}</td>
+                <td>{{ totalCartons }}</td>
+                <td></td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
         <div v-if="totalPages > 1" class="pagination">
@@ -117,6 +125,9 @@ function resetForm() {
   editingId.value = null
   errors.nom = ''
 }
+function categorieNom(id) {
+  return categories.value.find(c => String(c.id) === String(id))?.nom || ''
+}
 
 function openCreate() {
   resetForm()
@@ -131,16 +142,22 @@ function openEdit(p) {
   nextTick(() => firstInput.value?.focus())
 }
 
+const showZeroStock = ref(false)
 const filteredProduits = computed(() => {
-  if (!recherche.value) return produits.value
+  let res = produits.value
+  if (!showZeroStock.value) res = res.filter(p => Number(p.stock_actuel) > 0)
+  if (!recherche.value) return res
   const q = recherche.value.toLowerCase()
-  return produits.value.filter(p => p.nom.toLowerCase().includes(q) || p.categorie?.nom?.toLowerCase().includes(q))
+  return res.filter(p => p.nom.toLowerCase().includes(q) || p.categorie?.nom?.toLowerCase().includes(q))
 })
 const totalPages = computed(() => Math.ceil(filteredProduits.value.length / pageSize))
 const paginatedProduits = computed(() => {
   const start = (page.value - 1) * pageSize
   return filteredProduits.value.slice(start, start + pageSize)
 })
+const totalStock = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_actuel || 0), 0))
+const totalCartons = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_min || 0), 0))
+function fmt2(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0.00' }
 
 async function load() {
   loading.value = true
@@ -148,7 +165,11 @@ async function load() {
 }
 
 function validate() {
-  errors.nom = form.nom ? '' : 'Le nom est requis'
+  errors.nom = form.categorie_id ? '' : 'La catégorie est requise'
+  if (!form.categorie_id) return false
+  // nom backend = nom de la catégorie
+  form.nom = categorieNom(form.categorie_id) || form.nom
+  errors.nom = form.nom ? '' : 'La catégorie est requise'
   return !errors.nom
 }
 
@@ -171,8 +192,8 @@ async function save() {
 function confirmDelete() { showConfirm.value = false }
 
 function doExport() {
-  const headers = ['Nom', 'Catégorie', 'Stock Actuel', 'Cartons', 'Unité']
-  const rows = filteredProduits.value.map(p => [p.nom, p.categorie?.nom || '', p.stock_actuel, p.stock_min, p.unite_mesure])
+  const headers = ['Catégorie', 'Stock Actuel', 'Cartons', 'Unité']
+  const rows = filteredProduits.value.map(p => [p.categorie?.nom || p.nom, p.stock_actuel, p.stock_min, p.unite_mesure])
   exportCsv(headers, rows, 'produits.csv')
 }
 

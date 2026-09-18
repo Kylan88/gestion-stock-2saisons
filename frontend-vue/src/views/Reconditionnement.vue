@@ -1,7 +1,37 @@
 <template>
   <div class="page">
-    <PageHeader title="Reconditionnement" subtitle="Transformer des cartons en sachets de 100g" />
+    <PageHeader title="Reconditionnement" subtitle="Transformer des cartons en sachets de 100g">
+      <template #actions>
+        <div class="tabs">
+          <button class="tab" :class="{ active: activeView === 'saisie' }" @click="activeView = 'saisie'">Saisie</button>
+          <button class="tab" :class="{ active: activeView === 'historique' }" @click="activeView = 'historique'; loadHistorique()">Historique</button>
+        </div>
+      </template>
+    </PageHeader>
 
+    <div v-if="activeView === 'historique'" class="anim-fade" key="historique">
+      <LoadingSpinner v-if="loadingHist" />
+      <div v-if="!loadingHist && historique.length === 0" class="empty">
+        <div class="empty-text">Aucun reconditionnement enregistré</div>
+      </div>
+      <div v-if="!loadingHist && historique.length > 0" class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets</th><th>Déchet kg</th></tr></thead>
+          <tbody>
+            <tr v-for="r in historique" :key="r.id">
+              <td>{{ formatDateHist(r.date_reconditionnement) }}</td>
+              <td><strong>{{ lotCode(r.lot_id) }}</strong></td>
+              <td>{{ r.type_source }}</td>
+              <td>{{ r.nb_cartons_entree }}</td>
+              <td>{{ fmt(r.nb_sachets_100g_sortie) }}</td>
+              <td>{{ fmt(r.dechet_kg ?? 0) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div v-else class="anim-fade" key="saisie">
     <LoadingSpinner v-if="loading" />
     <div v-else-if="lots.length === 0" class="empty anim-fade">
       <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
@@ -89,28 +119,6 @@
         </div>
       </div>
     </div>
-
-    <div style="margin-top:24px">
-      <h2 style="font-size:16px;font-weight:600;margin-bottom:12px">Historique</h2>
-      <div v-if="historique.length === 0" class="empty">
-        <div class="empty-text">Aucun reconditionnement enregistré</div>
-      </div>
-      <div v-else class="table-wrap">
-        <table class="table">
-          <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets</th><th>Déchet kg</th><th>Sortis</th></tr></thead>
-          <tbody>
-            <tr v-for="r in historique" :key="r.id">
-              <td>{{ formatDateHist(r.date_reconditionnement) }}</td>
-              <td><strong>{{ lotCode(r.lot_id) }}</strong></td>
-              <td>{{ r.type_source }}</td>
-              <td>{{ r.nb_cartons_entree }}</td>
-              <td>{{ r.nb_sachets_100g_sortie }}</td>
-              <td>{{ r.dechet_kg ?? 0 }}</td>
-              <td>{{ r.nb_sachets_sortis ?? 0 }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </div>
   </div>
 </template>
@@ -126,17 +134,24 @@ import { toCanonical, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 const lots = ref([])
 const historique = ref([])
 const loading = ref(true)
+const loadingHist = ref(false)
+const activeView = ref('saisie')
 const saving = ref(false)
 const toast = useToastStore()
 const form = reactive({})
 const stocks = ref({})
 
+function fmt(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '—' }
 function resultRecond(cartons, poidsSachet) {
   return cartons * 6 * Math.round(poidsSachet / 0.1)
 }
 function formatDateHist(d) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+async function loadHistorique() {
+  loadingHist.value = true
+  try { historique.value = await getReconditionnements() } finally { loadingHist.value = false }
 }
 function lotCode(lotId) {
   return lots.value.find(l => Number(l.id) === Number(lotId))?.code_lot || ('Lot #' + lotId)
@@ -176,7 +191,7 @@ async function load() {
         stocks.value[lot.id + '_fitini_fe'] = 0
       } catch {}
     }
-    historique.value = await getReconditionnements()
+    if (activeView.value === 'historique') await loadHistorique()
   } finally { loading.value = false }
 }
 
@@ -200,6 +215,11 @@ onMounted(load)
 </script>
 
 <style scoped>
+.tabs { display:flex; gap:4px; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
+.tab { padding:6px 16px; background:var(--surface); border:none; cursor:pointer; font-size:13px; font-weight:500; color:var(--text-muted); transition:all 0.2s; }
+.tab:hover { color:var(--primary); }
+.tab.active { background:var(--primary); color:white; font-weight:600; }
+.table-wrap { overflow-x:auto; }
 .recond-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 14px; }
 .recond-card { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
 .recond-head {

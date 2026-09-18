@@ -117,13 +117,20 @@ function zoneTotal(zone) {
   return (stocksByZone[zone.id] || []).reduce((total, stock) => total + Number(stock.quantite || 0), 0)
 }
 const reconds = ref([])
-function sachetsCumules(type) {
-  return reconds.value
-    .filter(r => r.type_source === type)
-    .reduce((total, r) => total + Number(r.nb_sachets_sortis ?? r.nb_sachets_100g_sortie ?? 0), 0)
+function sachetsStock(type) {
+  // stock réel restant en sachets (après ventes), depuis StockZone — pas le cumul produit
+  const allStocks = Object.values(stocksByZone).flat()
+  return allStocks
+    .filter(s => {
+      const n = (s.produit?.nom || '').toLowerCase()
+      if (type === 'local') return n.includes('sachet 100g') && n.includes('local')
+      if (type === 'fitini_fe') return n.includes('sachet 100g') && (n.includes('fitini') || n.includes('ff'))
+      return false
+    })
+    .reduce((total, s) => total + Number(s.sachets || 0), 0)
 }
-const sachets100g = computed(() => sachetsCumules('local'))
-const sachetsFF = computed(() => sachetsCumules('fitini_fe'))
+const sachets100g = computed(() => sachetsStock('local'))
+const sachetsFF = computed(() => sachetsStock('fitini_fe'))
 function formatKg(value) { return Number(value || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) }
 
 onMounted(load)
