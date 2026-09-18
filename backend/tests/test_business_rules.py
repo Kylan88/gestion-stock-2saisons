@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timedelta
 
 import crud
 import models
@@ -95,3 +96,57 @@ def test_conditionnement_requires_finished_production_and_uses_its_weight(db):
     assert conditionnement.poids_entree == 10
     # le lot reste en_production jusqu'à cloturer_conditionnement
     assert lot.statut in (statuses.EN_PRODUCTION, statuses.EN_CONDITIONNEMENT, statuses.CONDITIONNE)
+
+
+def test_partial_lot_keeps_fresh_pulp_and_dried_weight_separate(db):
+    """Un dryer journalier ne doit jamais clôturer un lot encore à traiter."""
+    product = create_product(db, name="Mangue")
+    lot = models.Lot(
+        code_lot="LOT-31546",
+        produit_id=product.id,
+        poids_frais=31546.5,
+        quantite_initiale=31546.5,
+        statut=statuses.RECEPTION,
+    )
+    db.add(lot)
+    db.commit()
+
+    # 2 543,40 kg mûrs - 30 lavage - 50 déchets production - 20 retour non mûr
+    # - 17,90 retour mûr = 2 425,50 kg frais net.
+    musserie = crud.valider_musserie(
+        db, lot.id, dryer=1, fruits_murs_kg=2543.4,
+        dechets_lavage_kg=30.0, dechets_production_kg=50.0,
+        retour_non_mur_kg=20.0, retour_mure_kg=17.9,
+    )
+    assert musserie.poids_sortie == 2425.5
+
+    today = datetime.now().date().isoformat()
+    crud.cloturer_musserie(db, lot.id, today)
+    production = crud.valider_production(
+        db, lot.id, dryer=1, nbre_chariots=6, quantite_totale=1575.0,
+    )["etape"]
+    assert production.poids_entree == 2425.5
+    assert production.poids_sortie == 1575.0
+    assert production.perte == 850.5
+
+    crud.cloturer_production(db, lot.id, today)
+    db.refresh(lot)
+    assert lot.statut == statuses.EN_MUSSERIE
+    assert lot.quantite_restante > 0
+
+    # Le conditionnement se fait le lendemain sur le poids sec, pas sur 1 575 kg.
+    yesterday = datetime.now() - timedelta(days=1)
+    production.date_debut = yesterday
+    production.date_fin = yesterday
+    db.commit()
+    result = crud.valider_conditionnement_dryer(
+        db, lot.id, dryer=1, poids_sec_kg=400.0,
+        export_sachets=160, export_poids_sachet=2.5,
+    )
+    db.refresh(production)
+    db.refresh(lot)
+    assert result["poids_sec_kg"] == 400.0
+    assert production.poids_sec_kg == 400.0
+    crud.cloturer_conditionnement(db, lot.id, today)
+    db.refresh(lot)
+    assert lot.statut == statuses.EN_MUSSERIE

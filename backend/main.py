@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 
 from database import engine, Base, get_db
 from routers import produits, mouvements, lots, commandes, dashboard
@@ -23,6 +24,13 @@ import schemas
 
 # ── Creation des tables au demarrage ──
 Base.metadata.create_all(bind=engine)
+
+# Mise à niveau légère des bases existantes. create_all crée les nouvelles
+# tables mais n'ajoute pas les colonnes aux installations déjà en service.
+_etapes_columns = {column["name"] for column in inspect(engine).get_columns("etapes_production")}
+if "poids_sec_kg" not in _etapes_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE etapes_production ADD COLUMN poids_sec_kg FLOAT"))
 
 # ── Application FastAPI ──
 app = FastAPI(

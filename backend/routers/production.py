@@ -53,10 +53,10 @@ def get_dryers(lot_id: int, db: Session = Depends(get_db)):
     return crud.get_dryers_production(db, lot_id)
 
 @router.post("/cloturer/{lot_id}", response_model=schemas.EtapeProductionResponse)
-def cloturer_production(lot_id: int, db: Session = Depends(get_db)):
-    """Clôture la production d'un lot (passe le statut à terminé)."""
+def cloturer_production(lot_id: int, date: str | None = Query(None, description="Date ISO YYYY-MM-DD pour clôturer seulement cette journée"), db: Session = Depends(get_db)):
+    """Clôture les dryers d'une journée sans fermer le lot."""
     try:
-        ep = crud.cloturer_production(db, lot_id)
+        ep = crud.cloturer_production(db, lot_id, date)
         return ep
     except ValueError as e:
         raise HTTPException(400, str(e))

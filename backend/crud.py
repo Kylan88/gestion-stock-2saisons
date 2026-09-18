@@ -481,6 +481,8 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
     if not ep.date_debut:
         ep.date_debut = datetime.now()
     ep.operateur = operateur
+    ep.dryer = dryer
+    ep.nbre_chariots = nbre_chariots
 
     ep_musserie = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie",
@@ -492,6 +494,8 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
         ).first()
     dechets_prod = ep_musserie.dechets_production_kg if ep_musserie else 0.0
     ep.dechets_production_kg = dechets_prod
+    # Frais net issu de la musserie (référence), pulpe chargée = saisie jour.
+    frais_net = (ep_musserie.poids_sortie or 0.0) if ep_musserie else 0.0
 
     validate_weight_flow(db, lot_id, "production", quantite_totale)
 
@@ -516,35 +520,64 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
     for c in all_chariots:
         if c.dryer not in dryers_seen:
             dryers_seen[c.dryer] = {"dryer": c.dryer, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale}
-    ep.poids_entree = sum(d["quantite_totale"] for d in dryers_seen.values())
-    ep.poids_sortie = max(0, ep.poids_entree - ep.dechets_production_kg)
+    # Poids entrée = frais net musserie ; sortie = pulpe chargée ; perte = écart.
+    # Un dryer journalier ne clôture jamais le lot : le reste frais est suivi via le lot.
+    if frais_net > 0:
+        ep.poids_entree = round(frais_net, 2)
+    else:
+        ep.poids_entree = sum(d["quantite_totale"] for d in dryers_seen.values())
+    ep.poids_sortie = round(quantite_totale, 2)
+    ep.perte = round(max(0, ep.poids_entree - ep.poids_sortie), 2)
     ep.total_claies = sum(d["total_claies"] for d in dryers_seen.values())
+    ep.nbre_chariots = nbre_chariots
     ep.notes = " + ".join(f"Dryer {d['dryer']} ({d['nbre_chariots']} chariots)" for d in dryers_seen.values())
 
     db.commit(); db.refresh(ep)
+    # Enrichit le retour pour le frontend (frais net / pulpe / sec).
+    for d in dryers_seen.values():
+        d["poids_frais_net_kg"] = ep.poids_entree
+        d["pulpe_kg"] = ep.poids_sortie
+        d["poids_sec_kg"] = ep.poids_sec_kg
     return {"etape": ep, "dryers": list(dryers_seen.values())}
 
 
-def cloturer_production(db: Session, lot_id: int) -> EtapeProduction:
-    eps = db.query(EtapeProduction).filter(
+def cloturer_production(db: Session, lot_id: int, date_str: str | None = None) -> EtapeProduction:
+    """Clôture les dryers d'une journée sans fermer le lot.
+    - Si date_str (YYYY-MM-DD) : ne clôture que les productions de ce jour,
+      le lot reste ouvert tant qu'il reste de la matière à traiter.
+    - Si None : clôture tout (comportement historique) puis avance le lot
+      vers en_conditionnement uniquement s'il était en_production.
+    """
+    query = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
-    ).all()
+    )
+    if date_str:
+        try:
+            target = date_type.fromisoformat(date_str)
+        except ValueError:
+            raise ValueError("Format date invalide (attendu YYYY-MM-DD)")
+        query = query.filter(
+            func.date(EtapeProduction.date_debut) == target
+        )
+    eps = query.all()
     if not eps:
         raise ValueError(f"Aucune étape production pour le lot {lot_id}")
     main = None
     for ep in eps:
         if ep.statut != statuses.TERMINE:
             ep.statut = statuses.TERMINE
-            ep.date_fin = datetime.now()
+            ep.date_fin = ep.date_fin or datetime.now()
             if main is None:
                 main = ep
     if main is None:
         main = eps[-1]
     lot = db.get(models.Lot, lot_id)
-    if lot and statuses.normalize(lot.statut) == statuses.EN_PRODUCTION:
-        # flux continu : on n'avance le statut que si le lot a fini sa musserie
-        statuses.validate_transition(lot.statut, statuses.EN_CONDITIONNEMENT)
-        lot.statut = statuses.EN_CONDITIONNEMENT
+    # Clôture journalière : le lot reste ouvert (flux continu musserie⇄production).
+    if not date_str:
+        if lot and statuses.normalize(lot.statut) == statuses.EN_PRODUCTION:
+            # flux continu : on n'avance le statut que si le lot a fini sa musserie
+            statuses.validate_transition(lot.statut, statuses.EN_CONDITIONNEMENT)
+            lot.statut = statuses.EN_CONDITIONNEMENT
     db.commit(); db.refresh(main)
     if lot: db.refresh(lot)
     return main
@@ -558,15 +591,21 @@ def get_dryers_production(db: Session, lot_id: int) -> list:
         return []
     ep_ids = [e.id for e in eps]
     chariots = db.query(Chariot).filter(Chariot.etape_production_id.in_(ep_ids)).order_by(Chariot.id).all()
+    by_ep = {e.id: e for e in eps}
     dryers = {}
     for c in chariots:
         d = c.dryer
+        ep = by_ep.get(c.etape_production_id)
         if d not in dryers:
-            dryers[d] = {"dryer": d, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale, "operateur": c.operateur or "", "chariots": []}
+            dryers[d] = {"dryer": d, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale, "poids_frais_net_kg": (ep.poids_entree if ep else c.quantite_totale) or 0, "pulpe_kg": (ep.poids_sortie if ep else c.quantite_totale) or 0, "poids_sec_kg": ep.poids_sec_kg if ep else None, "operateur": c.operateur or "", "chariots": []}
         dryers[d]["chariots"].append({
             "id": c.id, "numero_chariot": c.numero_chariot,
             "heure_remplissage": c.heure_remplissage, "heure_entree_sechoir": c.heure_entree_sechoir,
         })
+    # Inclut les étapes sans chariots détaillés (saisie rapide).
+    for ep in eps:
+        if ep.dryer and ep.dryer not in dryers:
+            dryers[ep.dryer] = {"dryer": ep.dryer, "nbre_chariots": ep.nbre_chariots or 0, "total_claies": ep.total_claies or 0, "quantite_totale": ep.poids_sortie or 0, "poids_frais_net_kg": ep.poids_entree or 0, "pulpe_kg": ep.poids_sortie or 0, "poids_sec_kg": ep.poids_sec_kg, "operateur": ep.operateur or "", "chariots": []}
     return list(dryers.values())
 
 # ── CONDITIONNEMENT (cartons) — cumul journalier ──
@@ -668,8 +707,12 @@ def valider_conditionnement(db: Session, lot_id: int,
     }
 
 
-def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
-    """Clôture du conditionnement — journalière par dryer (J+1), finale quand lot épuisé."""
+def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = None) -> dict:
+    """Clôture du conditionnement — journalière par dryer (J+1), finale quand lot épuisé.
+    - Si date_str : clôture journalière, le lot reste ouvert tant qu'il reste
+      de la matière (quantite_restante > 0) — un dryer ne clôture jamais un lot partiel.
+    - Si None : clôture finale historique (passe à conditionne).
+    """
     lot = get_lot(db, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
@@ -735,6 +778,23 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
     if lot.poids_frais > 0:
         lot.rendement_global = round((total_flux / lot.poids_frais) * 100, 1)
 
+    # Clôture journalière d'un lot partiel : on fige la journée sans fermer le lot.
+    if date_str and (lot.quantite_restante or 0) > 0:
+        etape_cond.statut = statuses.EN_COURS
+        etape_cond.date_fin = datetime.now()
+        etape_cond.poids_sortie = total_flux
+        etape_cond.rendement_pourcentage = lot.rendement_global
+        db.commit(); db.refresh(lot); db.refresh(etape_cond)
+        return {
+            "lot_id": lot_id,
+            "code_lot": lot.code_lot,
+            "poids_sec_final": total_flux,
+            "ecart_bilan_pourcentage": ecart_pourcentage,
+            "rendement_global": lot.rendement_global,
+            "statut_lot": lot.statut,
+            "cloture_jour": date_str,
+        }
+
     etape_cond.statut = statuses.TERMINE
     etape_cond.date_fin = datetime.now()
     etape_cond.poids_sortie = total_flux
@@ -787,7 +847,12 @@ def get_conditionnement_dryers_disponibles(db: Session, lot_id: int, target_date
     return [r[0] for r in rows if r[0]]
 
 def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) -> dict:
-    """Valide le conditionnement pour 1 dryer à J+1 (vérifie production veille)."""
+    """Valide le conditionnement pour 1 dryer à J+1 (vérifie production veille).
+    poids_sec_kg = quantité réellement sortie du séchage. Elle ne peut pas
+    dépasser la pulpe chargée (tolérance 5%) et devient la référence des flux.
+    Un dryer journalier ne clôture jamais le lot : frais / pulpe / sec
+    restent séparés tant qu'il reste de la matière à traiter.
+    """
     from models import ConditionnementEntry, EtapeProduction
     from datetime import timedelta
     lot = get_lot(db, lot_id)
@@ -811,6 +876,15 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
         ).first()
     if not prod:
         raise ValueError(f"Pas de production D{dryer} hier ({veille}) pour {lot.code_lot} — conditionnement impossible aujourd'hui")
+    # Poids sec réellement sorti du séchage (référence des 5 flux du dryer).
+    poids_sec_kg = data.get("poids_sec_kg", 0.0) or 0.0
+    if poids_sec_kg < 0:
+        raise ValueError("Le poids sec ne peut pas être négatif")
+    prod_qty = (prod.poids_sortie or prod.poids_entree or 0)
+    if poids_sec_kg and prod_qty > 0 and poids_sec_kg > prod_qty * 1.05:
+        raise ValueError(f"Poids sec D{dryer} ({poids_sec_kg:.2f} kg) dépasse pulpe chargée veille ({prod_qty:.2f} kg) pour {lot.code_lot}")
+    if poids_sec_kg:
+        prod.poids_sec_kg = round(float(poids_sec_kg), 2)
     # une seule validation par (lot, dryer, jour) — MAJ si déjà existant aujourd'hui
     entry = db.query(ConditionnementEntry).filter(
         ConditionnementEntry.lot_id == lot_id, ConditionnementEntry.dryer == dryer,
@@ -828,16 +902,16 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
                 setattr(entry, k, data[k] or getattr(entry, k))
             else:
                 setattr(entry, k, float(data[k]))
-    # validation journalière : le poids conditionné du dryer ne doit pas dépasser la production veille
-    prod_qty = (prod.poids_sortie or prod.poids_entree or 0)
-    if prod_qty > 0:
+    # validation journalière : le poids conditionné du dryer ne doit pas dépasser le poids sec (si saisi), sinon la production veille
+    ref_qty = prod.poids_sec_kg or prod_qty
+    if ref_qty > 0:
         entry_poids = sum(
             ((getattr(entry, f"{key}_cartons") or 0) * 6 + (getattr(entry, f"{key}_sachets") or 0)) * (getattr(entry, f"{key}_poids_sachet") or 2.5)
             for key in ["export","local","dechets","rhum","fitini_fe"]
         )
-        if entry_poids > prod_qty * 1.05:
-            raise ValueError(f"Poids conditionné D{dryer} ({entry_poids:.2f} kg) dépasse production veille ({prod_qty:.2f} kg) pour {lot.code_lot}")
-    db.commit(); db.refresh(entry)
+        if entry_poids > ref_qty * 1.05:
+            raise ValueError(f"Poids conditionné D{dryer} ({entry_poids:.2f} kg) dépasse référence séchage ({ref_qty:.2f} kg) pour {lot.code_lot}")
+    db.commit(); db.refresh(entry); db.refresh(prod)
     # recalcul global lot = somme de toutes les entrées journalières (support MAJ)
     db.flush()
     all_entries = db.query(ConditionnementEntry).filter(ConditionnementEntry.lot_id == lot_id).all()
@@ -857,7 +931,7 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
         for key in ["export","local","dechets","rhum","fitini_fe"]:
             setattr(lot, f"{key}_poids_sachet", getattr(last, f"{key}_poids_sachet") or 2.5)
     db.commit(); db.refresh(lot)
-    return {"entry": entry, "lot": lot, "is_update": is_update}
+    return {"entry": entry, "lot": lot, "is_update": is_update, "poids_sec_kg": prod.poids_sec_kg or 0.0, "production_id": prod.id}
 
 def get_conditionnement_entries_dryer(db: Session, lot_id: int = None, date_str: str = None, dryer: int = None):
     from models import ConditionnementEntry

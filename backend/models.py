@@ -99,6 +99,9 @@ class EtapeProduction(Base):
     date_fin = Column(DateTime, nullable=True)
     poids_entree = Column(Float, default=0.0)
     poids_sortie = Column(Float, default=0.0)
+    # Production : poids de pulpe avant séchage. Le poids sec est saisi à la
+    # sortie du dryer et sert de référence au conditionnement.
+    poids_sec_kg = Column(Float, nullable=True)
     perte = Column(Float, default=0.0)
     rendement_pourcentage = Column(Float, nullable=True)
     operateur = Column(String(100), default="")

@@ -109,8 +109,9 @@ export async function getDryersProduction(lotId) {
   const { data } = await api.get(`/production/dryers/${lotId}`)
   return data
 }
-export async function cloturerProduction(lotId) {
-  const { data } = await api.post(`/production/cloturer/${lotId}`)
+export async function cloturerProduction(lotId, date = null) {
+  const params = date ? { date } : {}
+  const { data } = await api.post(`/production/cloturer/${lotId}`, null, { params })
   return data
 }
 
@@ -119,8 +120,9 @@ export async function validerConditionnement(lotId, payload) {
   const { data } = await api.post(`/conditionnement/lots/${lotId}`, payload)
   return data
 }
-export async function cloturerConditionnement(lotId) {
-  const { data } = await api.post(`/conditionnement/lots/${lotId}/cloturer`)
+export async function cloturerConditionnement(lotId, date = null) {
+  const params = date ? { date } : {}
+  const { data } = await api.post(`/conditionnement/lots/${lotId}/cloturer`, null, { params })
   return data
 }
 export async function getConditionnementDryersDisponibles(lotId, date = null) {

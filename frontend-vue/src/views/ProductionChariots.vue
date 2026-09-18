@@ -73,7 +73,7 @@
 
         <!-- Musserie disponible pour production aujourd'hui -->
         <div v-if="musserieData[lot.id] && musserieData[lot.id].length > 0" class="musserie-available">
-          <div class="musserie-available-title">Musserie du jour (à charger) :</div>
+          <div class="musserie-available-title">Frais net issu de la musserie du jour :</div>
           <div class="musserie-available-grid">
             <div v-for="m in musserieData[lot.id]" :key="m.dryer" class="musserie-available-item">
               <span class="musserie-dryer">Dryer {{ m.dryer }}</span>
@@ -91,7 +91,9 @@
               <div class="cumul-box-body">
                 <div class="cumul-stat"><span>Chariots</span><strong>{{ d.nbre_chariots }}</strong></div>
                 <div class="cumul-stat"><span>Claies</span><strong>{{ d.total_claies }}</strong></div>
-                <div class="cumul-stat"><span>Production</span><strong>{{ d.quantite_totale }} kg</strong></div>
+                <div class="cumul-stat"><span>Frais net</span><strong>{{ d.poids_frais_net_kg }} kg</strong></div>
+                <div class="cumul-stat"><span>Pulpe chargée</span><strong>{{ d.pulpe_kg }} kg</strong></div>
+                <div v-if="d.poids_sec_kg != null" class="cumul-stat"><span>Poids sec</span><strong>{{ d.poids_sec_kg }} kg</strong></div>
               </div>
               <div class="cumul-chariots">
                 <span v-for="c in d.chariots" :key="c.id" class="chariot-pill">
@@ -102,14 +104,14 @@
           </div>
 
           <div class="cumul-total">
-            <span>Total produit : <strong>{{ totalAllDryers(lot.id) }} kg</strong></span>
+            <span>Total pulpe chargée : <strong>{{ totalAllDryers(lot.id) }} kg</strong></span>
             <span>Chariots : <strong>{{ totalChariots(lot.id) }}</strong></span>
             <span>Claies : <strong>{{ totalClaies(lot.id) }}</strong></span>
           </div>
 
           <div class="cloture-row">
             <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer la production' }}
+              {{ cloturing ? 'Clôture...' : 'Clôturer la journée' }}
             </button>
           </div>
         </div>
@@ -191,7 +193,7 @@
           <!-- Clôturer -->
           <div v-if="dryers[lot.id] && dryers[lot.id].length > 0" style="margin-top:12px;text-align:right">
             <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer la production' }}
+              {{ cloturing ? 'Clôture...' : 'Clôturer la journée' }}
             </button>
           </div>
         </div>
@@ -201,7 +203,7 @@
     <ConfirmDialog
       :show="!!confirmClotureLot"
       :title="'Clôturer la production du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Terminer la production du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — tous les dryers du jour (D' + (availableDryers(confirmClotureLot?.id) || []).join(', D') + ') seront clôturés. Cette action est irréversible.'"
+      :message="'Valider les dryers de cette journée pour ' + (confirmClotureLot?.code_lot || '') + '. Le lot restera ouvert tant qu’il reste de la matière à traiter.'"
       confirmText="Clôturer"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
@@ -281,7 +283,7 @@ function enregistrerChariot(lotId, index) {
 
 function totalAllDryers(lotId) {
   if (!dryers[lotId]) return 0
-  return dryers[lotId].reduce((sum, d) => sum + d.quantite_totale, 0)
+  return dryers[lotId].reduce((sum, d) => sum + (d.pulpe_kg ?? d.quantite_totale ?? 0), 0)
 }
 
 function totalChariots(lotId) {
@@ -405,8 +407,9 @@ async function cloturer(lot) {
   confirmClotureLot.value = null
   cloturing.value = true
   try {
-    await cloturerProduction(lot.id)
-    toast.success(`Production clôturée pour ${lot.code_lot}`)
+    const date = new Date().toISOString().slice(0, 10)
+    await cloturerProduction(lot.id, date)
+    toast.success(`Production du jour clôturée pour ${lot.code_lot} — lot toujours ouvert`)
     await load()
   } finally { cloturing.value = false }
 }
