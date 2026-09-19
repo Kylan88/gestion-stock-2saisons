@@ -171,7 +171,7 @@
     <ConfirmDialog
       :show="!!confirmClotureLot"
       :title="'Clôturer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Terminer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot passera en chambre froide. Cette action est irréversible.'"
+      :message="'Figer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot restera ouvert tant qu\u2019il reste de la mati\u00e8re \u00e0 traiter.'"
       confirmText="Clôturer"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
@@ -451,8 +451,13 @@ async function cloturer(lot) {
   confirmClotureLot.value = null
   cloturing.value = true
   try {
-    await cloturerConditionnement(lot.id)
-    toast.success(`Conditionnement clôturé pour ${lot.code_lot} — passage en chambre froide`)
+    const date = new Date().toISOString().slice(0, 10)
+    const res = await cloturerConditionnement(lot.id, date)
+    if (res?.cloture_jour) {
+      toast.success(`Conditionnement du jour figé pour ${lot.code_lot} — lot toujours ouvert`)
+    } else {
+      toast.success(`Conditionnement clôturé pour ${lot.code_lot} — passage en chambre froide`)
+    }
     await load()
   } finally { cloturing.value = false }
 }

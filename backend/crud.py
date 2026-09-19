@@ -754,11 +754,20 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
     ).all()
     if not productions:
         raise ValueError("Aucune production trouvée pour ce lot")
-    for ep in productions:
-        if ep.statut != statuses.TERMINE:
-            raise ValueError("Toutes les productions doivent être terminées avant de clôturer le conditionnement")
+    productions_terminees = [ep for ep in productions if ep.statut == statuses.TERMINE]
+    if not productions_terminees:
+        raise ValueError("Aucune production terminée — clôture du conditionnement impossible")
 
-    reference = sum(ep.poids_sortie or 0.0 for ep in productions)
+    # Clôture journalière : lot partiel (reste>0) ou lot pas encore en fin de
+    # parcours (ex. en_musserie avec flux continu). On fige la journée sans
+    # fermer le lot — un dryer ne clôture jamais un lot partiel.
+    is_daily = (
+        (lot.quantite_restante or 0) > 0
+        or not statuses.can_transition(lot.statut, statuses.CONDITIONNE)
+        or date_str is not None
+    )
+
+    reference = sum((ep.poids_sortie or 0.0) for ep in productions_terminees)
     etape_cond.poids_entree = reference
     total_flux = _calc_total_flux(lot)
 
@@ -779,7 +788,7 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
         lot.rendement_global = round((total_flux / lot.poids_frais) * 100, 1)
 
     # Clôture journalière d'un lot partiel : on fige la journée sans fermer le lot.
-    if date_str and (lot.quantite_restante or 0) > 0:
+    if is_daily:
         etape_cond.statut = statuses.EN_COURS
         etape_cond.date_fin = datetime.now()
         etape_cond.poids_sortie = total_flux
@@ -792,7 +801,7 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
             "ecart_bilan_pourcentage": ecart_pourcentage,
             "rendement_global": lot.rendement_global,
             "statut_lot": lot.statut,
-            "cloture_jour": date_str,
+            "cloture_jour": date_str or datetime.now().date().isoformat(),
         }
 
     etape_cond.statut = statuses.TERMINE
