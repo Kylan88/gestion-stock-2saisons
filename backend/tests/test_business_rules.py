@@ -200,7 +200,6 @@ def test_lot_epuise_bascule_seul_vers_conditionne_sans_cloture_finale(db):
 def test_conditionnement_alimente_stock_delta_sans_doublon(db):
     """Chaque saisie alimente la chambre froide (delta uniquement, idempotent),
     et le transfert manuel ne peut pas renvoyer les mêmes cartons."""
-    import pytest as _pytest
     product = create_product(db, name="Mangue")
     zone = models.ZoneStockage(nom="CF test", type_zone="froid", actif=True, capacite_kg=10000)
     db.add(zone)
@@ -235,8 +234,168 @@ def test_conditionnement_alimente_stock_delta_sans_doublon(db):
     assert sum(s.quantite for s in stocks2 if s.lot_id == lot.id) == round(2 * 6 * 2.5, 2)
 
     # Le transfert manuel des mêmes cartons est refusé (déjà en stock).
-    with _pytest.raises(ValueError, match="Pas assez de cartons"):
+    with pytest.raises(ValueError, match="Pas assez de cartons"):
         crud.creer_demande_transfert(
             db, lot.id,
             [schemas.DemandeTransfertLigneCreate(type_flux="local", nb_cartons=1, zone_id=zone.id)],
+        )
+
+
+def test_reconditionnement_rhum_obtenu_alimente_stock_rhum(db):
+    """Le rhum arrangé obtenu depuis local/fitini fê alimente le stock Rhum arrangé,
+    sans double déduction (matière déjà déduite via les cartons sources)."""
+    product = create_product(db, name="Mangue")
+    zone = models.ZoneStockage(nom="CF rhum", type_zone="froid", actif=True, capacite_kg=10000)
+    local_p = models.Produit(nom="Local", stock_actuel=0)
+    db.add_all([zone, local_p])
+    db.commit()
+    lot = models.Lot(
+        code_lot="LOT-RHUM", produit_id=product.id, poids_frais=500,
+        quantite_initiale=500, quantite_restante=0, statut=statuses.CONDITIONNE,
+        local_cartons=2, local_poids_sachet=2.5,
+    )
+    db.add(lot)
+    db.commit()
+    db.add(models.StockZone(zone_id=zone.id, lot_id=lot.id, produit_id=local_p.id,
+                            quantite=30.0, sachets=12))
+    db.commit()
+
+    res = crud.creer_reconditionnement(
+        db, lot.id, "local", nb_cartons_entree=1, nb_sachets_sortis=100,
+        rhum_cartons_sortie=1, rhum_sachets_sortis=3, rhum_poids_vrac_kg=1.2,
+        zone_id=zone.id,
+    )
+    assert res["rhum"]["alimente"] is True
+    assert res["rhum"]["cartons"] == 1
+    assert res["rhum"]["zone"] == "CF rhum"
+    rhum_p = db.query(models.Produit).filter(models.Produit.nom == "Rhum arrangé").first()
+    assert rhum_p is not None
+    lignes = db.query(models.StockZone).filter(
+        models.StockZone.lot_id == lot.id, models.StockZone.produit_id == rhum_p.id,
+        models.StockZone.date_sortie.is_(None)).all()
+    assert sum(s.sachets for s in lignes) == 1 * 6 + 3
+    assert rhum_p.stock_actuel == round((1 * 6 + 3) * 2.5 + 1.2, 2)
+    # cartons sources déduits une seule fois
+    db.refresh(lot)
+    assert lot.local_cartons == 1
+
+
+def test_musserie_meme_jour_ecrase_au_lieu_de_cumuler(db):
+    """Une seule saisie par (lot, dryer, jour) : la 2e écrase, ne s'additionne pas."""
+    product = create_product(db, name="Mangue")
+    lot = models.Lot(
+        code_lot="LOT-ECRASE", produit_id=product.id, poids_frais=1000,
+        quantite_initiale=1000, statut=statuses.RECEPTION,
+    )
+    db.add(lot)
+    db.commit()
+
+    crud.valider_musserie(db, lot.id, dryer=1, fruits_murs_kg=100.0, dechets_tri_kg=10.0)
+    db.refresh(lot)
+    assert lot.quantite_restante == 890.0
+
+    ep = crud.valider_musserie(db, lot.id, dryer=1, fruits_murs_kg=200.0, dechets_tri_kg=10.0)
+    db.refresh(lot)
+    assert lot.quantite_restante == 790.0
+    assert ep.poids_sortie == 200.0
+    nb = db.query(models.EtapeProduction).filter(
+        models.EtapeProduction.lot_id == lot.id,
+        models.EtapeProduction.etape == "musserie",
+    ).count()
+    assert nb == 1
+
+
+def test_saisie_conditionnement_ne_change_jamais_le_statut(db):
+    """La saisie (et figer la journée) ne ferme jamais le lot à la main ;
+    sans zone, elle réussit quand même (stock non alimenté, pas d'erreur)."""
+    product = create_product(db, name="Mangue")
+    lot = models.Lot(
+        code_lot="LOT-SAISIE", produit_id=product.id, poids_frais=1000,
+        quantite_initiale=1000, quantite_restante=500, statut=statuses.EN_MUSSERIE,
+    )
+    production = models.EtapeProduction(
+        lot=lot, etape="production", ordre=2, statut=statuses.TERMINE, poids_sortie=50,
+    )
+    db.add_all([lot, production])
+    db.commit()
+
+    res = crud.valider_conditionnement(db, lot.id, local_cartons=1)
+    db.refresh(lot)
+    assert lot.statut == statuses.EN_MUSSERIE
+    assert res["lot_epuise"] is False
+    assert res["stock"]["alimente"] is False
+    etape = db.query(models.EtapeProduction).filter(
+        models.EtapeProduction.lot_id == lot.id,
+        models.EtapeProduction.etape == "conditionnement",
+    ).one()
+    assert etape.statut != statuses.TERMINE
+
+    res_jour = crud.cloturer_conditionnement(db, lot.id)
+    db.refresh(lot)
+    assert lot.statut == statuses.EN_MUSSERIE
+    assert res_jour["lot_epuise"] is False
+
+
+def test_transfert_manuel_rattrape_apres_saisie_sans_zone(db):
+    """Saisie sans zone active : OK sans stock, puis transfert manuel possible."""
+    product = create_product(db, name="Mangue")
+    lot = models.Lot(
+        code_lot="LOT-RATTRAPAGE", produit_id=product.id, poids_frais=1000,
+        quantite_initiale=1000, quantite_restante=100, statut=statuses.EN_PRODUCTION,
+    )
+    production = models.EtapeProduction(
+        lot=lot, etape="production", ordre=2, statut=statuses.TERMINE, poids_sortie=500,
+    )
+    db.add_all([lot, production])
+    db.commit()
+
+    res = crud.valider_conditionnement(db, lot.id, local_cartons=2)
+    assert res["stock"]["alimente"] is False
+
+    zone = models.ZoneStockage(nom="CF rattrapage", type_zone="froid", actif=True, capacite_kg=10000)
+    db.add(zone)
+    db.commit()
+    demande = crud.creer_demande_transfert(
+        db, lot.id,
+        [schemas.DemandeTransfertLigneCreate(type_flux="local", nb_cartons=2, zone_id=zone.id)],
+        responsable="Magasinier",
+    )
+    crud.valider_demande_transfert(db, demande.id)
+    stocks = crud.get_stocks_zone(db)
+    assert sum(s.quantite for s in stocks if s.lot_id == lot.id) == round(2 * 6 * 2.5, 2)
+
+
+def test_reconditionnement_sans_rhum_inchange(db):
+    """Sans sortie rhum : comportement historique (sachets 100g seuls)."""
+    product = create_product(db, name="Mangue")
+    zone = models.ZoneStockage(nom="CF simple", type_zone="froid", actif=True, capacite_kg=10000)
+    local_p = models.Produit(nom="Local", stock_actuel=0)
+    db.add_all([zone, local_p])
+    db.commit()
+    lot = models.Lot(
+        code_lot="LOT-SIMPLE", produit_id=product.id, poids_frais=500,
+        quantite_initiale=500, quantite_restante=0, statut=statuses.CONDITIONNE,
+        local_cartons=1, local_poids_sachet=2.5,
+    )
+    db.add(lot)
+    db.commit()
+    db.add(models.StockZone(zone_id=zone.id, lot_id=lot.id, produit_id=local_p.id,
+                            quantite=15.0, sachets=6))
+    db.commit()
+
+    res = crud.creer_reconditionnement(db, lot.id, "local", nb_cartons_entree=1, nb_sachets_sortis=140)
+    assert res["rhum"]["alimente"] is False
+    assert res["stock_final_sachets"] == 140
+    db.refresh(lot)
+    assert lot.local_cartons == 0
+
+
+def test_rhum_negatif_rejete_a_la_frontiere_api():
+    with pytest.raises(ValueError):
+        schemas.ReconditionnementCreate(
+            lot_id=1, type_source="local", nb_cartons_entree=1, rhum_cartons_sortie=-1,
+        )
+    with pytest.raises(ValueError):
+        schemas.ReconditionnementCreate(
+            lot_id=1, type_source="local", nb_cartons_entree=1, rhum_poids_vrac_kg=-0.5,
         )

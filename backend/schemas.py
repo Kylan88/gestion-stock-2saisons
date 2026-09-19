@@ -282,11 +282,19 @@ class DemandeTransfertResponse(BaseModel):
 
 class ReconditionnementCreate(ValidatedInput):
     positive_fields = {"nb_cartons_entree"}
+    non_negative_fields = {"rhum_cartons_sortie", "rhum_sachets_sortis", "rhum_poids_sachet", "rhum_poids_vrac_kg"}
     lot_id: int
     type_source: str
     nb_cartons_entree: int
     dechet_kg: float = 0.0
     nb_sachets_sortis: int = 0
+    # Rhum arrangé obtenu depuis ces cartons (source local/fitini fê) — optionnel
+    rhum_cartons_sortie: int = 0
+    rhum_sachets_sortis: int = 0
+    rhum_poids_sachet: float = 2.5
+    # Vrac (kg) : quantité ne remplissant ni cartons ni sachets (ex. 1,2 kg)
+    rhum_poids_vrac_kg: float = 0.0
+    zone_id: Optional[int] = None
     responsable: str = ""
     notes: str = ""
 
@@ -294,6 +302,8 @@ class ReconditionnementResponse(BaseModel):
     id: int; lot_id: int; date_reconditionnement: datetime
     type_source: str; nb_cartons_entree: int; nb_sachets_100g_sortie: int
     dechet_kg: float; nb_sachets_sortis: int
+    rhum_cartons_sortie: int = 0; rhum_sachets_sortis: int = 0; rhum_poids_sachet: float = 2.5
+    rhum_poids_vrac_kg: float = 0.0
     responsable: str; notes: str; statut: str
     class Config: from_attributes = True
 

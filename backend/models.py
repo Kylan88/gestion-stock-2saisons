@@ -253,6 +253,12 @@ class Reconditionnement(Base):
     nb_sachets_100g_sortie = Column(Integer, default=0)
     dechet_kg = Column(Float, default=0.0)
     nb_sachets_sortis = Column(Integer, default=0)
+    # Rhum arrangé obtenu depuis ces cartons (source local ou fitini fê uniquement)
+    rhum_cartons_sortie = Column(Integer, default=0)
+    rhum_sachets_sortis = Column(Integer, default=0)
+    rhum_poids_sachet = Column(Float, default=2.5)
+    # Rhum en vrac (kg) : quand la quantité obtenue ne remplit ni cartons ni sachets
+    rhum_poids_vrac_kg = Column(Float, default=0.0)
     responsable = Column(String(100), default="")
     notes = Column(Text, default="")
     statut = Column(String(20), default=statuses.TERMINE)

@@ -1634,13 +1634,19 @@ def alimenter_stock_depuis_conditionnement(db: Session, lot_id: int,
 def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
                             nb_cartons_entree: int, dechet_kg: float = 0.0,
                             nb_sachets_sortis: int = 0, responsable: str = "",
-                            notes: str = "") -> dict:
-    from models import Reconditionnement, StockZone, Produit
+                            notes: str = "", rhum_cartons_sortie: int = 0,
+                            rhum_sachets_sortis: int = 0,
+                            rhum_poids_sachet: float = 2.5,
+                            rhum_poids_vrac_kg: float = 0.0,
+                            zone_id: int | None = None) -> dict:
+    from models import Reconditionnement, StockZone, Produit, ZoneStockage
     lot = get_lot(db, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
     if nb_cartons_entree <= 0:
         raise ValueError("Le nombre de cartons doit être supérieur à zéro")
+    if (rhum_cartons_sortie or 0) < 0 or (rhum_sachets_sortis or 0) < 0 or (rhum_poids_vrac_kg or 0) < 0:
+        raise ValueError("Les quantités de rhum arrangé ne peuvent pas être négatives")
 
     if type_source == "local":
         disponible = lot.local_cartons
@@ -1736,9 +1742,53 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
         nb_sachets_100g_sortie=nb_sachets_100g,
         dechet_kg=dechet_kg or 0.0,
         nb_sachets_sortis=nb_sachets_sortis or 0,
+        rhum_cartons_sortie=rhum_cartons_sortie or 0,
+        rhum_sachets_sortis=rhum_sachets_sortis or 0,
+        rhum_poids_sachet=rhum_poids_sachet or 2.5,
+        rhum_poids_vrac_kg=rhum_poids_vrac_kg or 0.0,
         responsable=responsable, notes=notes,
     )
     db.add(recond)
+    db.flush()
+
+    # Rhum arrangé obtenu depuis ces cartons (local/fitini fê) → stock Rhum arrangé.
+    # Matière déjà déduite via les cartons sources : pas de double déduction.
+    # Le vrac (kg) couvre ce qui ne remplit ni cartons ni sachets (ex. 1,2 kg).
+    rhum_total_sachets = (rhum_cartons_sortie or 0) * 6 + (rhum_sachets_sortis or 0)
+    rhum_vrac_kg = round(rhum_poids_vrac_kg or 0.0, 2)
+    rhum = {"alimente": False}
+    if rhum_total_sachets > 0 or rhum_vrac_kg > 0:
+        rhum_produit = db.query(Produit).filter(Produit.nom == "Rhum arrangé").first()
+        if not rhum_produit:
+            rhum_produit = Produit(nom="Rhum arrangé", actif=True)
+            db.add(rhum_produit); db.flush()
+        rhum_zone = None
+        if zone_id:
+            rhum_zone = db.get(ZoneStockage, zone_id)
+            if rhum_zone and not rhum_zone.actif:
+                rhum_zone = None
+        if not rhum_zone:
+            rhum_zone = db.query(ZoneStockage).filter(
+                ZoneStockage.actif == True, ZoneStockage.type_zone == "froid"
+            ).order_by(ZoneStockage.id).first() or db.query(ZoneStockage).filter(
+                ZoneStockage.actif == True
+            ).order_by(ZoneStockage.id).first()
+        if not rhum_zone:
+            rhum = {"alimente": False, "raison": "aucune zone de stockage active"}
+        else:
+            rhum_poids = round(rhum_total_sachets * (rhum_poids_sachet or 2.5) + rhum_vrac_kg, 2)
+            db.add(StockZone(
+                zone_id=rhum_zone.id, lot_id=lot_id, produit_id=rhum_produit.id,
+                quantite=rhum_poids, sachets=rhum_total_sachets,
+            ))
+            db.flush()
+            rhum_produit.stock_actuel = float(db.query(
+                func.coalesce(func.sum(StockZone.quantite), 0)).filter(
+                StockZone.produit_id == rhum_produit.id, StockZone.date_sortie.is_(None)
+            ).scalar() or 0)
+            rhum = {"alimente": True, "cartons": rhum_cartons_sortie or 0,
+                    "sachets": rhum_sachets_sortis or 0,
+                    "vrac_kg": rhum_vrac_kg, "poids_kg": rhum_poids, "zone": rhum_zone.nom}
     db.commit(); db.refresh(recond)
 
     return {
@@ -1750,6 +1800,7 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
         "stock_initial_sachets": stock_initial,
         "stock_final_sachets": total_sachets,
         "poids_total_kg": total_kg,
+        "rhum": rhum,
     }
 
 

@@ -71,6 +71,20 @@
               <span>Estimation : <strong>{{ resultRecond(form[lot.id].local || 0, lot.local_poids_sachet) }}</strong> sachets</span>
               <span>En stock : <strong>{{ stockFinal(lot.id,'local', lot.local_poids_sachet) }}</strong> sachets</span>
             </div>
+            <div class="form-row" style="margin-top:8px">
+              <div class="form-group" style="flex:1">
+                <label>Rhum arrangé obtenu (cartons)</label>
+                <input type="number" v-model.number="form[lot.id].local_rhum" class="input" min="0" placeholder="0" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Rhum arrangé (sachets vrac)</label>
+                <input type="number" v-model.number="form[lot.id].local_rhum_sachets" class="input" min="0" placeholder="0" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Rhum en vrac (kg)</label>
+                <input type="number" v-model.number="form[lot.id].local_rhum_vrac" class="input" step="0.1" min="0" placeholder="ex. 1,2" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -98,6 +112,20 @@
               <span>Estimation : <strong>{{ resultRecond(form[lot.id].fitini || 0, lot.fitini_fe_poids_sachet) }}</strong> sachets</span>
               <span>En stock : <strong>{{ stockFinal(lot.id,'fitini_fe', lot.fitini_fe_poids_sachet) }}</strong> sachets</span>
             </div>
+            <div class="form-row" style="margin-top:8px">
+              <div class="form-group" style="flex:1">
+                <label>Rhum arrangé obtenu (cartons)</label>
+                <input type="number" v-model.number="form[lot.id].fitini_rhum" class="input" min="0" placeholder="0" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Rhum arrangé (sachets vrac)</label>
+                <input type="number" v-model.number="form[lot.id].fitini_rhum_sachets" class="input" min="0" placeholder="0" />
+              </div>
+              <div class="form-group" style="flex:1">
+                <label>Rhum en vrac (kg)</label>
+                <input type="number" v-model.number="form[lot.id].fitini_rhum_vrac" class="input" step="0.1" min="0" placeholder="ex. 1,2" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -110,6 +138,13 @@
         <div class="form-group" style="flex:1">
           <label>Responsable</label>
           <input v-model="form[lot.id].responsable" class="input" placeholder="Nom" />
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>Chambre (rhum obtenu)</label>
+          <select v-model="form[lot.id].zone_id" class="input">
+            <option :value="null">Défaut (1re froide)</option>
+            <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.nom }}</option>
+          </select>
         </div>
         <div class="form-group" style="flex:0">
           <label>&nbsp;</label>
@@ -125,11 +160,11 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getLots, creerReconditionnement, getReconditionnements } from '../api'
+import { getLots, creerReconditionnement, getReconditionnements, getStock, getZonesStock } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import PageHeader from '../components/PageHeader.vue'
-import { toCanonical, CONDITIONNE, EN_STOCK } from '../utils/statuses'
+import { toCanonical, CONDITIONNE, EN_STOCK, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT } from '../utils/statuses'
 
 const lots = ref([])
 const historique = ref([])
@@ -140,6 +175,7 @@ const saving = ref(false)
 const toast = useToastStore()
 const form = reactive({})
 const stocks = ref({})
+const zones = ref([])
 
 function fmt(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '—' }
 function resultRecond(cartons, poidsSachet) {
@@ -180,17 +216,29 @@ async function load() {
   loading.value = true
   try {
     const raw = await getLots()
-    lots.value = raw.filter(l => [CONDITIONNE, EN_STOCK].includes(toCanonical(l.statut)) && (l.local_cartons > 0 || l.fitini_fe_cartons > 0))
+    // Flux continu : tout lot avec des cartons local/fitini_fe, quel que soit
+    // son statut (le backend contrôle les dispos, sans filtre statut).
+    lots.value = raw.filter(l => [EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK].includes(toCanonical(l.statut)) && (l.local_cartons > 0 || l.fitini_fe_cartons > 0))
+    try {
+      const z = await getZonesStock()
+      zones.value = (z || []).filter(zz => zz.actif)
+    } catch { zones.value = [] }
+    const defZone = (zones.value.find(zz => zz.type_zone === 'froid') || zones.value[0])?.id ?? null
     for (const lot of lots.value) {
-      form[lot.id] = reactive({ local: 0, local_dechet: 0, local_sortis: 0, fitini: 0, fitini_dechet: 0, fitini_sortis: 0, responsable: '' })
-      // stock initial
-      try {
-        const all = await getReconditionnements({ lot_id: lot.id })
-        // stock initial = dernier stock final si existant, sinon 0 (simplifié)
-        stocks.value[lot.id + '_local'] = 0
-        stocks.value[lot.id + '_fitini_fe'] = 0
-      } catch {}
+      form[lot.id] = reactive({ local: 0, local_dechet: 0, local_sortis: 0, local_rhum: 0, local_rhum_sachets: 0, local_rhum_vrac: 0, fitini: 0, fitini_dechet: 0, fitini_sortis: 0, fitini_rhum: 0, fitini_rhum_sachets: 0, fitini_rhum_vrac: 0, zone_id: defZone, responsable: '' })
     }
+    // Vrai stock de sachets 100g par lot (issu de la chambre froide, auto + manuel)
+    try {
+      const st = await getStock()
+      for (const s of (st || [])) {
+        if (!s.lot_id || !(s.sachets > 0)) continue
+        const pname = s.produit?.nom || ''
+        const type = pname === 'Sachet 100g local' ? 'local' : pname === 'Sachet 100g fitini_fe' ? 'fitini_fe' : null
+        if (!type) continue
+        const k = s.lot_id + '_' + type
+        stocks.value[k] = (stocks.value[k] || 0) + s.sachets
+      }
+    } catch {}
     if (activeView.value === 'historique') await loadHistorique()
   } finally { loading.value = false }
 }
@@ -200,15 +248,22 @@ async function valider(lot) {
   try {
     const d = form[lot.id]
     if (d.local > 0) {
-      await creerReconditionnement({ lot_id: lot.id, type_source: 'local', nb_cartons_entree: d.local, dechet_kg: d.local_dechet || 0, nb_sachets_sortis: d.local_sortis || 0, responsable: d.responsable })
-      toast.success(`Reconditionnement local créé : ${resultRecond(d.local, lot.local_poids_sachet)} sachets`)
+      const res = await creerReconditionnement({ lot_id: lot.id, type_source: 'local', nb_cartons_entree: d.local, dechet_kg: d.local_dechet || 0, nb_sachets_sortis: d.local_sortis || 0, rhum_cartons_sortie: d.local_rhum || 0, rhum_sachets_sortis: d.local_rhum_sachets || 0, rhum_poids_vrac_kg: d.local_rhum_vrac || 0, zone_id: d.zone_id ?? null, responsable: d.responsable })
+      toast.success(`Reconditionnement local créé : ${resultRecond(d.local, lot.local_poids_sachet)} sachets` + rhumMsg(res?.rhum))
     }
     if (d.fitini > 0) {
-      await creerReconditionnement({ lot_id: lot.id, type_source: 'fitini_fe', nb_cartons_entree: d.fitini, dechet_kg: d.fitini_dechet || 0, nb_sachets_sortis: d.fitini_sortis || 0, responsable: d.responsable })
-      toast.success(`Reconditionnement fitini fê créé : ${resultRecond(d.fitini, lot.fitini_fe_poids_sachet)} sachets`)
+      const res = await creerReconditionnement({ lot_id: lot.id, type_source: 'fitini_fe', nb_cartons_entree: d.fitini, dechet_kg: d.fitini_dechet || 0, nb_sachets_sortis: d.fitini_sortis || 0, rhum_cartons_sortie: d.fitini_rhum || 0, rhum_sachets_sortis: d.fitini_rhum_sachets || 0, rhum_poids_vrac_kg: d.fitini_rhum_vrac || 0, zone_id: d.zone_id ?? null, responsable: d.responsable })
+      toast.success(`Reconditionnement fitini fê créé : ${resultRecond(d.fitini, lot.fitini_fe_poids_sachet)} sachets` + rhumMsg(res?.rhum))
     }
     await load()
   } finally { saving.value = false }
+}
+function rhumMsg(rhum) {
+  if (rhum?.alimente) {
+    const vrac = rhum.vrac_kg ? ` + ${rhum.vrac_kg} kg vrac` : ''
+    return ` — rhum +${rhum.cartons || 0} cartons / ${rhum.sachets || 0} sachets${vrac} (${rhum.zone})`
+  }
+  return ''
 }
 
 onMounted(load)

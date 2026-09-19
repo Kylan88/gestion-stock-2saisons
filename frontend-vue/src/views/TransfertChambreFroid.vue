@@ -12,7 +12,8 @@
     </div>
     <div v-else-if="lots.length === 0" class="empty anim-fade">
       <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
-      <div class="empty-text">Aucun lot terminé en attente de transfert</div>
+      <div class="empty-text">Aucun carton en attente de transfert</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:6px">Les saisies alimentent déjà la chambre froide — voir les demandes récentes ci-dessous</div>
     </div>
 
     <div v-for="lot in lots" :key="lot.id" class="card anim-fade" style="margin-bottom:16px">
@@ -24,22 +25,22 @@
         </div>
       </div>
 
-      <div v-if="lot.statut_transfert === 'valide'" class="transfert-ok">
-        Transfert validé
+      <div v-if="restantTotal(lot) === 0" class="transfert-ok">
+        Stock à jour — chambre froide alimentée
       </div>
 
       <div v-else class="transfert-form">
         <div class="transfert-fluxes">
-          <div v-for="flux in getFluxesForLot(lot)" :key="flux.key" class="transfert-flux" :class="{'has-error': (form[lot.id][flux.key + '_cartons']||0) > lot[flux.field]}">
+          <div v-for="flux in getFluxesForLot(lot)" :key="flux.key" class="transfert-flux" :class="{'has-error': (form[lot.id][flux.key + '_cartons']||0) > restantCartons(lot, flux)}">
             <div class="flux-info">
               <span class="flux-badge" :style="{background: flux.color}">{{ flux.label }}</span>
-              <span>{{ lot[flux.field] }} cartons disponibles</span>
-              <span v-if="(form[lot.id][flux.key + '_cartons']||0) > lot[flux.field]" class="field-error" style="margin-left:auto">Dépasse max {{ lot[flux.field] }}</span>
+              <span>{{ restantCartons(lot, flux) }} cartons à transférer ({{ lot[flux.field] }} conditionnés)</span>
+              <span v-if="(form[lot.id][flux.key + '_cartons']||0) > restantCartons(lot, flux)" class="field-error" style="margin-left:auto">Dépasse max {{ restantCartons(lot, flux) }}</span>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>Cartons à transférer</label>
-                <input type="number" v-model.number="form[lot.id][flux.key + '_cartons']" class="input" min="0" :max="lot[flux.field]" :placeholder="'max ' + lot[flux.field]" />
+                <input type="number" v-model.number="form[lot.id][flux.key + '_cartons']" class="input" min="0" :max="restantCartons(lot, flux)" :placeholder="'max ' + restantCartons(lot, flux)" />
               </div>
               <div class="form-group">
                 <label>Chambre froide</label>
@@ -101,7 +102,7 @@ import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
-import { toCanonical, CONDITIONNE, EN_STOCK } from '../utils/statuses'
+import { toCanonical, CONDITIONNE, EN_STOCK, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT } from '../utils/statuses'
 
 const lots = ref([])
 const demandes = ref([])
@@ -110,6 +111,8 @@ const loading = ref(true)
 const saving = ref(false)
 const toast = useToastStore()
 const form = reactive({})
+// Cartons déjà en chambre froide (demandes validées) par lot+flux : "lotId_flux" -> nb
+const transferes = reactive({})
 
 const fluxConfig = [
   { key: 'export', label: 'Export', field: 'export_cartons', color: '#00853E' },
@@ -119,7 +122,14 @@ const fluxConfig = [
   { key: 'rhum', label: 'Rhum', field: 'rhum_cartons', color: '#d97706' },
 ]
 function getFluxesForLot(lot) {
-  return fluxConfig.filter(f => (lot[f.field] || 0) > 0)
+  return fluxConfig.filter(f => restantCartons(lot, f) > 0)
+}
+// Reste à transférer = cartons conditionnés − déjà en chambre froide (auto + manuel validés)
+function restantCartons(lot, flux) {
+  return Math.max(0, (lot[flux.field] || 0) - (transferes[lot.id + '_' + flux.key] || 0))
+}
+function restantTotal(lot) {
+  return fluxConfig.reduce((s, f) => s + restantCartons(lot, f), 0)
 }
 const creatingZones = ref(false)
 async function seedZones() {
@@ -137,7 +147,7 @@ function initForm(lotId, lot) {
   const init = { responsable: '', notes: '' }
   const defaultZone = zones.value[0]?.id ?? ''
   for (const f of fluxConfig) {
-    init[f.key + '_cartons'] = lot[f.field] || 0
+    init[f.key + '_cartons'] = restantCartons(lot, f)
     init[f.key + '_zone_id'] = defaultZone
   }
   form[lotId] = reactive(init)
@@ -155,11 +165,25 @@ async function load() {
   try {
     const [raw, z] = await Promise.all([getLots(), getZonesStock()])
     zones.value = z.filter(z => z.actif)
-    lots.value = raw.filter(l => toCanonical(l.statut) === CONDITIONNE)
+    demandes.value = await getDemandesTransfert()
+    // Déjà transféré (validé) par lot+flux — auto-journalier inclus
+    for (const k of Object.keys(transferes)) delete transferes[k]
+    for (const d of demandes.value) {
+      if (toCanonical(d.statut) !== 'validee') continue
+      for (const l of (d.lignes || [])) {
+        const k = d.lot_id + '_' + l.type_flux
+        transferes[k] = (transferes[k] || 0) + (l.nb_cartons || 0)
+      }
+    }
+    // Flux continu : tout lot avec des cartons conditionnés non transférés,
+    // quel que soit son statut (musserie/production/conditionnement/conditionne).
+    lots.value = raw.filter(l =>
+      [EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut))
+      && restantTotal(l) > 0
+    )
     for (const lot of lots.value) {
       initForm(lot.id, lot)
     }
-    demandes.value = await getDemandesTransfert()
   } finally { loading.value = false }
 }
 
@@ -172,7 +196,8 @@ async function valider(lot) {
     for (const f of fluxConfig) {
       const nb = d[f.key + '_cartons'] || 0
       if (nb > 0) {
-        if (nb > (lot[f.field] || 0)) { toast.error(`${f.label}: ${nb} dépasse ${lot[f.field]}`); return }
+        const max = restantCartons(lot, f)
+        if (nb > max) { toast.error(`${f.label}: ${nb} dépasse le reste à transférer (${max})`); return }
         lignes.push({ type_flux: f.key, nb_cartons: nb, zone_id: d[f.key + '_zone_id'] })
       }
     }

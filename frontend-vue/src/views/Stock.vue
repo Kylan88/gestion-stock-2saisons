@@ -86,8 +86,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getZonesStock, getContenuZone, getLots, getReconditionnements } from '../api'
-import { toCanonical, EN_STOCK, EXPEDIE, PERIME } from '../utils/statuses'
+import { getZonesStock, getContenuZone, getReconditionnements } from '../api'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -102,12 +101,15 @@ const lotsTraites = ref(0)
 async function load() {
   loading.value = true
   try {
-    const [z, lots, recs] = await Promise.all([getZonesStock(), getLots(), getReconditionnements()])
+    const [z, recs] = await Promise.all([getZonesStock(), getReconditionnements()])
     zones.value = z
-    lotsTraites.value = lots.filter(l => [EN_STOCK, EXPEDIE, PERIME].includes(toCanonical(l.statut))).length
     reconds.value = recs
     const contents = await Promise.all(z.map(zone => getContenuZone(zone.id)))
     z.forEach((zone, i) => { stocksByZone[zone.id] = contents[i] })
+    // Lots réellement présents en zone (flux continu : le statut du lot ne dit plus rien)
+    const lotIds = new Set()
+    contents.flat().forEach(s => { if (s.lot_id) lotIds.add(s.lot_id) })
+    lotsTraites.value = lotIds.size
   } finally { loading.value = false }
 }
 

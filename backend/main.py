@@ -31,6 +31,12 @@ _etapes_columns = {column["name"] for column in inspect(engine).get_columns("eta
 if "poids_sec_kg" not in _etapes_columns:
     with engine.begin() as connection:
         connection.execute(text("ALTER TABLE etapes_production ADD COLUMN poids_sec_kg FLOAT"))
+_recond_columns = {column["name"] for column in inspect(engine).get_columns("reconditionnements")}
+for _col in ("rhum_cartons_sortie INTEGER", "rhum_sachets_sortis INTEGER", "rhum_poids_sachet FLOAT", "rhum_poids_vrac_kg FLOAT"):
+    _name = _col.split()[0]
+    if _name not in _recond_columns:
+        with engine.begin() as connection:
+            connection.execute(text(f"ALTER TABLE reconditionnements ADD COLUMN {_col}"))
 
 # ── Application FastAPI ──
 app = FastAPI(
