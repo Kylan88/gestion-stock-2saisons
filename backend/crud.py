@@ -271,11 +271,28 @@ def valider_musserie(db: Session, lot_id: int,
     lot = db.get(Lot, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
+    # Une seule validation par (lot, dryer, jour) — jour = date_debut du jour courant
+    # Si une étape ouverte existe pour ce dryer AUJOURD'HUI, on la MET À JOUR (écrasement)
+    # sinon on crée une nouvelle entrée du jour (permet MAJ sans cumul, et multi-jours sans doublon)
     ep = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie",
         EtapeProduction.dryer == (dryer or None),
-        EtapeProduction.statut != statuses.TERMINE
+        EtapeProduction.statut != statuses.TERMINE,
+        EtapeProduction.date_debut >= today_start(),
+        EtapeProduction.date_debut < tomorrow_start(),
     ).first()
+    # fallback : si aucune entrée du jour, mais une ancienne ouverte sans date (compat), on la réutilise pour MAJ du jour même
+    if not ep:
+        ep = db.query(EtapeProduction).filter(
+            EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie",
+            EtapeProduction.dryer == (dryer or None),
+            EtapeProduction.statut != statuses.TERMINE,
+        ).first()
+        # si cette ancienne est d'un jour précédent (date_debut < today), on ne la réutilise pas : on crée une nouvelle
+        if ep and ep.date_debut and ep.date_debut < today_start():
+            ep = None
+    is_update = ep is not None and ep.id is not None
+    old_retour_mure = (ep.retour_mure_kg or 0) if is_update else 0
     if not ep:
         ep = EtapeProduction(lot_id=lot_id, etape="musserie", ordre=1, statut="en_cours", dryer=dryer or None)
         db.add(ep); db.flush()
@@ -286,30 +303,40 @@ def valider_musserie(db: Session, lot_id: int,
     if operateur:
         ep.operateur = operateur
 
-    ep.fruits_murs_kg = (ep.fruits_murs_kg or 0) + fruits_murs_kg
-    ep.dechets_tri_kg = (ep.dechets_tri_kg or 0) + dechets_tri_kg
-    ep.dechets_lavage_kg = (ep.dechets_lavage_kg or 0) + dechets_lavage_kg
-    ep.retour_non_mur_kg = (ep.retour_non_mur_kg or 0) + retour_non_mur_kg
-    ep.retour_mure_kg = (ep.retour_mure_kg or 0) + retour_mure_kg
-    ep.dechets_production_kg = (ep.dechets_production_kg or 0) + dechets_production_kg
-    ep.quantite_acceptee_kg = (ep.quantite_acceptee_kg or 0) + quantite_acceptee_kg
-    ep.quantite_transferee_kg = (ep.quantite_transferee_kg or 0) + quantite_transferee_kg
-    ep.stock_restant_kg = quantite_transferee_kg if quantite_transferee_kg else (ep.stock_restant_kg or 0) + stock_restant_kg
-    ep.stock_lendemain_kg = quantite_transferee_kg if quantite_transferee_kg else (ep.stock_lendemain_kg or 0) + stock_lendemain_kg
+    # MAJ : écrasement des valeurs du jour (pas de +=)
+    ep.fruits_murs_kg = fruits_murs_kg
+    ep.dechets_tri_kg = dechets_tri_kg
+    ep.dechets_lavage_kg = dechets_lavage_kg
+    ep.retour_non_mur_kg = retour_non_mur_kg
+    ep.retour_mure_kg = retour_mure_kg
+    ep.dechets_production_kg = dechets_production_kg
+    ep.quantite_acceptee_kg = quantite_acceptee_kg
+    ep.quantite_transferee_kg = quantite_transferee_kg
+    ep.stock_restant_kg = stock_restant_kg if quantite_transferee_kg else stock_restant_kg
+    ep.stock_lendemain_kg = stock_lendemain_kg if quantite_transferee_kg else stock_lendemain_kg
 
-    poids_sortie = max(0, ep.fruits_murs_kg - ep.retour_non_mur_kg - ep.dechets_lavage_kg - ep.dechets_production_kg)
+    # Le retour mûr RÉDUIT la sortie et AUGMENTE le lot — on applique le delta, pas le cumul
+    delta_retour = retour_mure_kg - old_retour_mure
+    lot.poids_frais = (lot.poids_frais or 0) + delta_retour
+
+    # Envoi journalier : tri NON déduit (le tri reste une perte lot, pas une perte dryer)
+    mure_net_kg = ep.fruits_murs_kg - ep.retour_mure_kg
+    poids_sortie = max(0, mure_net_kg - ep.retour_non_mur_kg - ep.dechets_lavage_kg - ep.dechets_production_kg)
     ep.poids_sortie = round(poids_sortie, 2)
     perte = ep.dechets_tri_kg + ep.dechets_lavage_kg + ep.dechets_production_kg
     ep.perte = round(perte, 2)
     total_consomme = ep.fruits_murs_kg
     ep.rendement_pourcentage = round((poids_sortie / total_consomme) * 100, 1) if total_consomme > 0 else None
 
-    base_restant = lot.quantite_restante or lot.poids_frais or 0
-    if reste_kg is not None:
-        lot.quantite_restante = round(max(0, reste_kg), 2)
-    else:
-        # Lots : reste = reçu − Σ fruits_murs envoyés (sans déchets/retour, cf. consigne)
-        lot.quantite_restante = round(max(0, base_restant - fruits_murs_kg), 2)
+    # Reste lot = reçu - Σ(net mûrs) - Σ(tri)  — tri retiré du lot, pas de l'envoi journalier
+    # Multi-dryer : somme sur toutes les étapes musserie du lot
+    db.flush()
+    all_mus = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie"
+    ).all()
+    total_net = sum((e.fruits_murs_kg or 0) - (e.retour_mure_kg or 0) for e in all_mus)
+    total_tri = sum(e.dechets_tri_kg or 0 for e in all_mus)
+    lot.quantite_restante = round(max(0, (lot.poids_frais or 0) - total_net - total_tri), 2)
     if statuses.normalize(lot.statut) == statuses.RECEPTION:
         lot.statut = statuses.EN_MUSSERIE
 
@@ -454,6 +481,8 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
     if not ep.date_debut:
         ep.date_debut = datetime.now()
     ep.operateur = operateur
+    ep.dryer = dryer
+    ep.nbre_chariots = nbre_chariots
 
     ep_musserie = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie",
@@ -465,6 +494,8 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
         ).first()
     dechets_prod = ep_musserie.dechets_production_kg if ep_musserie else 0.0
     ep.dechets_production_kg = dechets_prod
+    # Frais net issu de la musserie (référence), pulpe chargée = saisie jour.
+    frais_net = (ep_musserie.poids_sortie or 0.0) if ep_musserie else 0.0
 
     validate_weight_flow(db, lot_id, "production", quantite_totale)
 
@@ -478,7 +509,7 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
             quantite_totale=quantite_totale,
             operateur=operateur,
             heure_remplissage=c_data.get("heure_remplissage", ""),
-            heure_entree_sechoir=c_data.get("heure_entree_sechoir", ""),
+            heure_entree_dryer=c_data.get("heure_entree_dryer", ""),
         )
         db.add(chariot)
 
@@ -489,34 +520,64 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
     for c in all_chariots:
         if c.dryer not in dryers_seen:
             dryers_seen[c.dryer] = {"dryer": c.dryer, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale}
-    ep.poids_entree = sum(d["quantite_totale"] for d in dryers_seen.values())
-    ep.poids_sortie = max(0, ep.poids_entree - ep.dechets_production_kg)
+    # Poids entrée = frais net musserie ; sortie = pulpe chargée ; perte = écart.
+    # Un dryer journalier ne clôture jamais le lot : le reste frais est suivi via le lot.
+    if frais_net > 0:
+        ep.poids_entree = round(frais_net, 2)
+    else:
+        ep.poids_entree = sum(d["quantite_totale"] for d in dryers_seen.values())
+    ep.poids_sortie = round(quantite_totale, 2)
+    ep.perte = round(max(0, ep.poids_entree - ep.poids_sortie), 2)
     ep.total_claies = sum(d["total_claies"] for d in dryers_seen.values())
+    ep.nbre_chariots = nbre_chariots
     ep.notes = " + ".join(f"Dryer {d['dryer']} ({d['nbre_chariots']} chariots)" for d in dryers_seen.values())
 
     db.commit(); db.refresh(ep)
+    # Enrichit le retour pour le frontend (frais net / pulpe / sec).
+    for d in dryers_seen.values():
+        d["poids_frais_net_kg"] = ep.poids_entree
+        d["pulpe_kg"] = ep.poids_sortie
+        d["poids_sec_kg"] = ep.poids_sec_kg
     return {"etape": ep, "dryers": list(dryers_seen.values())}
 
 
-def cloturer_production(db: Session, lot_id: int) -> EtapeProduction:
-    eps = db.query(EtapeProduction).filter(
+def cloturer_production(db: Session, lot_id: int, date_str: str | None = None) -> EtapeProduction:
+    """Clôture les dryers d'une journée sans fermer le lot.
+    - Si date_str (YYYY-MM-DD) : ne clôture que les productions de ce jour,
+      le lot reste ouvert tant qu'il reste de la matière à traiter.
+    - Si None : clôture tout (comportement historique) puis avance le lot
+      vers en_conditionnement uniquement s'il était en_production.
+    """
+    query = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "production"
-    ).all()
+    )
+    if date_str:
+        try:
+            target = date_type.fromisoformat(date_str)
+        except ValueError:
+            raise ValueError("Format date invalide (attendu YYYY-MM-DD)")
+        query = query.filter(
+            func.date(EtapeProduction.date_debut) == target
+        )
+    eps = query.all()
     if not eps:
         raise ValueError(f"Aucune étape production pour le lot {lot_id}")
     main = None
     for ep in eps:
         if ep.statut != statuses.TERMINE:
             ep.statut = statuses.TERMINE
-            ep.date_fin = datetime.now()
+            ep.date_fin = ep.date_fin or datetime.now()
             if main is None:
                 main = ep
     if main is None:
         main = eps[-1]
     lot = db.get(models.Lot, lot_id)
-    if lot:
-        statuses.validate_transition(lot.statut, statuses.EN_CONDITIONNEMENT)
-        lot.statut = statuses.EN_CONDITIONNEMENT
+    # Clôture journalière : le lot reste ouvert (flux continu musserie⇄production).
+    if not date_str:
+        if lot and statuses.normalize(lot.statut) == statuses.EN_PRODUCTION:
+            # flux continu : on n'avance le statut que si le lot a fini sa musserie
+            statuses.validate_transition(lot.statut, statuses.EN_CONDITIONNEMENT)
+            lot.statut = statuses.EN_CONDITIONNEMENT
     db.commit(); db.refresh(main)
     if lot: db.refresh(lot)
     return main
@@ -530,15 +591,24 @@ def get_dryers_production(db: Session, lot_id: int) -> list:
         return []
     ep_ids = [e.id for e in eps]
     chariots = db.query(Chariot).filter(Chariot.etape_production_id.in_(ep_ids)).order_by(Chariot.id).all()
+    by_ep = {e.id: e for e in eps}
     dryers = {}
     for c in chariots:
         d = c.dryer
+        ep = by_ep.get(c.etape_production_id)
         if d not in dryers:
-            dryers[d] = {"dryer": d, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale, "operateur": c.operateur or "", "chariots": []}
+            dryers[d] = {"dryer": d, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale, "poids_frais_net_kg": (ep.poids_entree if ep else c.quantite_totale) or 0, "pulpe_kg": (ep.poids_sortie if ep else c.quantite_totale) or 0, "poids_sec_kg": ep.poids_sec_kg if ep else None, "operateur": c.operateur or "", "chariots": []}
         dryers[d]["chariots"].append({
             "id": c.id, "numero_chariot": c.numero_chariot,
-            "heure_remplissage": c.heure_remplissage, "heure_entree_sechoir": c.heure_entree_sechoir,
+            "heure_remplissage": c.heure_remplissage, "heure_entree_dryer": c.heure_entree_dryer,
         })
+    # Inclut les étapes sans chariots détaillés (saisie rapide),
+    # mais pas les placeholders créés par cloturer_musserie (pas de chariots, pulpe 0).
+    for ep in eps:
+        if ep.dryer and ep.dryer not in dryers:
+            if not (ep.poids_sortie or 0) > 0:
+                continue
+            dryers[ep.dryer] = {"dryer": ep.dryer, "nbre_chariots": ep.nbre_chariots or 0, "total_claies": ep.total_claies or 0, "quantite_totale": ep.poids_sortie or 0, "poids_frais_net_kg": ep.poids_entree or 0, "pulpe_kg": ep.poids_sortie or 0, "poids_sec_kg": ep.poids_sec_kg, "operateur": ep.operateur or "", "chariots": []}
     return list(dryers.values())
 
 # ── CONDITIONNEMENT (cartons) — cumul journalier ──
@@ -627,6 +697,15 @@ def valider_conditionnement(db: Session, lot_id: int,
     reference = sum(ep.poids_sortie or 0.0 for ep in productions) if productions else etape_cond.poids_entree or 0.0
 
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
+    # Flux continu : bascule auto vers 'conditionne' si le lot est épuisé.
+    epuise = _bascule_auto_lot_epuise(db, lot)
+    db.refresh(lot)
+    # Chaque saisie alimente le stock (delta uniquement, jamais bloquant).
+    try:
+        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
+    except Exception as e:
+        stock = {"alimente": False, "raison": str(e)}
+    db.refresh(lot)
 
     return {
         "lot_id": lot_id,
@@ -637,18 +716,37 @@ def valider_conditionnement(db: Session, lot_id: int,
         "dechets_cartons": lot.dechets_cartons, "rhum_cartons": lot.rhum_cartons,
         "fitini_fe_cartons": lot.fitini_fe_cartons,
         "statut_lot": lot.statut,
+        "lot_epuise": epuise,
+        "stock": stock,
     }
 
 
-def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
-    """Clôture le conditionnement : valide les poids et passe le lot à conditionne."""
+def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = None) -> dict:
+    """Fige la journée de conditionnement (flux continu : jamais de fermeture manuelle).
+    Le lot reste toujours ouvert ; s'il est épuisé (reste <= 0, productions
+    terminées, flux non vide), il bascule seul vers 'conditionne'.
+    """
     lot = get_lot(db, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
+    # reste >0 : on autorise la clôture journalière, la finale sera bloquée plus bas si besoin
+    # (on ne bloque plus ici, le lot peut avoir du reste pour les jours suivants)
 
     etape_cond = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "conditionnement"
     ).first()
+    # idempotent : déjà clôturé -> on renvoie l'état sans erreur (évite le double-clic)
+    if (etape_cond and etape_cond.statut == statuses.TERMINE
+            and statuses.normalize(lot.statut) == statuses.CONDITIONNE):
+        return {
+            "lot_id": lot_id,
+            "code_lot": lot.code_lot,
+            "poids_sec_final": etape_cond.poids_sortie,
+            "ecart_bilan_pourcentage": lot.ecart_bilan_pourcentage,
+            "rendement_global": lot.rendement_global,
+            "statut_lot": lot.statut,
+            "deja_cloture": True,
+        }
     if not etape_cond:
         # compat per dryer J+1 : vérifie ConditionnementEntry
         from models import ConditionnementEntry
@@ -669,11 +767,11 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
     ).all()
     if not productions:
         raise ValueError("Aucune production trouvée pour ce lot")
-    for ep in productions:
-        if ep.statut != statuses.TERMINE:
-            raise ValueError("Toutes les productions doivent être terminées avant de clôturer le conditionnement")
+    productions_terminees = [ep for ep in productions if ep.statut == statuses.TERMINE]
+    if not productions_terminees:
+        raise ValueError("Aucune production terminée — saisie du conditionnement impossible")
 
-    reference = sum(ep.poids_sortie or 0.0 for ep in productions)
+    reference = sum((ep.poids_sortie or 0.0) for ep in productions_terminees)
     etape_cond.poids_entree = reference
     total_flux = _calc_total_flux(lot)
 
@@ -685,21 +783,29 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
     ecart_pourcentage = None
     if reference and reference > 0:
         ecart_pourcentage = round(abs(reference - total_flux) / reference * 100, 2)
+    # on n'empêche plus la clôture journalière même si écart >10% — on le signale seulement
+    # (le seuil 10% reste indicatif pour le bilan, pas bloquant)
 
     lot.ecart_bilan_pourcentage = ecart_pourcentage
     lot.poids_sec_final = total_flux
     if lot.poids_frais > 0:
         lot.rendement_global = round((total_flux / lot.poids_frais) * 100, 1)
 
-    etape_cond.statut = statuses.TERMINE
+    # Flux continu : on fige la journée sans jamais fermer le lot à la main.
+    # Si le lot est épuisé, la bascule vers 'conditionne' se fait seule.
+    etape_cond.statut = statuses.EN_COURS
     etape_cond.date_fin = datetime.now()
     etape_cond.poids_sortie = total_flux
     etape_cond.rendement_pourcentage = lot.rendement_global
-
-    statuses.validate_transition(lot.statut, statuses.CONDITIONNE)
-    lot.statut = statuses.CONDITIONNE
-
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
+    epuise = _bascule_auto_lot_epuise(db, lot)
+    db.refresh(lot); db.refresh(etape_cond)
+    # Figer alimente aussi le stock (delta uniquement, jamais bloquant).
+    try:
+        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
+    except Exception as e:
+        stock = {"alimente": False, "raison": str(e)}
+    db.refresh(lot)
 
     return {
         "lot_id": lot_id,
@@ -708,7 +814,55 @@ def cloturer_conditionnement(db: Session, lot_id: int) -> dict:
         "ecart_bilan_pourcentage": ecart_pourcentage,
         "rendement_global": lot.rendement_global,
         "statut_lot": lot.statut,
+        "cloture_jour": date_str or datetime.now().date().isoformat(),
+        "lot_epuise": epuise,
+        "stock": stock,
     }
+
+
+def _bascule_auto_lot_epuise(db: Session, lot) -> bool:
+    """Bascule automatique d'un lot épuisé vers 'conditionne' (flux continu).
+    Il n'y a plus de clôture finale manuelle : quand quantite_restante <= 0,
+    qu'au moins une production est terminée et que le conditionnement est non
+    vide, le lot avance seul étape par étape jusqu'à 'conditionne'.
+    Retourne True si le lot a atteint 'conditionne'. Ne fait rien (et ne bloque
+    jamais la saisie) tant qu'il reste de la matière à traiter.
+    """
+    if (lot.quantite_restante or 0) > 0:
+        return False
+    productions = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "production"
+    ).all()
+    if not any(ep.statut == statuses.TERMINE for ep in productions):
+        return False
+    if _calc_total_flux(lot) <= 0:
+        return False
+    ordre = statuses.WORKFLOW_ORDER
+    try:
+        idx = ordre.index(statuses.normalize(lot.statut))
+    except ValueError:
+        return False
+    cible_idx = ordre.index(statuses.CONDITIONNE)
+    avance = False
+    while idx < cible_idx:
+        suivant = ordre[idx + 1]
+        if not statuses.can_transition(lot.statut, suivant):
+            break
+        lot.statut = suivant
+        idx += 1
+        avance = True
+    if statuses.normalize(lot.statut) != statuses.CONDITIONNE:
+        if avance:
+            db.commit(); db.refresh(lot)
+        return False
+    etape_cond = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "conditionnement"
+    ).first()
+    if etape_cond and etape_cond.statut != statuses.TERMINE:
+        etape_cond.statut = statuses.TERMINE
+        etape_cond.date_fin = etape_cond.date_fin or datetime.now()
+    db.commit(); db.refresh(lot)
+    return True
 
 
 def _calc_total_flux(lot) -> float:
@@ -743,7 +897,12 @@ def get_conditionnement_dryers_disponibles(db: Session, lot_id: int, target_date
     return [r[0] for r in rows if r[0]]
 
 def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) -> dict:
-    """Valide le conditionnement pour 1 dryer à J+1 (vérifie production veille)."""
+    """Valide le conditionnement pour 1 dryer à J+1 (vérifie production veille).
+    poids_sec_kg = quantité réellement sortie du séchage. Elle ne peut pas
+    dépasser la pulpe chargée (tolérance 5%) et devient la référence des flux.
+    Un dryer journalier ne clôture jamais le lot : frais / pulpe / sec
+    restent séparés tant qu'il reste de la matière à traiter.
+    """
     from models import ConditionnementEntry, EtapeProduction
     from datetime import timedelta
     lot = get_lot(db, lot_id)
@@ -767,29 +926,71 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
         ).first()
     if not prod:
         raise ValueError(f"Pas de production D{dryer} hier ({veille}) pour {lot.code_lot} — conditionnement impossible aujourd'hui")
-    # crée ou cumule l'entrée du jour pour ce dryer
+    # Poids sec réellement sorti du séchage (référence des 5 flux du dryer).
+    poids_sec_kg = data.get("poids_sec_kg", 0.0) or 0.0
+    if poids_sec_kg < 0:
+        raise ValueError("Le poids sec ne peut pas être négatif")
+    prod_qty = (prod.poids_sortie or prod.poids_entree or 0)
+    if poids_sec_kg and prod_qty > 0 and poids_sec_kg > prod_qty * 1.05:
+        raise ValueError(f"Poids sec D{dryer} ({poids_sec_kg:.2f} kg) dépasse pulpe chargée veille ({prod_qty:.2f} kg) pour {lot.code_lot}")
+    if poids_sec_kg:
+        prod.poids_sec_kg = round(float(poids_sec_kg), 2)
+    # une seule validation par (lot, dryer, jour) — MAJ si déjà existant aujourd'hui
     entry = db.query(ConditionnementEntry).filter(
         ConditionnementEntry.lot_id == lot_id, ConditionnementEntry.dryer == dryer,
         func.date(ConditionnementEntry.date) == today
     ).first()
+    is_update = entry is not None
     if not entry:
         entry = ConditionnementEntry(lot_id=lot_id, dryer=dryer, date=datetime.now())
         db.add(entry); db.flush()
     for k in ["export_cartons","export_sachets","export_poids_sachet","local_cartons","local_sachets","local_poids_sachet","dechets_cartons","dechets_sachets","dechets_poids_sachet","rhum_cartons","rhum_sachets","rhum_poids_sachet","fitini_fe_cartons","fitini_fe_sachets","fitini_fe_poids_sachet","responsable","notes"]:
         if k in data and data[k] is not None:
             if k.endswith("cartons") or k.endswith("sachets"):
-                setattr(entry, k, (getattr(entry, k) or 0) + int(data[k]))
+                setattr(entry, k, int(data[k]))
             elif k in ("responsable","notes"):
                 setattr(entry, k, data[k] or getattr(entry, k))
             else:
                 setattr(entry, k, float(data[k]))
-    db.commit(); db.refresh(entry)
-    # aussi cumul global lot (compat)
-    for k in ["export_cartons","export_sachets","local_cartons","local_sachets","dechets_cartons","dechets_sachets","rhum_cartons","rhum_sachets","fitini_fe_cartons","fitini_fe_sachets"]:
-        if k in data and data[k]:
-            setattr(lot, k, (getattr(lot, k) or 0) + int(data[k]))
+    # validation journalière : le poids conditionné du dryer ne doit pas dépasser le poids sec (si saisi), sinon la production veille
+    ref_qty = prod.poids_sec_kg or prod_qty
+    if ref_qty > 0:
+        entry_poids = sum(
+            ((getattr(entry, f"{key}_cartons") or 0) * 6 + (getattr(entry, f"{key}_sachets") or 0)) * (getattr(entry, f"{key}_poids_sachet") or 2.5)
+            for key in ["export","local","dechets","rhum","fitini_fe"]
+        )
+        if entry_poids > ref_qty * 1.05:
+            raise ValueError(f"Poids conditionné D{dryer} ({entry_poids:.2f} kg) dépasse référence séchage ({ref_qty:.2f} kg) pour {lot.code_lot}")
+    db.commit(); db.refresh(entry); db.refresh(prod)
+    # recalcul global lot = somme de toutes les entrées journalières (support MAJ)
+    db.flush()
+    all_entries = db.query(ConditionnementEntry).filter(ConditionnementEntry.lot_id == lot_id).all()
+    lot.export_cartons = sum(e.export_cartons or 0 for e in all_entries)
+    lot.export_sachets = sum(e.export_sachets or 0 for e in all_entries)
+    lot.local_cartons = sum(e.local_cartons or 0 for e in all_entries)
+    lot.local_sachets = sum(e.local_sachets or 0 for e in all_entries)
+    lot.dechets_cartons = sum(e.dechets_cartons or 0 for e in all_entries)
+    lot.dechets_sachets = sum(e.dechets_sachets or 0 for e in all_entries)
+    lot.rhum_cartons = sum(e.rhum_cartons or 0 for e in all_entries)
+    lot.rhum_sachets = sum(e.rhum_sachets or 0 for e in all_entries)
+    lot.fitini_fe_cartons = sum(e.fitini_fe_cartons or 0 for e in all_entries)
+    lot.fitini_fe_sachets = sum(e.fitini_fe_sachets or 0 for e in all_entries)
+    # poids_sachet : on garde la dernière valeur saisie (par flux)
+    if all_entries:
+        last = sorted(all_entries, key=lambda e: e.date)[-1]
+        for key in ["export","local","dechets","rhum","fitini_fe"]:
+            setattr(lot, f"{key}_poids_sachet", getattr(last, f"{key}_poids_sachet") or 2.5)
     db.commit(); db.refresh(lot)
-    return {"entry": entry, "lot": lot}
+    # Flux continu : bascule auto vers 'conditionne' si le lot est épuisé.
+    epuise = _bascule_auto_lot_epuise(db, lot)
+    db.refresh(lot)
+    # Chaque saisie alimente le stock (delta uniquement, jamais bloquant).
+    try:
+        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
+    except Exception as e:
+        stock = {"alimente": False, "raison": str(e)}
+    db.refresh(lot)
+    return {"entry": entry, "lot": lot, "is_update": is_update, "poids_sec_kg": prod.poids_sec_kg or 0.0, "production_id": prod.id, "lot_epuise": epuise, "stock": stock}
 
 def get_conditionnement_entries_dryer(db: Session, lot_id: int = None, date_str: str = None, dryer: int = None):
     from models import ConditionnementEntry
@@ -859,7 +1060,8 @@ def sortir_de_zone(db: Session, stock_zone_id: int) -> Optional[StockZone]:
 def get_commandes(db: Session, skip: int = 0, limit: int = 100,
                   statut: Optional[str] = None, recherche: Optional[str] = None) -> List[Commande]:
     q = db.query(Commande).options(
-        joinedload(Commande.lignes).joinedload(LigneCommande.produit)
+        joinedload(Commande.lignes).joinedload(LigneCommande.produit),
+        joinedload(Commande.lignes).joinedload(LigneCommande.lot)
     )
     if statut:
         q = q.filter(Commande.statut == statut)
@@ -869,7 +1071,8 @@ def get_commandes(db: Session, skip: int = 0, limit: int = 100,
 
 def get_commande(db: Session, commande_id: int) -> Optional[Commande]:
     return db.query(Commande).options(
-        joinedload(Commande.lignes).joinedload(LigneCommande.produit)
+        joinedload(Commande.lignes).joinedload(LigneCommande.produit),
+        joinedload(Commande.lignes).joinedload(LigneCommande.lot)
     ).filter(Commande.id == commande_id).first()
 
 def create_commande(db: Session, client_nom: str, lignes_data: list,
@@ -886,24 +1089,144 @@ def create_commande(db: Session, client_nom: str, lignes_data: list,
         p = db.get(Produit, ligne["produit_id"])
         if not p or not p.actif:
             raise ValueError(f"Produit {ligne['produit_id']} introuvable ou inactif")
+        if ligne.get("lot_id") and not db.get(Lot, ligne["lot_id"]):
+            raise ValueError(f"Lot {ligne['lot_id']} introuvable")
+        unite = (ligne.get("unite") or _unite_attendue_produit(p)).lower()
+        if unite not in ("carton", "sachet", "kg"):
+            raise ValueError(f"Unité inconnue : {ligne.get('unite')} (carton, sachet ou kg)")
+        if unite != "kg" and unite != _unite_attendue_produit(p):
+            raise ValueError(f"Unité '{unite}' incohérente pour {p.nom} (attendu : {_unite_attendue_produit(p)})")
+        ligne["unite"] = unite
         if ligne["quantite"] <= 0 or ligne.get("prix_unitaire", 0) < 0:
             raise ValueError("Les quantités doivent être positives et les prix non négatifs")
         prix = ligne.get("prix_unitaire", p.prix_unitaire if p else 0)
         li = LigneCommande(commande_id=cmd.id, produit_id=ligne["produit_id"],
                            lot_id=ligne.get("lot_id"), quantite=ligne["quantite"],
-                           prix_unitaire=prix)
+                           unite=ligne.get("unite", "carton"), prix_unitaire=prix)
         db.add(li)
         total += ligne["quantite"] * prix
     cmd.total_ht = total
     db.commit(); db.refresh(cmd)
     return cmd
 
+FLOW_COMMANDES = {
+    "en_attente": {"préparée", "annulée"},
+    "préparée": {"livrée", "annulée"},
+    "livrée": set(),
+    "annulée": set(),
+}
+
+def _stock_disponible_produit(db: Session, produit_id: int, lot_id: Optional[int] = None) -> float:
+    q = db.query(func.coalesce(func.sum(StockZone.quantite), 0)).filter(
+        StockZone.produit_id == produit_id, StockZone.date_sortie.is_(None))
+    if lot_id:
+        q = q.filter(StockZone.lot_id == lot_id)
+    return float(q.scalar() or 0)
+
+FLUX_PRODUIT_CLE = {"Local": "local", "Export": "export", "Fitini Fê": "fitini_fe",
+                    "Déchets": "dechets", "Rhum arrangé": "rhum"}
+
+def _est_produit_sachet(produit) -> bool:
+    if not produit:
+        return False
+    return (produit.nom or "").startswith("Sachet 100g") or produit.unite_mesure == "sachet 100g"
+
+def _unite_attendue_produit(produit) -> str:
+    return "sachet" if _est_produit_sachet(produit) else "carton"
+
+def _ligne_quantite_kg(db: Session, produit, lot_id, quantite: float, unite: str) -> float:
+    """Convertit une quantité commandée (carton/sachet/kg) en kg pour le stock."""
+    u = (unite or "").lower()
+    if u == "sachet":
+        return round(quantite * 0.1, 2)
+    if u == "kg" or not u:
+        return quantite
+    # carton : 6 sachets x poids_sachet (du lot si précisé, sinon 2.5)
+    ps = 2.5
+    if lot_id:
+        lot = db.get(Lot, lot_id)
+        cle = FLUX_PRODUIT_CLE.get(produit.nom) if produit else None
+        if lot and cle:
+            ps = getattr(lot, f"{cle}_poids_sachet", 2.5) or 2.5
+    return round(quantite * 6 * ps, 2)
+
+def _verifier_disponibilites_commande(db: Session, cmd: Commande):
+    for li in cmd.lignes:
+        p = db.get(Produit, li.produit_id)
+        nom = p.nom if p else f"#{li.produit_id}"
+        unite = (li.unite or _unite_attendue_produit(p)).lower()
+        besoin_kg = _ligne_quantite_kg(db, p, li.lot_id, li.quantite, unite)
+        dispo = _stock_disponible_produit(db, li.produit_id, li.lot_id)
+        if dispo < besoin_kg:
+            lot_txt = ""
+            if li.lot_id:
+                lot = db.get(Lot, li.lot_id)
+                lot_txt = f" (lot {lot.code_lot})" if lot else f" (lot #{li.lot_id})"
+            raise ValueError(f"Stock insuffisant pour {nom}{lot_txt} : {li.quantite} {unite}(s) demandés (~{besoin_kg} kg), {dispo} kg dispo")
+
+def _recalc_stock_produit(db: Session, produit) -> float:
+    """stock_actuel : sachets pour les produits 100g, kg pour les autres."""
+    if _est_produit_sachet(produit):
+        total = db.query(func.coalesce(func.sum(StockZone.sachets), 0)).filter(
+            StockZone.produit_id == produit.id, StockZone.date_sortie.is_(None)).scalar() or 0
+    else:
+        total = db.query(func.coalesce(func.sum(StockZone.quantite), 0)).filter(
+            StockZone.produit_id == produit.id, StockZone.date_sortie.is_(None)).scalar() or 0
+    produit.stock_actuel = float(total)
+    return float(total)
+
+def _consommer_stock_commande(db: Session, cmd: Commande):
+    for li in cmd.lignes:
+        p = db.get(Produit, li.produit_id)
+        unite = (li.unite or _unite_attendue_produit(p)).lower()
+        besoin = _ligne_quantite_kg(db, p, li.lot_id, li.quantite, unite)
+        rows = db.query(StockZone).filter(
+            StockZone.produit_id == li.produit_id, StockZone.date_sortie.is_(None))
+        if li.lot_id:
+            rows = rows.filter(StockZone.lot_id == li.lot_id)
+        rows = rows.order_by(StockZone.date_entree).all()
+        dispo = sum(r.quantite or 0 for r in rows)
+        if dispo < besoin:
+            p = db.get(Produit, li.produit_id)
+            raise ValueError(f"Stock insuffisant pour {p.nom if p else li.produit_id} : {dispo} kg dispo, {besoin} kg demandés")
+        rest = besoin
+        for r in rows:
+            if rest <= 0:
+                break
+            take = min(r.quantite or 0, rest)
+            ratio = (take / r.quantite) if r.quantite else 0
+            r.quantite = round((r.quantite or 0) - take, 2)
+            if r.sachets:
+                r.sachets = int(round(r.sachets * (1 - ratio)))
+            rest = round(rest - take, 2)
+            if (r.quantite or 0) <= 0:
+                r.date_sortie = datetime.now()
+                r.quantite = 0
+                r.sachets = 0
+    # recalc produits touchés (sachets pour 100g, kg sinon ; flush requis, autoflush=False)
+    db.flush()
+    for pid in {li.produit_id for li in cmd.lignes}:
+        p = db.get(Produit, pid)
+        if p:
+            _recalc_stock_produit(db, p)
+
 def update_commande_statut(db: Session, commande_id: int, statut: str) -> Optional[Commande]:
     cmd = db.get(Commande, commande_id)
     if not cmd: return None
-    cmd.statut = statut
+    statut = (statut or "").strip()
+    if statut not in FLOW_COMMANDES:
+        raise ValueError(f"Statut commande inconnu : {statut}")
+    if statut == cmd.statut:
+        raise ValueError(f"Commande déjà '{statut}'")
+    if statut not in FLOW_COMMANDES.get(cmd.statut, set()):
+        raise ValueError(f"Transition impossible : '{cmd.statut}' → '{statut}'")
+    if statut == "préparée":
+        _verifier_disponibilites_commande(db, cmd)
     if statut == "livrée":
+        _verifier_disponibilites_commande(db, cmd)
+        _consommer_stock_commande(db, cmd)
         cmd.date_livraison_reelle = datetime.now()
+    cmd.statut = statut
     db.commit(); db.refresh(cmd)
     return cmd
 
@@ -1070,8 +1393,9 @@ def creer_demande_transfert(db: Session, lot_id: int, lignes: list,
     lot = get_lot(db, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
-    if lot.statut != statuses.CONDITIONNE:
-        raise ValueError(f"Le lot {lot.code_lot} n'a pas terminé le conditionnement")
+    if statuses.normalize(lot.statut) not in (statuses.EN_MUSSERIE, statuses.EN_PRODUCTION,
+                                               statuses.EN_CONDITIONNEMENT, statuses.CONDITIONNE):
+        raise ValueError(f"Le lot {lot.code_lot} n'a pas de cartons à transférer (statut: {lot.statut})")
     if not lignes:
         raise ValueError("Une demande de transfert doit contenir au moins une ligne")
 
@@ -1086,6 +1410,22 @@ def creer_demande_transfert(db: Session, lot_id: int, lignes: list,
     disponibilites = {}
     for key, cfg in FLUX_CONFIG.items():
         disponibilites[key] = getattr(lot, cfg["cartons_field"], 0) or 0
+
+    # Déjà transféré (demandes validées) : on ne peut transférer que le delta.
+    # Évite le double stock quand le conditionnement alimente la chambre froide
+    # à chaque saisie journalière (flux continu, plusieurs lots par jour).
+    transferes = {
+        row[0]: int(row[1] or 0)
+        for row in db.query(
+            DemandeTransfertLigne.type_flux,
+            func.coalesce(func.sum(DemandeTransfertLigne.nb_cartons), 0),
+        ).join(DemandeTransfert, DemandeTransfert.id == DemandeTransfertLigne.demande_id).filter(
+            DemandeTransfert.lot_id == lot_id,
+            DemandeTransfert.statut == statuses.VALIDEE,
+        ).group_by(DemandeTransfertLigne.type_flux).all()
+    }
+    for key in disponibilites:
+        disponibilites[key] = max(0, disponibilites[key] - transferes.get(key, 0))
 
     demandes_par_flux = {}
     for l in lignes:
@@ -1164,11 +1504,23 @@ def valider_demande_transfert(db: Session, demande_id: int) -> "DemandeTransfert
             quantite=quantite, sachets=ligne.nb_cartons * 6,
         )
         db.add(stock)
+        # nb cartons par catégorie (flux) -> champ Cartons du produit
+        produit.stock_min = (produit.stock_min or 0) + ligne.nb_cartons
         ligne.statut = statuses.VALIDEE
+
+    # stock par produit = somme exacte des stocks en zone (flush requis, autoflush=False)
+    db.flush()
+    pids = [r[0] for r in db.query(StockZone.produit_id).filter(StockZone.lot_id == lot.id).distinct().all()]
+    for pid in set(pids):
+        p = db.get(Produit, pid)
+        if p:
+            _recalc_stock_produit(db, p)
 
     demande.statut = statuses.VALIDEE
     lot.statut_transfert = statuses.VALIDE
-    lot.statut = statuses.EN_STOCK
+    # flux continu : EN_STOCK seulement si le lot est épuisé, sinon il reste en cours
+    if (lot.quantite_restante or 0) <= 0 and statuses.normalize(lot.statut) == statuses.CONDITIONNE:
+        lot.statut = statuses.EN_STOCK
     db.commit(); db.refresh(demande)
     return demande
 
@@ -1198,18 +1550,106 @@ def get_demande_transfert(db: Session, demande_id: int):
     return db.get(DemandeTransfert, demande_id)
 
 
+def alimenter_stock_depuis_conditionnement(db: Session, lot_id: int,
+                                           zone_id: int | None = None,
+                                           responsable: str = "auto-journalier") -> dict:
+    """Alimente la chambre froide à chaque saisie de conditionnement (flux continu).
+    Ne transfère que le delta par flux (produits − déjà transférés validés) :
+    idempotent, supporte plusieurs lots le même jour, ne bloque jamais la saisie.
+    Retourne {"alimente": bool, ...}. En cas de zone absente/saturée, la saisie
+    appelante doit réussir quand même (raison fournie, pas d'exception).
+    """
+    from types import SimpleNamespace
+    from models import DemandeTransfert, DemandeTransfertLigne, ZoneStockage
+    lot = get_lot(db, lot_id)
+    if not lot:
+        return {"alimente": False, "raison": f"Lot {lot_id} introuvable"}
+
+    FLUX_CONFIG = {
+        "local": {"cartons_field": "local_cartons"},
+        "fitini_fe": {"cartons_field": "fitini_fe_cartons"},
+        "export": {"cartons_field": "export_cartons"},
+        "dechets": {"cartons_field": "dechets_cartons"},
+        "rhum": {"cartons_field": "rhum_cartons"},
+    }
+    transferes = {
+        row[0]: int(row[1] or 0)
+        for row in db.query(
+            DemandeTransfertLigne.type_flux,
+            func.coalesce(func.sum(DemandeTransfertLigne.nb_cartons), 0),
+        ).join(DemandeTransfert, DemandeTransfert.id == DemandeTransfertLigne.demande_id).filter(
+            DemandeTransfert.lot_id == lot_id,
+            DemandeTransfert.statut == statuses.VALIDEE,
+        ).group_by(DemandeTransfertLigne.type_flux).all()
+    }
+    deltas = {}
+    for key, cfg in FLUX_CONFIG.items():
+        produit = (getattr(lot, cfg["cartons_field"], 0) or 0)
+        delta = produit - transferes.get(key, 0)
+        if delta > 0:
+            deltas[key] = delta
+    if not deltas:
+        return {"alimente": False, "raison": "aucun nouveau carton"}
+
+    zones_froid = db.query(ZoneStockage).filter(
+        ZoneStockage.actif == True, ZoneStockage.type_zone == "froid"
+    ).order_by(ZoneStockage.id).all()
+    zones_actives = zones_froid or db.query(ZoneStockage).filter(
+        ZoneStockage.actif == True
+    ).order_by(ZoneStockage.id).all()
+    if zone_id:
+        zone_forcee = db.get(ZoneStockage, zone_id)
+        if zone_forcee and zone_forcee.actif:
+            zones_actives = [zone_forcee]
+    if not zones_actives:
+        return {"alimente": False, "raison": "aucune zone de stockage active"}
+
+    def zone_pour_flux(type_flux: str):
+        for z in zones_actives:
+            if (z.usage or "") == type_flux:
+                return z
+        return zones_actives[0]
+
+    lignes = [
+        SimpleNamespace(type_flux=flux, nb_cartons=nb, zone_id=zone_pour_flux(flux).id)
+        for flux, nb in deltas.items()
+    ]
+    try:
+        demande = creer_demande_transfert(
+            db, lot_id, lignes, responsable=responsable,
+            notes=f"Auto conditionnement {datetime.now().date().isoformat()}",
+        )
+        valider_demande_transfert(db, demande.id)
+    except ValueError as e:
+        return {"alimente": False, "raison": str(e)}
+    zones_noms = sorted({zone_pour_flux(flux).nom for flux in deltas})
+    return {
+        "alimente": True,
+        "demande_id": demande.id,
+        "cartons": sum(deltas.values()),
+        "detail": deltas,
+        "zones": zones_noms,
+    }
+
+
 # ── RECONDITIONNEMENT (sachets 100g) ──
 
 def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
                             nb_cartons_entree: int, dechet_kg: float = 0.0,
                             nb_sachets_sortis: int = 0, responsable: str = "",
-                            notes: str = "") -> dict:
-    from models import Reconditionnement, StockZone, Produit
+                            notes: str = "", rhum_cartons_sortie: int = 0,
+                            rhum_sachets_sortis: int = 0,
+                            rhum_poids_sachet: float = 2.5,
+                            rhum_poids_vrac_kg: float = 0.0,
+                            zone_id: int | None = None) -> dict:
+    from models import Reconditionnement, StockZone, Produit, ZoneStockage
     lot = get_lot(db, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
     if nb_cartons_entree <= 0:
         raise ValueError("Le nombre de cartons doit être supérieur à zéro")
+    if (rhum_cartons_sortie or 0) < 0 or (rhum_sachets_sortis or 0) < 0 or (rhum_poids_vrac_kg or 0) < 0:
+        raise ValueError("Les quantités de rhum arrangé ne peuvent pas être négatives")
 
     if type_source == "local":
         disponible = lot.local_cartons
@@ -1225,6 +1665,35 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
 
     nb_sachets_100g = nb_cartons_entree * 6 * round(poids_sachet / 0.1)
 
+    # déduire la matière consommée du stock source (Local / Fitini Fê du lot, FIFO)
+    # sinon la même matière serait comptée 2 fois dans le stock total (cartons + sachets)
+    source_label = "Local" if type_source == "local" else "Fitini Fê"
+    source_produit = db.query(Produit).filter(Produit.nom == source_label).first()
+    if source_produit:
+        besoin_kg = round(nb_cartons_entree * 6 * poids_sachet, 2)
+        besoin_sachets = nb_cartons_entree * 6
+        rows = db.query(StockZone).filter(
+            StockZone.lot_id == lot_id, StockZone.produit_id == source_produit.id,
+            StockZone.date_sortie.is_(None)
+        ).order_by(StockZone.date_entree).all()
+        dispo_kg = sum(r.quantite or 0 for r in rows)
+        if dispo_kg < besoin_kg:
+            raise ValueError(f"Stock {source_label} insuffisant pour {lot.code_lot} : {dispo_kg} kg dispo, {besoin_kg} kg requis")
+        rest_kg, rest_s = besoin_kg, besoin_sachets
+        for r in rows:
+            if rest_kg <= 0:
+                break
+            take_kg = min(r.quantite or 0, rest_kg)
+            take_s = min(r.sachets or 0, rest_s)
+            r.quantite = round((r.quantite or 0) - take_kg, 2)
+            r.sachets = (r.sachets or 0) - take_s
+            rest_kg = round(rest_kg - take_kg, 2)
+            rest_s -= take_s
+            if (r.quantite or 0) <= 0:
+                r.date_sortie = datetime.now()
+                r.quantite = 0
+                r.sachets = 0
+
     produit = db.query(Produit).filter(Produit.nom == f"Sachet 100g {type_source}").first()
     if not produit:
         produit = Produit(nom=f"Sachet 100g {type_source}", unite_mesure="sachet 100g",
@@ -1238,10 +1707,17 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
     ).first()
     stock_initial = stock_exist.sachets if stock_exist else 0
     dechet_sachets = int(round(dechet_kg / 0.1)) if dechet_kg else 0
-    total_sachets = stock_initial + nb_sachets_100g - nb_sachets_sortis - dechet_sachets
+    # "sortis" = sachets réellement obtenus (l'estimation cartons×6×poids/0,1 n'est qu'indicative)
+    total_sachets = stock_initial + (nb_sachets_sortis or 0) - dechet_sachets
     total_kg = round(total_sachets * 0.1, 2)
 
-    if stock_exist:
+    if total_sachets <= 0:
+        # plus rien en stock : on clôt la ligne au lieu d'un stock à 0 (schema exige quantite > 0)
+        if stock_exist:
+            stock_exist.date_sortie = datetime.now()
+            stock_exist.quantite = 0
+            stock_exist.sachets = 0
+    elif stock_exist:
         stock_exist.quantite = total_kg
         stock_exist.sachets = total_sachets
     else:
@@ -1250,10 +1726,9 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
             quantite=total_kg, sachets=total_sachets,
         )
         db.add(stock_new)
-    # maj stock produit global (sachets)
-    produit.stock_actuel = (produit.stock_actuel or 0) + nb_sachets_100g - dechet_sachets - nb_sachets_sortis
-    # si sortis déjà comptés comme sortie stock, on ne double pas : on a déjà mis total_sachets, donc produit = sum StockZone
-    # recalc exact depuis StockZone pour ce produit
+    # maj stock produit global (sachets) = somme exacte des StockZone
+    # (flush requis : la session est en autoflush=False)
+    db.flush()
     total_stock_produit = db.query(func.coalesce(func.sum(StockZone.sachets), 0)).filter(
         StockZone.produit_id == produit.id, StockZone.date_sortie.is_(None)
     ).scalar() or 0
@@ -1270,9 +1745,53 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
         nb_sachets_100g_sortie=nb_sachets_100g,
         dechet_kg=dechet_kg or 0.0,
         nb_sachets_sortis=nb_sachets_sortis or 0,
+        rhum_cartons_sortie=rhum_cartons_sortie or 0,
+        rhum_sachets_sortis=rhum_sachets_sortis or 0,
+        rhum_poids_sachet=rhum_poids_sachet or 2.5,
+        rhum_poids_vrac_kg=rhum_poids_vrac_kg or 0.0,
         responsable=responsable, notes=notes,
     )
     db.add(recond)
+    db.flush()
+
+    # Rhum arrangé obtenu depuis ces cartons (local/fitini fê) → stock Rhum arrangé.
+    # Matière déjà déduite via les cartons sources : pas de double déduction.
+    # Le vrac (kg) couvre ce qui ne remplit ni cartons ni sachets (ex. 1,2 kg).
+    rhum_total_sachets = (rhum_cartons_sortie or 0) * 6 + (rhum_sachets_sortis or 0)
+    rhum_vrac_kg = round(rhum_poids_vrac_kg or 0.0, 2)
+    rhum = {"alimente": False}
+    if rhum_total_sachets > 0 or rhum_vrac_kg > 0:
+        rhum_produit = db.query(Produit).filter(Produit.nom == "Rhum arrangé").first()
+        if not rhum_produit:
+            rhum_produit = Produit(nom="Rhum arrangé", actif=True)
+            db.add(rhum_produit); db.flush()
+        rhum_zone = None
+        if zone_id:
+            rhum_zone = db.get(ZoneStockage, zone_id)
+            if rhum_zone and not rhum_zone.actif:
+                rhum_zone = None
+        if not rhum_zone:
+            rhum_zone = db.query(ZoneStockage).filter(
+                ZoneStockage.actif == True, ZoneStockage.type_zone == "froid"
+            ).order_by(ZoneStockage.id).first() or db.query(ZoneStockage).filter(
+                ZoneStockage.actif == True
+            ).order_by(ZoneStockage.id).first()
+        if not rhum_zone:
+            rhum = {"alimente": False, "raison": "aucune zone de stockage active"}
+        else:
+            rhum_poids = round(rhum_total_sachets * (rhum_poids_sachet or 2.5) + rhum_vrac_kg, 2)
+            db.add(StockZone(
+                zone_id=rhum_zone.id, lot_id=lot_id, produit_id=rhum_produit.id,
+                quantite=rhum_poids, sachets=rhum_total_sachets,
+            ))
+            db.flush()
+            rhum_produit.stock_actuel = float(db.query(
+                func.coalesce(func.sum(StockZone.quantite), 0)).filter(
+                StockZone.produit_id == rhum_produit.id, StockZone.date_sortie.is_(None)
+            ).scalar() or 0)
+            rhum = {"alimente": True, "cartons": rhum_cartons_sortie or 0,
+                    "sachets": rhum_sachets_sortis or 0,
+                    "vrac_kg": rhum_vrac_kg, "poids_kg": rhum_poids, "zone": rhum_zone.nom}
     db.commit(); db.refresh(recond)
 
     return {
@@ -1284,6 +1803,7 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
         "stock_initial_sachets": stock_initial,
         "stock_final_sachets": total_sachets,
         "poids_total_kg": total_kg,
+        "rhum": rhum,
     }
 
 
@@ -1367,19 +1887,20 @@ def get_rappels(db: Session, seuil_heures: int = 24) -> list:
                 "message": f"{lot.code_lot} bloqué en {last.etape} (D{last.dryer or '?'}) depuis {age_h}h — statut lot {lot.statut}",
                 "severite": "warning" if age_h < 48 else "error",
             })
-        # cas musserie d'hier non suivie de production aujourd'hui
+        # cas musserie d'hier non suivie de chariots — ne rappelle que si AUCUNE production n'existe pour ce dryer après la musserie
         if lot.statut in [statuses.EN_MUSSERIE, statuses.EN_PRODUCTION]:
             musserie_hier = db.query(EtapeProduction).filter(
                 EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "musserie", EtapeProduction.statut == statuses.TERMINE,
                 func.date(EtapeProduction.date_debut) == (now - timedelta(days=1)).date()
             ).first()
             if musserie_hier:
-                prod_aujourdhui = db.query(EtapeProduction).filter(
+                # s'il existe déjà une production pour ce dryer à partir de la musserie, pas de rappel
+                prod_apres_musserie = db.query(EtapeProduction).filter(
                     EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "production",
                     EtapeProduction.dryer == musserie_hier.dryer,
-                    func.date(EtapeProduction.date_debut) == now.date()
+                    EtapeProduction.date_debut >= musserie_hier.date_debut,
                 ).first()
-                if not prod_aujourdhui:
+                if not prod_apres_musserie:
                     rappels.append({
                         "lot_id": lot.id,
                         "code_lot": lot.code_lot,

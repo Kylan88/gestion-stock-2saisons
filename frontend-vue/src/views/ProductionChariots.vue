@@ -73,7 +73,7 @@
 
         <!-- Musserie disponible pour production aujourd'hui -->
         <div v-if="musserieData[lot.id] && musserieData[lot.id].length > 0" class="musserie-available">
-          <div class="musserie-available-title">Musserie du jour (à charger) :</div>
+          <div class="musserie-available-title">Frais net issu de la musserie du jour :</div>
           <div class="musserie-available-grid">
             <div v-for="m in musserieData[lot.id]" :key="m.dryer" class="musserie-available-item">
               <span class="musserie-dryer">Dryer {{ m.dryer }}</span>
@@ -91,25 +91,27 @@
               <div class="cumul-box-body">
                 <div class="cumul-stat"><span>Chariots</span><strong>{{ d.nbre_chariots }}</strong></div>
                 <div class="cumul-stat"><span>Claies</span><strong>{{ d.total_claies }}</strong></div>
-                <div class="cumul-stat"><span>Production</span><strong>{{ d.quantite_totale }} kg</strong></div>
+                <div class="cumul-stat"><span>Frais net</span><strong>{{ d.poids_frais_net_kg }} kg</strong></div>
+                <div class="cumul-stat"><span>Pulpe chargée</span><strong>{{ d.pulpe_kg }} kg</strong></div>
+                <div v-if="d.poids_sec_kg != null" class="cumul-stat"><span>Poids sec</span><strong>{{ d.poids_sec_kg }} kg</strong></div>
               </div>
               <div class="cumul-chariots">
                 <span v-for="c in d.chariots" :key="c.id" class="chariot-pill">
-                  C{{ c.numero_chariot }} {{ c.heure_remplissage }}→{{ c.heure_entree_sechoir }}
+                  C{{ c.numero_chariot }} {{ c.heure_remplissage }}→{{ c.heure_entree_dryer }}
                 </span>
               </div>
             </div>
           </div>
 
           <div class="cumul-total">
-            <span>Total produit : <strong>{{ totalAllDryers(lot.id) }} kg</strong></span>
+            <span>Total pulpe chargée : <strong>{{ totalAllDryers(lot.id) }} kg</strong></span>
             <span>Chariots : <strong>{{ totalChariots(lot.id) }}</strong></span>
             <span>Claies : <strong>{{ totalClaies(lot.id) }}</strong></span>
           </div>
 
           <div class="cloture-row">
             <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer la production' }}
+              {{ cloturing ? 'Clôture...' : 'Clôturer la journée' }}
             </button>
           </div>
         </div>
@@ -161,15 +163,15 @@
               <div class="chariot-header">
                 <span>Chariot</span>
                 <span>Remplissage</span>
-                <span>Entrée séchoir</span>
+                <span>Entrée Dryer</span>
                 <span></span>
               </div>
               <div class="chariot-progress"><div class="chariot-progress-fill" :style="{width: (f[lot.id].chariots.filter(c=>c.enregistre).length / f[lot.id].nbre_chariots * 100) + '%'}"></div></div>
               <div v-for="i in f[lot.id].nbre_chariots" :key="i" class="chariot-row" :class="{ 'chariot-ok': f[lot.id].chariots[i-1].enregistre }">
                 <span class="ch-num">{{ i }}</span>
                 <input type="time" v-model="f[lot.id].chariots[i-1].heure_remplissage" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-                <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_sechoir" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-                <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm" :class="f[lot.id].chariots[i-1].heure_remplissage && f[lot.id].chariots[i-1].heure_entree_sechoir ? 'btn-primary' : 'btn-outline'" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_sechoir" @click="enregistrerChariot(lot.id, i-1)">✓ Valider</button>
+                <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_dryer" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
+                <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm" :class="f[lot.id].chariots[i-1].heure_remplissage && f[lot.id].chariots[i-1].heure_entree_dryer ? 'btn-primary' : 'btn-outline'" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_dryer" @click="enregistrerChariot(lot.id, i-1)">✓ Valider</button>
                 <span v-else class="ch-check">✓ Fait</span>
               </div>
             </div>
@@ -191,7 +193,7 @@
           <!-- Clôturer -->
           <div v-if="dryers[lot.id] && dryers[lot.id].length > 0" style="margin-top:12px;text-align:right">
             <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer la production' }}
+              {{ cloturing ? 'Clôture...' : 'Clôturer la journée' }}
             </button>
           </div>
         </div>
@@ -201,7 +203,7 @@
     <ConfirmDialog
       :show="!!confirmClotureLot"
       :title="'Clôturer la production du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Terminer la production du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — tous les dryers du jour (D' + (availableDryers(confirmClotureLot?.id) || []).join(', D') + ') seront clôturés. Cette action est irréversible.'"
+      :message="'Valider les dryers de cette journée pour ' + (confirmClotureLot?.code_lot || '') + '. Le lot restera ouvert tant qu’il reste de la matière à traiter.'"
       confirmText="Clôturer"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
@@ -269,7 +271,7 @@ function onDryerChange(lotId) {
 function rebuildChariots(lotId) {
   const d = f[lotId]
   const n = d.nbre_chariots || 0
-  while (d.chariots.length < n) d.chariots.push({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })
+  while (d.chariots.length < n) d.chariots.push({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false })
   while (d.chariots.length > n) d.chariots.pop()
 }
 function calcQté(lotId) { rebuildChariots(lotId) }
@@ -281,7 +283,7 @@ function enregistrerChariot(lotId, index) {
 
 function totalAllDryers(lotId) {
   if (!dryers[lotId]) return 0
-  return dryers[lotId].reduce((sum, d) => sum + d.quantite_totale, 0)
+  return dryers[lotId].reduce((sum, d) => sum + (d.pulpe_kg ?? d.quantite_totale ?? 0), 0)
 }
 
 function totalChariots(lotId) {
@@ -310,7 +312,7 @@ function initForm(lotId) {
     const n = DRYER[d].chariots
     f[lotId] = reactive({
       dryer: d, nbre_chariots: n,
-      operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })),
+      operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false })),
     })
   } else {
     // corrige si dryer actuel n'est plus disponible
@@ -328,7 +330,7 @@ function resetForm(lotId) {
     const n = DRYER[d].chariots
     f[lotId].dryer = d
     f[lotId].nbre_chariots = n
-    f[lotId].chariots = Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false }))
+    f[lotId].chariots = Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false }))
     f[lotId].operateur = ''
   }
 }
@@ -381,7 +383,7 @@ async function enregistrer(lot) {
       chariots: f[lot.id].chariots.map(c => ({
         numero_chariot: f[lot.id].chariots.indexOf(c) + 1,
         heure_remplissage: c.heure_remplissage || '',
-        heure_entree_sechoir: c.heure_entree_sechoir || '',
+        heure_entree_dryer: c.heure_entree_dryer || '',
       })),
     })
     toast.success(`Dryer ${currentDryer} enregistré`)
@@ -405,8 +407,9 @@ async function cloturer(lot) {
   confirmClotureLot.value = null
   cloturing.value = true
   try {
-    await cloturerProduction(lot.id)
-    toast.success(`Production clôturée pour ${lot.code_lot}`)
+    const date = new Date().toISOString().slice(0, 10)
+    await cloturerProduction(lot.id, date)
+    toast.success(`Production du jour clôturée pour ${lot.code_lot} — lot toujours ouvert`)
     await load()
   } finally { cloturing.value = false }
 }

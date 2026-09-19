@@ -105,9 +105,15 @@ def next_statuses(current: str) -> list:
 
 
 def validate_transition(from_status: str, to_status: str):
-    """Raise ValueError if the transition is not allowed."""
+    """Raise ValueError (message clair pour l'utilisateur) if the transition is not allowed."""
     if not can_transition(from_status, to_status):
+        allowed = sorted(TRANSITIONS.get(normalize(from_status), set()))
+        if normalize(from_status) == normalize(to_status):
+            raise ValueError(
+                f"Action déjà effectuée : le lot est déjà à l'étape '{from_status}'. "
+                f"Prochaine étape possible : {', '.join(repr(s) for s in allowed) if allowed else 'aucune (fin de parcours)'}."
+            )
         raise ValueError(
-            f"Transition invalide: '{from_status}' → '{to_status}'. "
-            f"Statuts autorises: {sorted(TRANSITIONS.get(normalize(from_status), set()))}"
+            f"Action impossible : le lot est à l'étape '{from_status}', on ne peut pas le passer à '{to_status}'. "
+            f"Prochaine étape possible : {', '.join(repr(s) for s in allowed) if allowed else 'aucune (fin de parcours)'}."
         )

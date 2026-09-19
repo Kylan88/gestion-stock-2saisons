@@ -43,8 +43,8 @@
             <th>Code Lot</th>
             <th>Produit</th>
             <th>Poids Frais</th>
-            <th>Traité</th>
-            <th>Progression</th>
+            <th title="Reçu − reste backend (même chiffre que la page Musserie)">Traité (réel)</th>
+            <th title="% traité réel en musserie, avancement du parcours ensuite">Progression</th>
             <th>Statut</th>
             <th>Workflow</th>
             <th></th>
@@ -150,12 +150,13 @@ function lotProgressPct(lot) {
   const total = lot.poids_frais
   const lotEtapes = etapes.value[lot.id] || []
 
-  // Progression réelle basée sur les étapes si disponibles, sinon sur quantite_restante
+  // Progression : % traité réel pour les étapes poids (musserie/production),
+  // avancement pondéré du parcours pour les étapes suivantes.
   if (statut === RECEPTION) return 0
   if (statut === EN_MUSSERIE) {
+    // Même chiffre que la page Musserie : (reçu − reste) / reçu.
     const restant = lot.quantite_restante ?? total
-    const pctMusserie = total > 0 ? ((total - restant) / total) : 0
-    return Math.min(30, Math.round(pctMusserie * 30))
+    return Math.min(100, Math.round(((total - restant) / total) * 100))
   }
   if (statut === EN_PRODUCTION) {
     const base = 30
@@ -190,7 +191,13 @@ function lotProgressPct(lot) {
 }
 
 function getTraitePoids(lot) {
+  // Même chiffre que la page Musserie : reçu − reste backend.
   if (!lot.poids_frais) return 0
+  const statut = toCanonical(lot.statut)
+  if (statut === RECEPTION) return 0
+  if (statut === EN_MUSSERIE || statut === EN_PRODUCTION) {
+    return Math.round((lot.poids_frais || 0) - (lot.quantite_restante ?? lot.poids_frais))
+  }
   return Math.round(lot.poids_frais * lotProgressPct(lot) / 100)
 }
 

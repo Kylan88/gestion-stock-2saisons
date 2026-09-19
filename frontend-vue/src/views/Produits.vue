@@ -17,16 +17,12 @@
         <div class="form-card">
           <div class="form-row">
             <div class="form-group">
-              <label>Nom *</label>
-              <input ref="firstInput" v-model="form.nom" class="input" :class="{ 'input-error': errors.nom }" />
-              <span v-if="errors.nom" class="field-error">{{ errors.nom }}</span>
-            </div>
-            <div class="form-group">
-              <label>Catégorie</label>
-              <select v-model="form.categorie_id" class="input">
+              <label>Catégorie *</label>
+              <select ref="firstInput" v-model="form.categorie_id" class="input" :class="{ 'input-error': errors.nom }">
                 <option value="">Sélectionner...</option>
                 <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.nom }}</option>
               </select>
+              <span v-if="errors.nom" class="field-error">{{ errors.nom }}</span>
             </div>
             <div class="form-group">
               <label>Unité</label>
@@ -35,16 +31,12 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Stock min</label>
-              <input type="number" v-model.number="form.stock_min" class="input" step="0.1" min="0" />
+              <label>Cartons</label>
+              <input type="number" v-model.number="form.stock_min" class="input" step="1" min="0" placeholder="Nombre de cartons" />
             </div>
             <div class="form-group">
               <label>Stock actuel</label>
               <input type="number" v-model.number="form.stock_actuel" class="input" step="0.1" min="0" />
-            </div>
-            <div class="form-group">
-              <label>Prix unitaire (FCFA)</label>
-              <input type="number" v-model.number="form.prix_unitaire" class="input" min="0" />
             </div>
           </div>
           <div style="display:flex;gap:10px">
@@ -57,25 +49,40 @@
       <EmptyState v-if="filteredProduits.length === 0" :text="recherche ? 'Aucun résultat' : 'Aucun produit'" />
 
       <div v-else>
-        <div class="filters">
+        <div class="filters" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
           <input v-model="recherche" class="input" placeholder="Rechercher un produit..." style="max-width:260px" />
+          <select v-model="selectedLotId" class="input" style="max-width:260px" title="Filtrer par lot disponible">
+            <option value="">Tous les lots</option>
+            <option v-for="l in lotsDisponibles" :key="l.id" :value="String(l.id)">{{ l.code_lot }}{{ l.type_fruit ? ' — ' + l.type_fruit : '' }}</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer">
+            <input type="checkbox" v-model="showZeroStock" /> Afficher stock 0
+          </label>
+          <span v-if="!showZeroStock" style="font-size:11px;color:var(--text-muted)">— masqués quand stock = 0</span>
         </div>
         <div class="table-wrap anim-fade">
           <table>
-            <thead><tr><th>Nom</th><th>Catégorie</th><th>Stock</th><th>Min</th><th>Prix</th><th>Statut</th><th></th></tr></thead>
+            <thead><tr><th>Catégorie</th><th>Stock</th><th>Cartons</th><th>Statut</th><th></th></tr></thead>
             <tbody>
               <tr v-for="p in paginatedProduits" :key="p.id">
-                <td><strong>{{ p.nom }}</strong></td>
-                <td>{{ p.categorie?.nom || '—' }}</td>
-                <td>{{ p.stock_actuel }} {{ p.unite_mesure }}</td>
+                <td><strong>{{ p.categorie?.nom || p.nom }}</strong></td>
+                <td>{{ fmt2(p.stock_actuel) }} {{ p.unite_mesure }}</td>
                 <td>{{ p.stock_min }}</td>
-                <td>{{ Number(p.prix_unitaire).toLocaleString() }} F</td>
-                <td><StatusBadge :status="p.stock_actuel <= 0 ? 'rupture' : p.stock_actuel <= p.stock_min ? 'stock bas' : 'disponible'" /></td>
+                <td><StatusBadge :status="p.stock_actuel > 0 ? 'disponible' : 'rupture'" /></td>
                 <td>
                   <button class="btn btn-ghost btn-sm" @click="openEdit(p)" aria-label="Modifier le produit">✎</button>
                 </td>
               </tr>
             </tbody>
+            <tfoot>
+              <tr style="font-weight:700;background:var(--surface);border-top:2px solid var(--border)">
+                <td>Totaux ({{ filteredProduits.length }})</td>
+                <td>{{ fmt2(totalStock) }}</td>
+                <td>{{ totalCartons }}</td>
+                <td></td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
         <div v-if="totalPages > 1" class="pagination">
@@ -91,8 +98,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, nextTick } from 'vue'
-import { getProduits, createProduit, updateProduit, getCategories } from '../api'
+import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
+import { getProduits, createProduit, updateProduit, getCategories, getStock } from '../api'
 import { useToastStore } from '../stores/toast'
 import { exportCsv } from '../utils/exportCsv'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -115,12 +122,15 @@ const showConfirm = ref(false)
 const firstInput = ref(null)
 const errors = reactive({ nom: '' })
 
-const form = reactive({ nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0, prix_unitaire: 0 })
+const form = reactive({ nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0 })
 
 function resetForm() {
-  Object.assign(form, { nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0, prix_unitaire: 0 })
+  Object.assign(form, { nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0 })
   editingId.value = null
   errors.nom = ''
+}
+function categorieNom(id) {
+  return categories.value.find(c => String(c.id) === String(id))?.nom || ''
 }
 
 function openCreate() {
@@ -131,29 +141,66 @@ function openCreate() {
 
 function openEdit(p) {
   editingId.value = p.id
-  Object.assign(form, { nom: p.nom, categorie_id: p.categorie?.id || '', unite_mesure: p.unite_mesure || 'kg', stock_min: p.stock_min, stock_actuel: p.stock_actuel, prix_unitaire: p.prix_unitaire })
+  Object.assign(form, { nom: p.nom, categorie_id: p.categorie?.id || '', unite_mesure: p.unite_mesure || 'kg', stock_min: p.stock_min, stock_actuel: p.stock_actuel })
   showForm.value = true
   nextTick(() => firstInput.value?.focus())
 }
 
+const showZeroStock = ref(false)
+const selectedLotId = ref('')
+const lotsDisponibles = ref([])
+const produitsParLot = ref({}) // { lotId: Set(produitId) }
 const filteredProduits = computed(() => {
-  if (!recherche.value) return produits.value
+  let res = produits.value
+  if (!showZeroStock.value) res = res.filter(p => Number(p.stock_actuel) > 0)
+  if (selectedLotId.value) {
+    const ids = produitsParLot.value[selectedLotId.value]
+    if (!ids) return []
+    res = res.filter(p => ids.has(p.id))
+  }
+  if (!recherche.value) return res
   const q = recherche.value.toLowerCase()
-  return produits.value.filter(p => p.nom.toLowerCase().includes(q) || p.categorie?.nom?.toLowerCase().includes(q))
+  return res.filter(p => p.nom.toLowerCase().includes(q) || p.categorie?.nom?.toLowerCase().includes(q))
 })
 const totalPages = computed(() => Math.ceil(filteredProduits.value.length / pageSize))
 const paginatedProduits = computed(() => {
   const start = (page.value - 1) * pageSize
   return filteredProduits.value.slice(start, start + pageSize)
 })
+const totalStock = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_actuel || 0), 0))
+const totalCartons = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_min || 0), 0))
+watch([recherche, selectedLotId, showZeroStock], () => { page.value = 1 })
+function fmt2(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0.00' }
 
 async function load() {
   loading.value = true
-  try { [produits.value, categories.value] = await Promise.all([getProduits(), getCategories()]) } finally { loading.value = false }
+  try {
+    const [prods, cats, stocks] = await Promise.all([getProduits(), getCategories(), getStock()])
+    produits.value = prods
+    categories.value = cats
+    // Lots disponibles = lots avec au moins une ligne de stock > 0 en zone.
+    const lotsMap = new Map()
+    const parLot = {}
+    for (const s of (stocks || [])) {
+      if (!s?.lot?.id || !(Number(s.quantite) > 0)) continue
+      const lotId = String(s.lot.id)
+      if (!lotsMap.has(lotId)) lotsMap.set(lotId, s.lot)
+      if (!parLot[lotId]) parLot[lotId] = new Set()
+      if (s.produit_id) parLot[lotId].add(s.produit_id)
+      else if (s.produit?.id) parLot[lotId].add(s.produit.id)
+    }
+    lotsDisponibles.value = [...lotsMap.values()].sort((a, b) => (a.code_lot || '').localeCompare(b.code_lot || ''))
+    produitsParLot.value = parLot
+    if (selectedLotId.value && !parLot[selectedLotId.value]) selectedLotId.value = ''
+  } finally { loading.value = false }
 }
 
 function validate() {
-  errors.nom = form.nom ? '' : 'Le nom est requis'
+  errors.nom = form.categorie_id ? '' : 'La catégorie est requise'
+  if (!form.categorie_id) return false
+  // nom backend = nom de la catégorie
+  form.nom = categorieNom(form.categorie_id) || form.nom
+  errors.nom = form.nom ? '' : 'La catégorie est requise'
   return !errors.nom
 }
 
@@ -176,8 +223,8 @@ async function save() {
 function confirmDelete() { showConfirm.value = false }
 
 function doExport() {
-  const headers = ['Nom', 'Catégorie', 'Prix Unitaire', 'Stock Actuel', 'Stock Min', 'Unité']
-  const rows = filteredProduits.value.map(p => [p.nom, p.categorie?.nom || '', p.prix_unitaire, p.stock_actuel, p.stock_min, p.unite_mesure])
+  const headers = ['Catégorie', 'Stock Actuel', 'Cartons', 'Unité']
+  const rows = filteredProduits.value.map(p => [p.categorie?.nom || p.nom, p.stock_actuel, p.stock_min, p.unite_mesure])
   exportCsv(headers, rows, 'produits.csv')
 }
 

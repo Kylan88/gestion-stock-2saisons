@@ -12,7 +12,7 @@ DRYER_CONFIG = {
 }
 
 
-def _make_chariots(db, ep, dryer, n, total_kg, operateur, heure_remplissage="08:00", heure_entree_sechoir="09:00"):
+def _make_chariots(db, ep, dryer, n, total_kg, operateur, heure_remplissage="08:00", heure_entree_dryer="09:00"):
     """Crée n chariots pour une étape production (poids réparti)."""
     config = DRYER_CONFIG.get(dryer, {"chariots": 6, "claies": 42})
     n = min(n, config["chariots"])
@@ -23,7 +23,7 @@ def _make_chariots(db, ep, dryer, n, total_kg, operateur, heure_remplissage="08:
             numero_chariot=i, dryer=dryer, nbre_chariots=n,
             total_claies=config["claies"] * n, quantite_totale=q,
             operateur=operateur,
-            heure_remplissage=heure_remplissage, heure_entree_sechoir=heure_entree_sechoir,
+            heure_remplissage=heure_remplissage, heure_entree_dryer=heure_entree_dryer,
         ))
 
 

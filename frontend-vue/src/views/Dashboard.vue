@@ -3,13 +3,13 @@
     <section class="dashboard-hero">
       <div>
         <span class="dashboard-eyebrow">VUE D'ENSEMBLE</span>
-        <h1 class="dashboard-title">Atelier de production</h1>
+        <h1 class="dashboard-title">Zone de production</h1>
         <p class="dashboard-subtitle">{{ todayDate }}</p>
       </div>
       <div class="dashboard-snapshot">
         <span class="snapshot-label">Stock chambre froide</span>
         <strong>{{ formatKg(stats.stock_froid_kg || 0) }} <small>kg</small></strong>
-        <span class="snapshot-meta"><i></i>{{ stats.lots_en_stock || 0 }} lots prêts</span>
+        <span class="snapshot-meta"><i></i>{{ stats.lots_en_stock || 0 }} lots ayant du stock</span>
       </div>
       <div class="dashboard-actions">
         <button class="btn btn-outline btn-sm" @click="load">↻ Actualiser</button>
@@ -81,56 +81,15 @@
         </div>
       </div>
 
-      <!-- KPIs — identique 2saisons-app StatCard -->
+      <!-- KPIs  -->
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;margin-bottom:32px">
         <StatCard title="Produits" :value="stats.total_produits" status="neutral" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>' />
         <StatCard title="Lots Actifs" :value="stats.total_lots_actifs" status="info" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' />
-        <StatCard title="Valeur Stock" :value="formatNum(stats.valeur_stock) + ' F'" status="warning" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>' />
+        <StatCard title="Valeur 100g" :value="formatNum(stats.valeur_stock) + ' F'" status="warning" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>' />
         <StatCard title="Rendement Moyen" :value="formatNum(stats.rendement_moyen || 0) + '%'" status="success" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' />
       </div>
 
-      <!-- Charts row -->
-      <div class="charts-row">
-        <div class="card chart-card">
-          <div class="card-header"><h3>Production Mensuelle (kg)</h3></div>
-          <div class="bar-chart">
-            <div class="bar-chart-inner">
-              <div v-for="(bar, i) in barData" :key="i" class="bar-col">
-                <div class="bar-tooltip">{{ bar.value }} kg</div>
-                <div class="bar-track">
-                  <div class="bar-fill" :style="{ height: bar.pct + '%' }">
-                    <div class="bar-fill-inner"></div>
-                  </div>
-                </div>
-                <span class="bar-label">{{ bar.label }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="card chart-card chart-card-donut">
-          <div class="card-header"><h3>Répartition des Lots</h3></div>
-          <div class="donut-wrap">
-            <svg class="donut-svg" viewBox="0 0 120 120">
-              <circle v-for="(seg, i) in donutSegments" :key="i"
-                cx="60" cy="60" r="48" fill="none"
-                :stroke="seg.color" stroke-width="18"
-                :stroke-dasharray="seg.dash" :stroke-dashoffset="seg.offset"
-                stroke-linecap="round"
-                style="transition: stroke-dasharray 0.6s ease"
-              />
-              <text x="60" y="56" text-anchor="middle" class="donut-total">{{ stats.total_lots_actifs }}</text>
-              <text x="60" y="72" text-anchor="middle" class="donut-sub">Lots</text>
-            </svg>
-            <div class="donut-legend">
-              <div v-for="seg in donutLegend" :key="seg.label" class="legend-item">
-                <span class="legend-dot" :style="{ background: seg.color }"></span>
-                <span class="legend-label">{{ seg.label }}</span>
-                <span class="legend-val">{{ seg.count }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       <!-- Lots en cours -->
       <div v-if="lotsEnCours.length" class="card" style="margin-top:20px">
@@ -177,7 +136,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getDashboardStats, getDashboardProduction, getAlertesStockBas, getDashboardProductionMensuelle, getLots, getProductionsEtapes } from '../api'
+import { getDashboardStats, getDashboardProduction, getAlertesStockBas, getLots, getProductionsEtapes } from '../api'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import RappelsBanner from '../components/RappelsBanner.vue'
@@ -189,7 +148,6 @@ const error = ref(null)
 const stats = ref({})
 const prod = ref({})
 const stockBas = ref([])
-const prodMensuelle = ref([])
 const allLots = ref([])
 const etapesData = ref({})
 
@@ -267,53 +225,17 @@ function lotProgressPct(lot) {
   return 0
 }
 
-const barData = computed(() => {
-  if (!prodMensuelle.value.length) return []
-  const values = prodMensuelle.value
-  const max = Math.max(...values.map(v => v.value), 1)
-  return values.map(v => ({ label: v.mois, value: Math.round(v.value), pct: Math.round((v.value / max) * 100) }))
-})
 
-const donutSegments = computed(() => {
-  const total = stats.value.total_lots_actifs || 1
-  const enMusserie = lotsMusserie.value.length
-  const enProduction = lotsProduction.value.length
-  const enConditionnement = lotsConditionnement.value.length
-  const enStock = stats.value.lots_en_stock || 0
-  const circumference = 2 * Math.PI * 48
-  const segments = [
-    { count: enStock, color: '#00853E' },
-    { count: enConditionnement, color: '#7C3AED' },
-    { count: enProduction, color: '#2563EB' },
-    { count: enMusserie, color: '#D97706' },
-  ]
-  let offset = 0
-  return segments.filter(s => s.count > 0).map(s => {
-    const pct = s.count / total
-    const dash = pct * circumference
-    const seg = { ...s, dash: `${dash} ${circumference - dash}`, offset: `${-offset}` }
-    offset += dash
-    return seg
-  })
-})
-
-const donutLegend = computed(() => [
-  { label: 'En stock', count: stats.value.lots_en_stock || 0, color: '#00853E' },
-  { label: 'Conditionnement', count: lotsConditionnement.value.length, color: '#7C3AED' },
-  { label: 'Production', count: lotsProduction.value.length, color: '#2563EB' },
-  { label: 'Musserie', count: lotsMusserie.value.length, color: '#D97706' },
-])
 
 async function load() {
   loading.value = true; error.value = null
   try {
-    const [s, p, sb, pm, lots] = await Promise.all([
-      getDashboardStats(), getDashboardProduction(), getAlertesStockBas(), getDashboardProductionMensuelle(), getLots(),
+    const [s, p, sb, lots] = await Promise.all([
+      getDashboardStats(), getDashboardProduction(), getAlertesStockBas(), getLots(),
     ])
     stats.value = s
     prod.value = p
     stockBas.value = sb
-    prodMensuelle.value = pm
     allLots.value = lots
 
     // Fetch etapes for each lot to calculate real progress
@@ -414,40 +336,6 @@ onMounted(load)
 .kpi-value { font-size: 26px; font-weight: 700; color: var(--dark); line-height: 1.1; }
 .kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-top: 3px; white-space: nowrap; }
 
-/* Charts */
-.charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 0; }
-.chart-card { padding: 20px; }
-
-.bar-chart { height: 220px; padding-top: 10px; }
-.bar-chart-inner {
-  display: flex; align-items: flex-end; justify-content: space-between;
-  height: 100%; gap: 12px; padding: 0 8px;
-}
-.bar-col {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  height: 100%; justify-content: flex-end; position: relative;
-}
-.bar-tooltip { font-size: 10px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; white-space: nowrap; }
-.bar-track {
-  width: 100%; max-width: 48px; height: 160px;
-  background: var(--surface); border-radius: 8px;
-  display: flex; align-items: flex-end; overflow: hidden;
-}
-.bar-fill { width: 100%; border-radius: 8px; transition: height 0.7s var(--ease); display: flex; align-items: flex-end; }
-.bar-fill-inner { width: 100%; height: 100%; border-radius: 8px; background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 100%); }
-.bar-label { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 8px; }
-
-.chart-card-donut { display: flex; flex-direction: column; }
-.donut-wrap { display: flex; align-items: center; gap: 24px; flex: 1; }
-.donut-svg { width: 140px; height: 140px; flex-shrink: 0; transform: rotate(-90deg); }
-.donut-total { font-size: 22px; font-weight: 700; fill: var(--dark); transform: rotate(90deg); transform-origin: center; }
-.donut-sub { font-size: 11px; fill: var(--text-muted); font-weight: 500; transform: rotate(90deg); transform-origin: center; }
-.donut-legend { display: flex; flex-direction: column; gap: 10px; }
-.legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.legend-label { color: var(--text-secondary); flex: 1; }
-.legend-val { font-weight: 600; color: var(--dark); }
-
 /* Lots en cours */
 .lots-list { display: flex; flex-direction: column; }
 .lot-row {
@@ -478,7 +366,6 @@ onMounted(load)
   .dashboard-hero { grid-template-columns: 1fr auto; }
   .dashboard-actions { grid-column: 1 / -1; }
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
-  .charts-row { grid-template-columns: 1fr; }
   .pipeline-row { padding: 14px; }
   .pipeline-stage { min-width: 100px; }
 }

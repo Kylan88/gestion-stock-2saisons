@@ -27,8 +27,14 @@
             <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
           </template>
         </StatCard>
-        <StatCard title="Lots stockés" :value="Object.values(stocksByZone).flat().length" status="neutral">
+        <StatCard title="Lots stockés" :value="lotsTraites" status="neutral">
           <template #icon><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></template>
+        </StatCard>
+        <StatCard title="100g" :value="sachets100g" status="info">
+          <template #icon><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg></template>
+        </StatCard>
+        <StatCard title="Sachet FF" :value="sachetsFF" status="neutral">
+          <template #icon><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg></template>
         </StatCard>
       </div>
       <div class="zones-grid">
@@ -79,8 +85,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { getZonesStock, getContenuZone } from '../api'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { getZonesStock, getContenuZone, getReconditionnements } from '../api'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -90,14 +96,20 @@ import StatCard from '../components/StatCard.vue'
 const zones = ref([])
 const stocksByZone = reactive({})
 const loading = ref(true)
+const lotsTraites = ref(0)
 
 async function load() {
   loading.value = true
   try {
-    const z = await getZonesStock()
+    const [z, recs] = await Promise.all([getZonesStock(), getReconditionnements()])
     zones.value = z
+    reconds.value = recs
     const contents = await Promise.all(z.map(zone => getContenuZone(zone.id)))
     z.forEach((zone, i) => { stocksByZone[zone.id] = contents[i] })
+    // Lots réellement présents en zone (flux continu : le statut du lot ne dit plus rien)
+    const lotIds = new Set()
+    contents.flat().forEach(s => { if (s.lot_id) lotIds.add(s.lot_id) })
+    lotsTraites.value = lotIds.size
   } finally { loading.value = false }
 }
 
@@ -106,6 +118,21 @@ function doPrint() { window.print() }
 function zoneTotal(zone) {
   return (stocksByZone[zone.id] || []).reduce((total, stock) => total + Number(stock.quantite || 0), 0)
 }
+const reconds = ref([])
+function sachetsStock(type) {
+  // stock réel restant en sachets (après ventes), depuis StockZone — pas le cumul produit
+  const allStocks = Object.values(stocksByZone).flat()
+  return allStocks
+    .filter(s => {
+      const n = (s.produit?.nom || '').toLowerCase()
+      if (type === 'local') return n.includes('sachet 100g') && n.includes('local')
+      if (type === 'fitini_fe') return n.includes('sachet 100g') && (n.includes('fitini') || n.includes('ff'))
+      return false
+    })
+    .reduce((total, s) => total + Number(s.sachets || 0), 0)
+}
+const sachets100g = computed(() => sachetsStock('local'))
+const sachetsFF = computed(() => sachetsStock('fitini_fe'))
 function formatKg(value) { return Number(value || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) }
 
 onMounted(load)

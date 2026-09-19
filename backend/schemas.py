@@ -78,7 +78,7 @@ class LotCreate(LotBase): pass
 class EtapeResume(BaseModel):
     id: int; etape: str; ordre: int; statut: str
     date_debut: Optional[datetime] = None; date_fin: Optional[datetime] = None
-    poids_entree: float = 0.0; poids_sortie: float = 0.0
+    poids_entree: float = 0.0; poids_sortie: float = 0.0; poids_sec_kg: Optional[float] = None
     perte: float = 0.0; rendement_pourcentage: Optional[float] = None
     operateur: str = ""
     fruits_murs_kg: float = 0.0; dechets_tri_kg: float = 0.0
@@ -94,12 +94,12 @@ class LotResponse(LotBase):
 
 class EtapeProductionBase(ValidatedInput):
     non_negative_fields = {
-        "poids_entree", "poids_sortie", "perte", "rendement_pourcentage", "fruits_murs_kg",
+        "poids_entree", "poids_sortie", "poids_sec_kg", "perte", "rendement_pourcentage", "fruits_murs_kg",
         "dechets_tri_kg", "dechets_lavage_kg", "retour_non_mur_kg", "dechets_production_kg",
     }
     lot_id: int; etape: str; ordre: int = 0; statut: str = "en_attente"
     date_debut: Optional[datetime] = None; date_fin: Optional[datetime] = None
-    poids_entree: float = 0.0; poids_sortie: float = 0.0
+    poids_entree: float = 0.0; poids_sortie: float = 0.0; poids_sec_kg: Optional[float] = None
     perte: float = 0.0; rendement_pourcentage: Optional[float] = None
     operateur: str = ""; notes: str = ""
     fruits_murs_kg: float = 0.0; dechets_tri_kg: float = 0.0
@@ -111,12 +111,12 @@ class EtapeProductionBase(ValidatedInput):
 class EtapeProductionCreate(EtapeProductionBase): pass
 class EtapeProductionUpdate(ValidatedInput):
     non_negative_fields = {
-        "poids_entree", "poids_sortie", "fruits_murs_kg", "dechets_tri_kg", "dechets_lavage_kg",
+        "poids_entree", "poids_sortie", "poids_sec_kg", "fruits_murs_kg", "dechets_tri_kg", "dechets_lavage_kg",
         "retour_non_mur_kg", "dechets_production_kg",
     }
     statut: Optional[str] = None; date_fin: Optional[datetime] = None
     poids_entree: Optional[float] = None
-    poids_sortie: Optional[float] = None; operateur: Optional[str] = None
+    poids_sortie: Optional[float] = None; poids_sec_kg: Optional[float] = None; operateur: Optional[str] = None
     notes: Optional[str] = None
     fruits_murs_kg: Optional[float] = None; dechets_tri_kg: Optional[float] = None
     dechets_lavage_kg: Optional[float] = None; retour_non_mur_kg: Optional[float] = None
@@ -204,7 +204,7 @@ class StockZoneResponse(StockZoneBase):
 class LigneCommandeBase(ValidatedInput):
     positive_fields = {"quantite"}
     non_negative_fields = {"prix_unitaire"}
-    produit_id: int; lot_id: Optional[int] = None; quantite: float; prix_unitaire: float = 0.0
+    produit_id: int; lot_id: Optional[int] = None; quantite: float; unite: str = "carton"; prix_unitaire: float = 0.0
 class CommandeBase(BaseModel):
     client_nom: str; client_contact: str = ""; date_livraison_prevue: Optional[datetime] = None
     notes: str = ""; statut: str = "en_attente"
@@ -221,13 +221,13 @@ class ChariotCreate(ValidatedInput):
     positive_fields = {"numero_chariot"}
     numero_chariot: int
     heure_remplissage: str = ""
-    heure_entree_sechoir: str = ""
+    heure_entree_dryer: str = ""
 
 class ChariotResponse(BaseModel):
     id: int; etape_production_id: int; lot_id: int
     numero_chariot: int; dryer: int; nbre_chariots: int; total_claies: int
     quantite_totale: float; operateur: str
-    heure_remplissage: str; heure_entree_sechoir: str
+    heure_remplissage: str; heure_entree_dryer: str
     created_at: Optional[datetime] = None
     class Config: from_attributes = True
 
@@ -282,11 +282,19 @@ class DemandeTransfertResponse(BaseModel):
 
 class ReconditionnementCreate(ValidatedInput):
     positive_fields = {"nb_cartons_entree"}
+    non_negative_fields = {"rhum_cartons_sortie", "rhum_sachets_sortis", "rhum_poids_sachet", "rhum_poids_vrac_kg"}
     lot_id: int
     type_source: str
     nb_cartons_entree: int
     dechet_kg: float = 0.0
     nb_sachets_sortis: int = 0
+    # Rhum arrangé obtenu depuis ces cartons (source local/fitini fê) — optionnel
+    rhum_cartons_sortie: int = 0
+    rhum_sachets_sortis: int = 0
+    rhum_poids_sachet: float = 2.5
+    # Vrac (kg) : quantité ne remplissant ni cartons ni sachets (ex. 1,2 kg)
+    rhum_poids_vrac_kg: float = 0.0
+    zone_id: Optional[int] = None
     responsable: str = ""
     notes: str = ""
 
@@ -294,6 +302,8 @@ class ReconditionnementResponse(BaseModel):
     id: int; lot_id: int; date_reconditionnement: datetime
     type_source: str; nb_cartons_entree: int; nb_sachets_100g_sortie: int
     dechet_kg: float; nb_sachets_sortis: int
+    rhum_cartons_sortie: int = 0; rhum_sachets_sortis: int = 0; rhum_poids_sachet: float = 2.5
+    rhum_poids_vrac_kg: float = 0.0
     responsable: str; notes: str; statut: str
     class Config: from_attributes = True
 
@@ -364,7 +374,11 @@ class ProductionStats(BaseModel):
 # ── CONDITIONNEMENT PAR DRYER J+1 ──
 
 class ConditionnementEntryCreate(ValidatedInput):
+    non_negative_fields = {"poids_sec_kg"}
     dryer: int
+    # Quantité réellement sortie du séchage. Elle ne peut pas dépasser la
+    # pulpe chargée dans ce dryer et devient la référence des 5 flux.
+    poids_sec_kg: float = 0.0
     export_cartons: int = 0; export_sachets: int = 0; export_poids_sachet: float = 2.5
     local_cartons: int = 0; local_sachets: int = 0; local_poids_sachet: float = 2.5
     dechets_cartons: int = 0; dechets_sachets: int = 0; dechets_poids_sachet: float = 2.5

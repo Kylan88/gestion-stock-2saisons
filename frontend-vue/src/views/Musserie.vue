@@ -32,23 +32,24 @@
       <div v-if="!loadingHist && historique.length > 0" class="table-wrap">
         <table class="table">
           <thead>
-            <tr>
-              <th>Date</th><th>Lot</th><th>Dryer</th><th>Fruits mûrs</th><th>Tri</th>
-              <th>Lavage</th><th>Déchets prod.</th><th>Retour</th><th>Poids sortie</th><th>Rendement</th>
-            </tr>
+              <tr>
+                <th>Date</th><th>Lot</th><th>Dryer</th><th>Fruits mûrs</th><th>Tri</th>
+                <th>Lavage</th><th>Déchets prod.</th><th>Retour non mûr</th><th>Retour mûr</th><th>Poids sortie</th><th>Rendement</th>
+              </tr>
           </thead>
           <tbody>
             <tr v-for="ep in historique" :key="ep.id">
               <td>{{ formatDate(ep.date_debut) }}</td>
               <td><strong>{{ ep.lot?.code_lot || ep.lot_id }}</strong></td>
               <td>{{ ep.dryer ? 'D' + ep.dryer : '—' }}</td>
-              <td>{{ ep.fruits_murs_kg }}</td>
-              <td>{{ ep.dechets_tri_kg }}</td>
-              <td>{{ ep.dechets_lavage_kg }}</td>
-              <td>{{ ep.dechets_production_kg }}</td>
-              <td>{{ ep.retour_non_mur_kg }}</td>
-              <td>{{ ep.poids_sortie }}</td>
-              <td>{{ ep.rendement_pourcentage ? ep.rendement_pourcentage + '%' : '—' }}</td>
+              <td>{{ fmt(ep.fruits_murs_kg) }}</td>
+              <td>{{ fmt(ep.dechets_tri_kg) }}</td>
+              <td>{{ fmt(ep.dechets_lavage_kg) }}</td>
+              <td>{{ fmt(ep.dechets_production_kg) }}</td>
+              <td>{{ fmt(ep.retour_non_mur_kg) }}</td>
+              <td>{{ fmt(ep.retour_mure_kg) }}</td>
+              <td>{{ fmt(ep.poids_sortie) }}</td>
+              <td>{{ ep.rendement_pourcentage != null ? fmt(ep.rendement_pourcentage) + '%' : '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -66,7 +67,7 @@
       <div v-if="lots.length > 1" class="lot-nav">
         <span class="lot-nav-label">Aller à :</span>
         <button v-for="lot in lots" :key="lot.id" class="lot-nav-pill" :class="{active: expandedLotId === lot.id}" @click="scrollToLot(lot.id)">
-          {{ lot.code_lot }} <small>({{ resteATraiter(lot) }}kg)</small>
+          {{ lot.code_lot }} <small>({{ fmt(resteATraiter(lot)) }} kg)</small>
         </button>
         <button class="lot-nav-pill ghost" @click="expandedLotId = expandedLotId ? null : lots[0]?.id">{{ expandedLotId ? 'Tout réduire' : 'Tout ouvrir' }}</button>
       </div>
@@ -81,8 +82,8 @@
             <StatusBadge :status="lot.statut" />
           </div>
           <div class="lot-header-right">
-            <span class="lot-recap"><strong>{{ lot.poids_frais }}</strong> kg reçu</span>
-            <span class="lot-recap reste">Reste : <strong>{{ resteATraiter(lot) }} kg</strong></span>
+            <span class="lot-recap"><strong>{{ fmt(lot.poids_frais) }}</strong> kg reçu</span>
+            <span class="lot-recap reste">Reste : <strong>{{ fmt(resteATraiter(lot)) }} kg</strong></span>
             <span class="expand-icon">{{ expandedLotId === lot.id ? '▲' : '▼' }}</span>
           </div>
         </div>
@@ -103,25 +104,29 @@
             <div v-for="ep in getEtapes(lot)" :key="ep.id" class="cumul-box">
               <div class="cumul-box-header">Dryer {{ ep.dryer || '—' }}</div>
               <div class="cumul-box-body">
-                <div class="cumul-stat"><span>Fruits mûrs</span><strong>{{ round(ep.fruits_murs_kg) }} kg</strong></div>
-                <div class="cumul-stat"><span>Tri</span><strong>{{ round(ep.dechets_tri_kg) }} kg</strong></div>
-                <div class="cumul-stat"><span>Lavage</span><strong>{{ round(ep.dechets_lavage_kg) }} kg</strong></div>
-                <div class="cumul-stat"><span>Déchets prod.</span><strong>{{ round(ep.dechets_production_kg) }} kg</strong></div>
-                <div class="cumul-stat"><span>Retour non mûr</span><strong>{{ round(ep.retour_non_mur_kg) }} kg</strong></div>
+                <div class="cumul-stat"><span>Fruits mûrs</span><strong>{{ fmt(ep.fruits_murs_kg) }} kg</strong></div>
+                <div class="cumul-stat"><span>Tri</span><strong>{{ fmt(ep.dechets_tri_kg) }} kg</strong></div>
+                <div class="cumul-stat"><span>Lavage</span><strong>{{ fmt(ep.dechets_lavage_kg) }} kg</strong></div>
+                <div class="cumul-stat"><span>Déchets prod.</span><strong>{{ fmt(ep.dechets_production_kg) }} kg</strong></div>
+                <div class="cumul-stat"><span>Retour non mûr</span><strong>{{ fmt(ep.retour_non_mur_kg) }} kg</strong></div>
+                <div class="cumul-stat"><span>Retour mûr</span><strong>{{ fmt(ep.retour_mure_kg) }} kg</strong></div>
               </div>
               <div class="cumul-box-footer">
-                <span>→ Sortie : <strong>{{ round(ep.poids_sortie) }} kg</strong></span>
-                <span v-if="ep.rendement_pourcentage" class="badge-rendement">{{ ep.rendement_pourcentage }}%</span>
+                <span>→ Sortie : <strong>{{ fmt(ep.poids_sortie) }} kg</strong></span>
+                <span v-if="ep.rendement_pourcentage != null" class="badge-rendement">{{ fmt(ep.rendement_pourcentage) }}%</span>
               </div>
             </div>
           </div>
 
-          <!-- Total cumulé -->
+          <!-- Total cumulé : mêmes définitions que le backend
+               traité = Σ fruits mûrs, production = Σ sorties dryers,
+               perte lot = Σ(tri + lavage + déchets). Le tri étant un écart
+               lot hors dryer, production + perte ≠ traité. -->
           <div class="cumul-total">
-            <span>Total traité : <strong>{{ totalCumulFruits(lot) }} kg</strong></span>
-            <span>→ Production : <strong>{{ totalCumulProd(lot) }} kg</strong></span>
-            <span>Perte : <strong>{{ totalCumulPerte(lot) }} kg</strong></span>
-            <span v-if="totalCumulRendement(lot) != null" class="rendement-val">Rendement : <strong>{{ totalCumulRendement(lot) }}%</strong></span>
+            <span>Fruits mûrs cumulés : <strong>{{ fmt(totalCumulFruits(lot)) }} kg</strong></span>
+            <span>→ Sortie dryers : <strong>{{ fmt(totalCumulProd(lot)) }} kg</strong></span>
+            <span>Perte lot (tri+lavage+déchets) : <strong>{{ fmt(totalCumulPerte(lot)) }} kg</strong></span>
+            <span v-if="totalCumulRendement(lot) != null" class="rendement-val">Rendement : <strong>{{ fmt(totalCumulRendement(lot)) }}%</strong></span>
           </div>
 
           <div class="cloture-row">
@@ -137,19 +142,19 @@
           <div class="resume-grid">
             <div class="resume-item">
               <span class="resume-label">Fruits mûrs aujourd'hui</span>
-              <strong class="resume-value">{{ sumFruitsMursJour(lot) }} kg</strong>
+              <strong class="resume-value">{{ fmt(sumFruitsMursJour(lot)) }} kg</strong>
             </div>
             <div class="resume-item">
               <span class="resume-label">Pertes totales aujourd'hui</span>
-              <strong class="resume-value text-error">{{ sumPertesJour(lot) }} kg</strong>
+              <strong class="resume-value text-error">{{ fmt(sumPertesJour(lot)) }} kg</strong>
             </div>
             <div class="resume-item">
-              <span class="resume-label">Production estimée</span>
-              <strong class="resume-value text-success">{{ round(sumFruitsMursJour(lot) - sumPertesJour(lot)) }} kg</strong>
+              <span class="resume-label">Production estimée (= mûrs − retours − lavage − déchets)</span>
+              <strong class="resume-value text-success">{{ fmt(sumProdEstimeeJour(lot)) }} kg</strong>
             </div>
             <div class="resume-item">
               <span class="resume-label">Reste pour demain</span>
-              <strong class="resume-value text-warning">{{ sumResteJour(lot) }} kg</strong>
+              <strong class="resume-value text-warning">{{ fmt(sumResteJour(lot)) }} kg</strong>
             </div>
           </div>
         </div>
@@ -192,11 +197,17 @@
                 <input type="number" v-model.number="f[lot.id][d].retour_non_mur_kg" class="input compact" step="0.1" min="0" @input="onInput(lot.id, d)" />
               </div>
 
-              <!-- Reste et opérateur -->
+              <!-- Retour mûr -->
+              <div class="form-group">
+                <label class="input-label">Retour mûr (kg)</label>
+                <input type="number" v-model.number="f[lot.id][d].retour_mure_kg" class="input compact" step="0.1" min="0" @input="onInput(lot.id, d)" />
+              </div>
+
+              <!-- Reste calculé + opérateur -->
               <div class="form-row">
                 <div class="form-group" style="flex:1">
-                  <label class="input-label">Reste demain (kg)</label>
-                  <input type="number" v-model.number="f[lot.id][d].reste_kg" class="input compact" step="0.1" min="0" @input="onInput(lot.id, d)" />
+                  <label class="input-label">Reste après saisie (calculé)</label>
+                  <div class="input compact" style="background:var(--surface);font-weight:700">{{ fmt(resteApresSaisie(lot)) }} kg</div>
                 </div>
                 <div class="form-group" style="flex:1">
                   <label class="input-label">Opérateur</label>
@@ -207,17 +218,17 @@
               <!-- Bilan calculé du dryer -->
               <div v-if="bilanJ[lot.id]?.[d]" class="bilan-jour">
                 <div class="bilan-line">
-                  <span class="bilan-prod">Production : <strong>{{ round(bilanJ[lot.id][d].prod) }} kg</strong></span>
-                  <span class="bilan-detail">= {{ bilanJ[lot.id][d].gross }} − {{ bilanJ[lot.id][d].retour }} − {{ bilanJ[lot.id][d].lavage }} − {{ bilanJ[lot.id][d].dechets_prod }}</span>
+                  <span class="bilan-prod">Production : <strong>{{ fmt(bilanJ[lot.id][d].prod) }} kg</strong></span>
+                  <span class="bilan-detail">= {{ fmt(bilanJ[lot.id][d].gross) }} − {{ fmt(bilanJ[lot.id][d].retour) }} − {{ fmt(bilanJ[lot.id][d].lavage) }} − {{ fmt(bilanJ[lot.id][d].dechets_prod) }}</span>
                 </div>
                 <div class="bilan-line" v-if="bilanJ[lot.id][d].reste != null">
-                  <span>Reste : <strong>{{ bilanJ[lot.id][d].reste }} kg</strong></span>
+                  <span>Reste : <strong>{{ fmt(bilanJ[lot.id][d].reste) }} kg</strong></span>
                 </div>
               </div>
 
-              <button class="btn btn-primary btn-sm" style="width:100%;margin-top:8px"
+              <button class="btn btn-sm" :class="isValidated(lot, d) ? 'btn-outline' : 'btn-primary'" style="width:100%;margin-top:8px"
                 :disabled="!f[lot.id][d].fruits_murs_kg || saving[d]" @click="enregistrer(lot, d)">
- {{ saving[d] ? '...' : 'Enreg.' }}
+  {{ saving[d] ? '...' : (isValidated(lot, d) ? 'Mettre à jour' : 'Enregistrer') }}
 </button>
               </div>
             </div>
@@ -230,7 +241,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
 import { getLots, getProductionsEtapes, validerMusserie, cloturerMusserie, getHistoriqueMusserie } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -268,6 +279,7 @@ async function loadHistorique() {
 watch(showHistorique, (v) => { if (v) loadHistorique() })
 
 function round(v) { return Math.round((v || 0) * 100) / 100 }
+function fmt(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '—' }
 
 function getEtapes(lot) {
   return (etapesData.value[lot.id] || []).filter(e => e.etape === 'musserie')
@@ -275,6 +287,15 @@ function getEtapes(lot) {
 
 function getEtapeForDryer(lot, dryer) {
   return getEtapes(lot).find(e => e.dryer === dryer) || null
+}
+
+function getTodayEtapeForDryer(lot, dryer) {
+  const today = todayLocal()
+  return getEtapes(lot).find(e => e.dryer === dryer && e.statut !== TERMINE && String(e.date_debut || '').slice(0,10) === today) || null
+}
+
+function isValidated(lot, dryer) {
+  return !!getTodayEtapeForDryer(lot, dryer)
 }
 
 function todayLocal() {
@@ -294,6 +315,12 @@ function canCloturerJour(lot) {
 function totalCumulFruits(lot) {
   return round(getEtapes(lot).reduce((s, e) => s + (e.fruits_murs_kg || 0), 0))
 }
+function totalCumulTri(lot) {
+  return round(getEtapes(lot).reduce((s, e) => s + (e.dechets_tri_kg || 0), 0))
+}
+function totalCumulNet(lot) {
+  return round(getEtapes(lot).reduce((s, e) => s + ((e.fruits_murs_kg || 0) - (e.retour_mure_kg || 0)), 0))
+}
 function totalCumulProd(lot) {
   return round(getEtapes(lot).reduce((s, e) => s + (e.poids_sortie || 0), 0))
 }
@@ -309,12 +336,17 @@ function totalCumulRendement(lot) {
 }
 
 function progressMusserie(lot) {
+  // % traité réel, même source que le Reste affiché (lot.quantite_restante backend).
   if (!lot.poids_frais) return 0
-  return Math.min(100, Math.round((totalCumulFruits(lot) / lot.poids_frais) * 100))
+  const reste = resteATraiter(lot)
+  return Math.min(100, Math.round(((lot.poids_frais - reste) / lot.poids_frais) * 100))
 }
 
 function resteATraiter(lot) {
-  return round(Math.max(0, (lot.poids_frais || 0) - totalCumulFruits(lot)))
+  // Référence unique : quantite_restante calculée par le backend
+  // (= reçu − Σ(mûrs − retour mûr) − Σ(tri)). Recalcul local en repli seulement.
+  if (lot.quantite_restante != null) return round(lot.quantite_restante)
+  return round(Math.max(0, (lot.poids_frais || 0) - totalCumulNet(lot) - totalCumulTri(lot)))
 }
 
 // Fonctions pour le résumé de saisie en temps réel
@@ -327,8 +359,26 @@ function sumFruitsMursJour(lot) {
   }
   return round(total)
 }
+function sumFruitsNetJour(lot) {
+  let total = 0
+  for (let d = 1; d <= 2; d++) {
+    const fd = f[lot.id]?.[d]
+    if (fd) total += Number(fd.fruits_murs_kg || 0) - Number(fd.retour_mure_kg || 0)
+  }
+  return round(total)
+}
+function sumTriJour(lot) {
+  let total = 0
+  for (let d = 1; d <= 2; d++) {
+    const fd = f[lot.id]?.[d]
+    if (fd) total += Number(fd.dechets_tri_kg || 0)
+  }
+  return round(total)
+}
 
 function sumPertesJour(lot) {
+  // Même définition que le backend (ep.perte) : tri + lavage + déchets prod.
+  // Le tri est un écart lot (hors dryer), pas une perte dryer.
   let total = 0
   for (let d = 1; d <= 2; d++) {
     const fd = f[lot.id]?.[d]
@@ -338,15 +388,27 @@ function sumPertesJour(lot) {
   }
   return round(total)
 }
-
-function sumResteJour(lot) {
+function sumProdEstimeeJour(lot) {
+  // Même formule que le backend (ep.poids_sortie) et le bilan dryer :
+  // sortie = mûrs − retour mûr − retour non mûr − lavage − déchets prod (tri exclu).
   let total = 0
   for (let d = 1; d <= 2; d++) {
-    if (f[lot.id]?.[d]?.reste_kg != null && f[lot.id][d].reste_kg !== '') {
-      total += Number(f[lot.id][d].reste_kg)
+    const fd = f[lot.id]?.[d]
+    if (fd) {
+      total += Number(fd.fruits_murs_kg || 0) - Number(fd.retour_mure_kg || 0)
+        - Number(fd.retour_non_mur_kg || 0) - Number(fd.dechets_lavage_kg || 0)
+        - Number(fd.dechets_production_kg || 0)
     }
   }
-  return round(total)
+  return round(Math.max(0, total))
+}
+
+function resteApresSaisie(lot) {
+  // reste lot (BDD) − (fruits nets + tri) saisis aujourd'hui — tri retiré du lot, pas de l'envoi
+  return round(Math.max(0, (lot.quantite_restante ?? lot.poids_frais ?? 0) - sumFruitsNetJour(lot) - sumTriJour(lot)))
+}
+function sumResteJour(lot) {
+  return resteApresSaisie(lot)
 }
 
 function onInput(lotId, dryer) {
@@ -358,24 +420,33 @@ function recalc(lotId, dryer) {
   if (!d || !d.fruits_murs_kg) { if (bilanJ[lotId]) bilanJ[lotId][dryer] = null; return }
   const gross = d.fruits_murs_kg || 0
   const retour = d.retour_non_mur_kg || 0
+  const retour_mure = d.retour_mure_kg || 0
   const lavage = d.dechets_lavage_kg || 0
   const dechets_prod = d.dechets_production_kg || 0
-  const prod = Math.max(0, gross - retour - lavage - dechets_prod)
-  const reste = d.reste_kg != null && d.reste_kg !== '' ? Number(d.reste_kg) : null
+  const prod = Math.max(0, gross - retour - retour_mure - lavage - dechets_prod)
   if (!bilanJ[lotId]) bilanJ[lotId] = {}
   bilanJ[lotId][dryer] = {
-    gross: round(gross), retour: round(retour), lavage: round(lavage),
-    dechets_prod: round(dechets_prod), prod: round(prod), reste: reste != null ? round(reste) : null,
+    gross: round(gross), retour: round(retour), retour_mure: round(retour_mure), lavage: round(lavage),
+    dechets_prod: round(dechets_prod), prod: round(prod), reste: null,
   }
 }
 
-function initForm(lotId, dryer) {
+function initForm(lotId, dryer, prefill = null) {
   if (!f[lotId]) f[lotId] = {}
   if (!f[lotId][dryer]) {
     f[lotId][dryer] = reactive({
       fruits_murs_kg: null, dechets_tri_kg: 0, dechets_lavage_kg: 0,
-      retour_non_mur_kg: 0, dechets_production_kg: 0, reste_kg: null, operateur: '',
+      retour_non_mur_kg: 0, retour_mure_kg: 0, dechets_production_kg: 0, operateur: '',
     })
+  }
+  if (prefill) {
+    f[lotId][dryer].fruits_murs_kg = prefill.fruits_murs_kg ?? null
+    f[lotId][dryer].dechets_tri_kg = prefill.dechets_tri_kg ?? 0
+    f[lotId][dryer].dechets_lavage_kg = prefill.dechets_lavage_kg ?? 0
+    f[lotId][dryer].retour_non_mur_kg = prefill.retour_non_mur_kg ?? 0
+    f[lotId][dryer].retour_mure_kg = prefill.retour_mure_kg ?? 0
+    f[lotId][dryer].dechets_production_kg = prefill.dechets_production_kg ?? 0
+    f[lotId][dryer].operateur = prefill.operateur ?? ''
   }
 }
 
@@ -406,8 +477,10 @@ async function load() {
     const filtered = raw.filter(l => [RECEPTION, EN_MUSSERIE].includes(toCanonical(l.statut)))
     for (const lot of filtered) {
       etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
-      initForm(lot.id, 1)
-      initForm(lot.id, 2)
+      for (const d of [1, 2]) {
+        const epToday = (etapesData.value[lot.id] || []).find(e => e.etape === 'musserie' && e.dryer === d && e.statut !== TERMINE && String(e.date_debut || '').slice(0,10) === todayLocal())
+        initForm(lot.id, d, epToday)
+      }
       recalcAll(lot.id)
     }
     lots.value = filtered
@@ -416,20 +489,20 @@ async function load() {
 }
 
 async function enregistrer(lot, dryer) {
+  const maj = isValidated(lot, dryer)
   saving[dryer] = true
   try {
-    const reste = f[lot.id][dryer].reste_kg
     await validerMusserie(lot.id, {
       fruits_murs_kg: Number(f[lot.id][dryer].fruits_murs_kg) || 0,
       dechets_tri_kg: Number(f[lot.id][dryer].dechets_tri_kg) || 0,
       dechets_lavage_kg: Number(f[lot.id][dryer].dechets_lavage_kg) || 0,
       retour_non_mur_kg: Number(f[lot.id][dryer].retour_non_mur_kg) || 0,
+      retour_mure_kg: Number(f[lot.id][dryer].retour_mure_kg) || 0,
       dechets_production_kg: Number(f[lot.id][dryer].dechets_production_kg) || 0,
       operateur: f[lot.id][dryer].operateur || '',
       dryer: dryer,
-      reste_kg: reste === '' || reste == null ? null : Number(reste),
     })
-    toast.success(`Dryer ${dryer} enregistré pour ${lot.code_lot}`)
+    toast.success(maj ? `Dryer ${dryer} mis à jour pour ${lot.code_lot}` : `Dryer ${dryer} enregistré pour ${lot.code_lot}`)
     await load()
   } catch (e) {
     const msg = e.response?.data?.detail || e.message
