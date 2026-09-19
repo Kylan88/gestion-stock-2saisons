@@ -32,10 +32,10 @@
       <div v-if="!loadingHist && historique.length > 0" class="table-wrap">
         <table class="table">
           <thead>
-            <tr>
-              <th>Date</th><th>Lot</th><th>Dryer</th><th>Fruits mûrs</th><th>Tri</th>
-              <th>Lavage</th><th>Déchets prod.</th><th>Retour</th><th>Poids sortie</th><th>Rendement</th>
-            </tr>
+              <tr>
+                <th>Date</th><th>Lot</th><th>Dryer</th><th>Fruits mûrs</th><th>Tri</th>
+                <th>Lavage</th><th>Déchets prod.</th><th>Retour non mûr</th><th>Retour mûr</th><th>Poids sortie</th><th>Rendement</th>
+              </tr>
           </thead>
           <tbody>
             <tr v-for="ep in historique" :key="ep.id">
@@ -47,6 +47,7 @@
               <td>{{ fmt(ep.dechets_lavage_kg) }}</td>
               <td>{{ fmt(ep.dechets_production_kg) }}</td>
               <td>{{ fmt(ep.retour_non_mur_kg) }}</td>
+              <td>{{ fmt(ep.retour_mure_kg) }}</td>
               <td>{{ fmt(ep.poids_sortie) }}</td>
               <td>{{ ep.rendement_pourcentage != null ? fmt(ep.rendement_pourcentage) + '%' : '—' }}</td>
             </tr>
@@ -108,6 +109,7 @@
                 <div class="cumul-stat"><span>Lavage</span><strong>{{ fmt(ep.dechets_lavage_kg) }} kg</strong></div>
                 <div class="cumul-stat"><span>Déchets prod.</span><strong>{{ fmt(ep.dechets_production_kg) }} kg</strong></div>
                 <div class="cumul-stat"><span>Retour non mûr</span><strong>{{ fmt(ep.retour_non_mur_kg) }} kg</strong></div>
+                <div class="cumul-stat"><span>Retour mûr</span><strong>{{ fmt(ep.retour_mure_kg) }} kg</strong></div>
               </div>
               <div class="cumul-box-footer">
                 <span>→ Sortie : <strong>{{ fmt(ep.poids_sortie) }} kg</strong></span>
@@ -116,11 +118,14 @@
             </div>
           </div>
 
-          <!-- Total cumulé -->
+          <!-- Total cumulé : mêmes définitions que le backend
+               traité = Σ fruits mûrs, production = Σ sorties dryers,
+               perte lot = Σ(tri + lavage + déchets). Le tri étant un écart
+               lot hors dryer, production + perte ≠ traité. -->
           <div class="cumul-total">
-            <span>Total traité : <strong>{{ fmt(totalCumulFruits(lot)) }} kg</strong></span>
-            <span>→ Production : <strong>{{ fmt(totalCumulProd(lot)) }} kg</strong></span>
-            <span>Perte : <strong>{{ fmt(totalCumulPerte(lot)) }} kg</strong></span>
+            <span>Fruits mûrs cumulés : <strong>{{ fmt(totalCumulFruits(lot)) }} kg</strong></span>
+            <span>→ Sortie dryers : <strong>{{ fmt(totalCumulProd(lot)) }} kg</strong></span>
+            <span>Perte lot (tri+lavage+déchets) : <strong>{{ fmt(totalCumulPerte(lot)) }} kg</strong></span>
             <span v-if="totalCumulRendement(lot) != null" class="rendement-val">Rendement : <strong>{{ fmt(totalCumulRendement(lot)) }}%</strong></span>
           </div>
 
@@ -144,8 +149,8 @@
               <strong class="resume-value text-error">{{ fmt(sumPertesJour(lot)) }} kg</strong>
             </div>
             <div class="resume-item">
-              <span class="resume-label">Production estimée</span>
-              <strong class="resume-value text-success">{{ fmt(sumFruitsMursJour(lot) - sumPertesJour(lot)) }} kg</strong>
+              <span class="resume-label">Production estimée (= mûrs − retours − lavage − déchets)</span>
+              <strong class="resume-value text-success">{{ fmt(sumProdEstimeeJour(lot)) }} kg</strong>
             </div>
             <div class="resume-item">
               <span class="resume-label">Reste pour demain</span>
@@ -331,12 +336,16 @@ function totalCumulRendement(lot) {
 }
 
 function progressMusserie(lot) {
+  // % traité réel, même source que le Reste affiché (lot.quantite_restante backend).
   if (!lot.poids_frais) return 0
-  const traite = totalCumulNet(lot) + totalCumulTri(lot)
-  return Math.min(100, Math.round((traite / lot.poids_frais) * 100))
+  const reste = resteATraiter(lot)
+  return Math.min(100, Math.round(((lot.poids_frais - reste) / lot.poids_frais) * 100))
 }
 
 function resteATraiter(lot) {
+  // Référence unique : quantite_restante calculée par le backend
+  // (= reçu − Σ(mûrs − retour mûr) − Σ(tri)). Recalcul local en repli seulement.
+  if (lot.quantite_restante != null) return round(lot.quantite_restante)
   return round(Math.max(0, (lot.poids_frais || 0) - totalCumulNet(lot) - totalCumulTri(lot)))
 }
 
@@ -368,6 +377,8 @@ function sumTriJour(lot) {
 }
 
 function sumPertesJour(lot) {
+  // Même définition que le backend (ep.perte) : tri + lavage + déchets prod.
+  // Le tri est un écart lot (hors dryer), pas une perte dryer.
   let total = 0
   for (let d = 1; d <= 2; d++) {
     const fd = f[lot.id]?.[d]
@@ -376,6 +387,20 @@ function sumPertesJour(lot) {
     }
   }
   return round(total)
+}
+function sumProdEstimeeJour(lot) {
+  // Même formule que le backend (ep.poids_sortie) et le bilan dryer :
+  // sortie = mûrs − retour mûr − retour non mûr − lavage − déchets prod (tri exclu).
+  let total = 0
+  for (let d = 1; d <= 2; d++) {
+    const fd = f[lot.id]?.[d]
+    if (fd) {
+      total += Number(fd.fruits_murs_kg || 0) - Number(fd.retour_mure_kg || 0)
+        - Number(fd.retour_non_mur_kg || 0) - Number(fd.dechets_lavage_kg || 0)
+        - Number(fd.dechets_production_kg || 0)
+    }
+  }
+  return round(Math.max(0, total))
 }
 
 function resteApresSaisie(lot) {
