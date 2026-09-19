@@ -697,6 +697,12 @@ def valider_conditionnement(db: Session, lot_id: int,
     # Flux continu : bascule auto vers 'conditionne' si le lot est épuisé.
     epuise = _bascule_auto_lot_epuise(db, lot)
     db.refresh(lot)
+    # Chaque saisie alimente le stock (delta uniquement, jamais bloquant).
+    try:
+        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
+    except Exception as e:
+        stock = {"alimente": False, "raison": str(e)}
+    db.refresh(lot)
 
     return {
         "lot_id": lot_id,
@@ -708,6 +714,7 @@ def valider_conditionnement(db: Session, lot_id: int,
         "fitini_fe_cartons": lot.fitini_fe_cartons,
         "statut_lot": lot.statut,
         "lot_epuise": epuise,
+        "stock": stock,
     }
 
 
@@ -790,6 +797,12 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
     epuise = _bascule_auto_lot_epuise(db, lot)
     db.refresh(lot); db.refresh(etape_cond)
+    # Figer alimente aussi le stock (delta uniquement, jamais bloquant).
+    try:
+        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
+    except Exception as e:
+        stock = {"alimente": False, "raison": str(e)}
+    db.refresh(lot)
 
     return {
         "lot_id": lot_id,
@@ -800,6 +813,7 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
         "statut_lot": lot.statut,
         "cloture_jour": date_str or datetime.now().date().isoformat(),
         "lot_epuise": epuise,
+        "stock": stock,
     }
 
 
@@ -967,7 +981,13 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
     # Flux continu : bascule auto vers 'conditionne' si le lot est épuisé.
     epuise = _bascule_auto_lot_epuise(db, lot)
     db.refresh(lot)
-    return {"entry": entry, "lot": lot, "is_update": is_update, "poids_sec_kg": prod.poids_sec_kg or 0.0, "production_id": prod.id, "lot_epuise": epuise}
+    # Chaque saisie alimente le stock (delta uniquement, jamais bloquant).
+    try:
+        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
+    except Exception as e:
+        stock = {"alimente": False, "raison": str(e)}
+    db.refresh(lot)
+    return {"entry": entry, "lot": lot, "is_update": is_update, "poids_sec_kg": prod.poids_sec_kg or 0.0, "production_id": prod.id, "lot_epuise": epuise, "stock": stock}
 
 def get_conditionnement_entries_dryer(db: Session, lot_id: int = None, date_str: str = None, dryer: int = None):
     from models import ConditionnementEntry
@@ -1388,6 +1408,22 @@ def creer_demande_transfert(db: Session, lot_id: int, lignes: list,
     for key, cfg in FLUX_CONFIG.items():
         disponibilites[key] = getattr(lot, cfg["cartons_field"], 0) or 0
 
+    # Déjà transféré (demandes validées) : on ne peut transférer que le delta.
+    # Évite le double stock quand le conditionnement alimente la chambre froide
+    # à chaque saisie journalière (flux continu, plusieurs lots par jour).
+    transferes = {
+        row[0]: int(row[1] or 0)
+        for row in db.query(
+            DemandeTransfertLigne.type_flux,
+            func.coalesce(func.sum(DemandeTransfertLigne.nb_cartons), 0),
+        ).join(DemandeTransfert, DemandeTransfert.id == DemandeTransfertLigne.demande_id).filter(
+            DemandeTransfert.lot_id == lot_id,
+            DemandeTransfert.statut == statuses.VALIDEE,
+        ).group_by(DemandeTransfertLigne.type_flux).all()
+    }
+    for key in disponibilites:
+        disponibilites[key] = max(0, disponibilites[key] - transferes.get(key, 0))
+
     demandes_par_flux = {}
     for l in lignes:
         if l.type_flux not in disponibilites:
@@ -1509,6 +1545,88 @@ def get_demandes_transfert(db: Session, lot_id: int = None, statut: str = None):
 def get_demande_transfert(db: Session, demande_id: int):
     from models import DemandeTransfert
     return db.get(DemandeTransfert, demande_id)
+
+
+def alimenter_stock_depuis_conditionnement(db: Session, lot_id: int,
+                                           zone_id: int | None = None,
+                                           responsable: str = "auto-journalier") -> dict:
+    """Alimente la chambre froide à chaque saisie de conditionnement (flux continu).
+    Ne transfère que le delta par flux (produits − déjà transférés validés) :
+    idempotent, supporte plusieurs lots le même jour, ne bloque jamais la saisie.
+    Retourne {"alimente": bool, ...}. En cas de zone absente/saturée, la saisie
+    appelante doit réussir quand même (raison fournie, pas d'exception).
+    """
+    from types import SimpleNamespace
+    from models import DemandeTransfert, DemandeTransfertLigne, ZoneStockage
+    lot = get_lot(db, lot_id)
+    if not lot:
+        return {"alimente": False, "raison": f"Lot {lot_id} introuvable"}
+
+    FLUX_CONFIG = {
+        "local": {"cartons_field": "local_cartons"},
+        "fitini_fe": {"cartons_field": "fitini_fe_cartons"},
+        "export": {"cartons_field": "export_cartons"},
+        "dechets": {"cartons_field": "dechets_cartons"},
+        "rhum": {"cartons_field": "rhum_cartons"},
+    }
+    transferes = {
+        row[0]: int(row[1] or 0)
+        for row in db.query(
+            DemandeTransfertLigne.type_flux,
+            func.coalesce(func.sum(DemandeTransfertLigne.nb_cartons), 0),
+        ).join(DemandeTransfert, DemandeTransfert.id == DemandeTransfertLigne.demande_id).filter(
+            DemandeTransfert.lot_id == lot_id,
+            DemandeTransfert.statut == statuses.VALIDEE,
+        ).group_by(DemandeTransfertLigne.type_flux).all()
+    }
+    deltas = {}
+    for key, cfg in FLUX_CONFIG.items():
+        produit = (getattr(lot, cfg["cartons_field"], 0) or 0)
+        delta = produit - transferes.get(key, 0)
+        if delta > 0:
+            deltas[key] = delta
+    if not deltas:
+        return {"alimente": False, "raison": "aucun nouveau carton"}
+
+    zones_froid = db.query(ZoneStockage).filter(
+        ZoneStockage.actif == True, ZoneStockage.type_zone == "froid"
+    ).order_by(ZoneStockage.id).all()
+    zones_actives = zones_froid or db.query(ZoneStockage).filter(
+        ZoneStockage.actif == True
+    ).order_by(ZoneStockage.id).all()
+    if zone_id:
+        zone_forcee = db.get(ZoneStockage, zone_id)
+        if zone_forcee and zone_forcee.actif:
+            zones_actives = [zone_forcee]
+    if not zones_actives:
+        return {"alimente": False, "raison": "aucune zone de stockage active"}
+
+    def zone_pour_flux(type_flux: str):
+        for z in zones_actives:
+            if (z.usage or "") == type_flux:
+                return z
+        return zones_actives[0]
+
+    lignes = [
+        SimpleNamespace(type_flux=flux, nb_cartons=nb, zone_id=zone_pour_flux(flux).id)
+        for flux, nb in deltas.items()
+    ]
+    try:
+        demande = creer_demande_transfert(
+            db, lot_id, lignes, responsable=responsable,
+            notes=f"Auto conditionnement {datetime.now().date().isoformat()}",
+        )
+        valider_demande_transfert(db, demande.id)
+    except ValueError as e:
+        return {"alimente": False, "raison": str(e)}
+    zones_noms = sorted({zone_pour_flux(flux).nom for flux in deltas})
+    return {
+        "alimente": True,
+        "demande_id": demande.id,
+        "cartons": sum(deltas.values()),
+        "detail": deltas,
+        "zones": zones_noms,
+    }
 
 
 # ── RECONDITIONNEMENT (sachets 100g) ──

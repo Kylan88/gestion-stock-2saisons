@@ -195,3 +195,48 @@ def test_lot_epuise_bascule_seul_vers_conditionne_sans_cloture_finale(db):
     db.refresh(lot)
     assert res["lot_epuise"] is True
     assert lot.statut == statuses.CONDITIONNE
+
+
+def test_conditionnement_alimente_stock_delta_sans_doublon(db):
+    """Chaque saisie alimente la chambre froide (delta uniquement, idempotent),
+    et le transfert manuel ne peut pas renvoyer les mêmes cartons."""
+    import pytest as _pytest
+    product = create_product(db, name="Mangue")
+    zone = models.ZoneStockage(nom="CF test", type_zone="froid", actif=True, capacite_kg=10000)
+    db.add(zone)
+    db.commit()
+    lot = models.Lot(
+        code_lot="LOT-STOCK-AUTO",
+        produit_id=product.id,
+        poids_frais=1000,
+        quantite_initiale=1000,
+        quantite_restante=400,
+        statut=statuses.EN_PRODUCTION,
+    )
+    db.add(lot)
+    db.commit()
+    prod = models.EtapeProduction(
+        lot_id=lot.id, etape="production", ordre=2, statut=statuses.TERMINE,
+        poids_entree=600, poids_sortie=500, dryer=1,
+    )
+    db.add(prod)
+    db.commit()
+
+    res = crud.valider_conditionnement(db, lot.id, local_cartons=2)
+    assert res["stock"]["alimente"] is True
+    assert res["stock"]["cartons"] == 2
+    stocks = crud.get_stocks_zone(db, produit_id=None)
+    assert sum(s.quantite for s in stocks if s.lot_id == lot.id) == round(2 * 6 * 2.5, 2)
+
+    # Rejouer sans nouveau carton : aucun doublon en stock.
+    res2 = crud.valider_conditionnement(db, lot.id)
+    assert res2["stock"]["alimente"] is False
+    stocks2 = crud.get_stocks_zone(db)
+    assert sum(s.quantite for s in stocks2 if s.lot_id == lot.id) == round(2 * 6 * 2.5, 2)
+
+    # Le transfert manuel des mêmes cartons est refusé (déjà en stock).
+    with _pytest.raises(ValueError, match="Pas assez de cartons"):
+        crud.creer_demande_transfert(
+            db, lot.id,
+            [schemas.DemandeTransfertLigneCreate(type_flux="local", nb_cartons=1, zone_id=zone.id)],
+        )

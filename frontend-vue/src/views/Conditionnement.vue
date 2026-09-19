@@ -422,11 +422,20 @@ async function load() {
   } finally { loading.value = false }
 }
 
+function stockMsg(stock) {
+  if (stock?.alimente) return ` — stock +${stock.cartons} cartons (${(stock.zones || []).join(', ')})`
+  return ''
+}
+function stockMsgDryer(res) {
+  if (res?.stock_alimente) return ` — stock +${res.stock_cartons} cartons (${(res.stock_zones || []).join(', ')})`
+  return ''
+}
+
 async function enregistrer(lot) {
   saving.value = true
   try {
-    await validerConditionnement(lot.id, form[lot.id])
-    toast.success(`Conditionnement enregistré pour ${lot.code_lot}`)
+    const res = await validerConditionnement(lot.id, form[lot.id])
+    toast.success(`Conditionnement enregistré pour ${lot.code_lot}` + stockMsg(res?.stock))
     await load()
   } finally { saving.value = false }
 }
@@ -435,8 +444,8 @@ async function enregistrerDryer(lot, dryer) {
   saving.value = true
   try {
     const payload = { dryer, ...form[lot.id][dryer] }
-    await validerConditionnementDryer(lot.id, payload)
-    toast.success(isMaj ? `Conditionnement D${dryer} mis à jour pour ${lot.code_lot}` : `Conditionnement D${dryer} enregistré pour ${lot.code_lot}`)
+    const res = await validerConditionnementDryer(lot.id, payload)
+    toast.success((isMaj ? `Conditionnement D${dryer} mis à jour pour ${lot.code_lot}` : `Conditionnement D${dryer} enregistré pour ${lot.code_lot}`) + stockMsgDryer(res))
     // bascule auto si autre dryer disponible et pas en MAJ
     if (!isMaj) {
       const avail = condDryersAvailable[lot.id] || []
@@ -454,9 +463,9 @@ async function cloturer(lot) {
     const date = new Date().toISOString().slice(0, 10)
     const res = await cloturerConditionnement(lot.id, date)
     if (res?.lot_epuise) {
-      toast.success(`Lot ${lot.code_lot} épuisé — passage seul en chambre froide`)
+      toast.success(`Lot ${lot.code_lot} épuisé — passage seul en chambre froide` + stockMsg(res?.stock))
     } else {
-      toast.success(`Journée figée pour ${lot.code_lot} — lot toujours ouvert`)
+      toast.success(`Journée figée pour ${lot.code_lot} — lot toujours ouvert` + stockMsg(res?.stock))
     }
     await load()
   } finally { cloturing.value = false }
