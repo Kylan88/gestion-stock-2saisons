@@ -602,9 +602,12 @@ def get_dryers_production(db: Session, lot_id: int) -> list:
             "id": c.id, "numero_chariot": c.numero_chariot,
             "heure_remplissage": c.heure_remplissage, "heure_entree_sechoir": c.heure_entree_sechoir,
         })
-    # Inclut les étapes sans chariots détaillés (saisie rapide).
+    # Inclut les étapes sans chariots détaillés (saisie rapide),
+    # mais pas les placeholders créés par cloturer_musserie (pas de chariots, pulpe 0).
     for ep in eps:
         if ep.dryer and ep.dryer not in dryers:
+            if not (ep.poids_sortie or 0) > 0:
+                continue
             dryers[ep.dryer] = {"dryer": ep.dryer, "nbre_chariots": ep.nbre_chariots or 0, "total_claies": ep.total_claies or 0, "quantite_totale": ep.poids_sortie or 0, "poids_frais_net_kg": ep.poids_entree or 0, "pulpe_kg": ep.poids_sortie or 0, "poids_sec_kg": ep.poids_sec_kg, "operateur": ep.operateur or "", "chariots": []}
     return list(dryers.values())
 
