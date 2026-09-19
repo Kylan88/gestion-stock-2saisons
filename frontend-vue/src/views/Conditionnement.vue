@@ -99,9 +99,9 @@
             <span v-if="ecartCumul(lot) != null">Écart : <strong>{{ fmt(ecartCumul(lot)) }}%</strong></span>
           </div>
           <div class="cloture-row">
-            <span v-if="toCanonical(lot.statut) === CONDITIONNE" class="badge badge-success">Clôturé ✓ — voir transfert</span>
+            <span v-if="toCanonical(lot.statut) === CONDITIONNE" class="badge badge-success">Lot épuisé ✓ — voir transfert</span>
             <button v-else class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer le conditionnement' }}
+              {{ cloturing ? '...' : 'Figer la journée' }}
             </button>
           </div>
         </div>
@@ -170,9 +170,9 @@
 
     <ConfirmDialog
       :show="!!confirmClotureLot"
-      :title="'Clôturer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Figer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot restera ouvert tant qu\u2019il reste de la mati\u00e8re \u00e0 traiter.'"
-      confirmText="Clôturer"
+      :title="'Figer la journée du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
+      :message="'Figer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot restera ouvert ; s\u2019il est épuisé il basculera seul en chambre froide.'"
+      confirmText="Figer"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
       @cancel="confirmClotureLot = null"
@@ -453,10 +453,10 @@ async function cloturer(lot) {
   try {
     const date = new Date().toISOString().slice(0, 10)
     const res = await cloturerConditionnement(lot.id, date)
-    if (res?.cloture_jour) {
-      toast.success(`Conditionnement du jour figé pour ${lot.code_lot} — lot toujours ouvert`)
+    if (res?.lot_epuise) {
+      toast.success(`Lot ${lot.code_lot} épuisé — passage seul en chambre froide`)
     } else {
-      toast.success(`Conditionnement clôturé pour ${lot.code_lot} — passage en chambre froide`)
+      toast.success(`Journée figée pour ${lot.code_lot} — lot toujours ouvert`)
     }
     await load()
   } finally { cloturing.value = false }

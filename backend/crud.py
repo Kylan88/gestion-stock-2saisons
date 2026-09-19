@@ -694,6 +694,9 @@ def valider_conditionnement(db: Session, lot_id: int,
     reference = sum(ep.poids_sortie or 0.0 for ep in productions) if productions else etape_cond.poids_entree or 0.0
 
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
+    # Flux continu : bascule auto vers 'conditionne' si le lot est épuisé.
+    epuise = _bascule_auto_lot_epuise(db, lot)
+    db.refresh(lot)
 
     return {
         "lot_id": lot_id,
@@ -704,14 +707,14 @@ def valider_conditionnement(db: Session, lot_id: int,
         "dechets_cartons": lot.dechets_cartons, "rhum_cartons": lot.rhum_cartons,
         "fitini_fe_cartons": lot.fitini_fe_cartons,
         "statut_lot": lot.statut,
+        "lot_epuise": epuise,
     }
 
 
 def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = None) -> dict:
-    """Clôture du conditionnement — journalière par dryer (J+1), finale quand lot épuisé.
-    - Si date_str : clôture journalière, le lot reste ouvert tant qu'il reste
-      de la matière (quantite_restante > 0) — un dryer ne clôture jamais un lot partiel.
-    - Si None : clôture finale historique (passe à conditionne).
+    """Fige la journée de conditionnement (flux continu : jamais de fermeture manuelle).
+    Le lot reste toujours ouvert ; s'il est épuisé (reste <= 0, productions
+    terminées, flux non vide), il bascule seul vers 'conditionne'.
     """
     lot = get_lot(db, lot_id)
     if not lot:
@@ -756,16 +759,7 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
         raise ValueError("Aucune production trouvée pour ce lot")
     productions_terminees = [ep for ep in productions if ep.statut == statuses.TERMINE]
     if not productions_terminees:
-        raise ValueError("Aucune production terminée — clôture du conditionnement impossible")
-
-    # Clôture journalière : lot partiel (reste>0) ou lot pas encore en fin de
-    # parcours (ex. en_musserie avec flux continu). On fige la journée sans
-    # fermer le lot — un dryer ne clôture jamais un lot partiel.
-    is_daily = (
-        (lot.quantite_restante or 0) > 0
-        or not statuses.can_transition(lot.statut, statuses.CONDITIONNE)
-        or date_str is not None
-    )
+        raise ValueError("Aucune production terminée — saisie du conditionnement impossible")
 
     reference = sum((ep.poids_sortie or 0.0) for ep in productions_terminees)
     etape_cond.poids_entree = reference
@@ -787,32 +781,15 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
     if lot.poids_frais > 0:
         lot.rendement_global = round((total_flux / lot.poids_frais) * 100, 1)
 
-    # Clôture journalière d'un lot partiel : on fige la journée sans fermer le lot.
-    if is_daily:
-        etape_cond.statut = statuses.EN_COURS
-        etape_cond.date_fin = datetime.now()
-        etape_cond.poids_sortie = total_flux
-        etape_cond.rendement_pourcentage = lot.rendement_global
-        db.commit(); db.refresh(lot); db.refresh(etape_cond)
-        return {
-            "lot_id": lot_id,
-            "code_lot": lot.code_lot,
-            "poids_sec_final": total_flux,
-            "ecart_bilan_pourcentage": ecart_pourcentage,
-            "rendement_global": lot.rendement_global,
-            "statut_lot": lot.statut,
-            "cloture_jour": date_str or datetime.now().date().isoformat(),
-        }
-
-    etape_cond.statut = statuses.TERMINE
+    # Flux continu : on fige la journée sans jamais fermer le lot à la main.
+    # Si le lot est épuisé, la bascule vers 'conditionne' se fait seule.
+    etape_cond.statut = statuses.EN_COURS
     etape_cond.date_fin = datetime.now()
     etape_cond.poids_sortie = total_flux
     etape_cond.rendement_pourcentage = lot.rendement_global
-
-    statuses.validate_transition(lot.statut, statuses.CONDITIONNE)
-    lot.statut = statuses.CONDITIONNE
-
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
+    epuise = _bascule_auto_lot_epuise(db, lot)
+    db.refresh(lot); db.refresh(etape_cond)
 
     return {
         "lot_id": lot_id,
@@ -821,7 +798,54 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
         "ecart_bilan_pourcentage": ecart_pourcentage,
         "rendement_global": lot.rendement_global,
         "statut_lot": lot.statut,
+        "cloture_jour": date_str or datetime.now().date().isoformat(),
+        "lot_epuise": epuise,
     }
+
+
+def _bascule_auto_lot_epuise(db: Session, lot) -> bool:
+    """Bascule automatique d'un lot épuisé vers 'conditionne' (flux continu).
+    Il n'y a plus de clôture finale manuelle : quand quantite_restante <= 0,
+    qu'au moins une production est terminée et que le conditionnement est non
+    vide, le lot avance seul étape par étape jusqu'à 'conditionne'.
+    Retourne True si le lot a atteint 'conditionne'. Ne fait rien (et ne bloque
+    jamais la saisie) tant qu'il reste de la matière à traiter.
+    """
+    if (lot.quantite_restante or 0) > 0:
+        return False
+    productions = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "production"
+    ).all()
+    if not any(ep.statut == statuses.TERMINE for ep in productions):
+        return False
+    if _calc_total_flux(lot) <= 0:
+        return False
+    ordre = statuses.WORKFLOW_ORDER
+    try:
+        idx = ordre.index(statuses.normalize(lot.statut))
+    except ValueError:
+        return False
+    cible_idx = ordre.index(statuses.CONDITIONNE)
+    avance = False
+    while idx < cible_idx:
+        suivant = ordre[idx + 1]
+        if not statuses.can_transition(lot.statut, suivant):
+            break
+        lot.statut = suivant
+        idx += 1
+        avance = True
+    if statuses.normalize(lot.statut) != statuses.CONDITIONNE:
+        if avance:
+            db.commit(); db.refresh(lot)
+        return False
+    etape_cond = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "conditionnement"
+    ).first()
+    if etape_cond and etape_cond.statut != statuses.TERMINE:
+        etape_cond.statut = statuses.TERMINE
+        etape_cond.date_fin = etape_cond.date_fin or datetime.now()
+    db.commit(); db.refresh(lot)
+    return True
 
 
 def _calc_total_flux(lot) -> float:
@@ -940,7 +964,10 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
         for key in ["export","local","dechets","rhum","fitini_fe"]:
             setattr(lot, f"{key}_poids_sachet", getattr(last, f"{key}_poids_sachet") or 2.5)
     db.commit(); db.refresh(lot)
-    return {"entry": entry, "lot": lot, "is_update": is_update, "poids_sec_kg": prod.poids_sec_kg or 0.0, "production_id": prod.id}
+    # Flux continu : bascule auto vers 'conditionne' si le lot est épuisé.
+    epuise = _bascule_auto_lot_epuise(db, lot)
+    db.refresh(lot)
+    return {"entry": entry, "lot": lot, "is_update": is_update, "poids_sec_kg": prod.poids_sec_kg or 0.0, "production_id": prod.id, "lot_epuise": epuise}
 
 def get_conditionnement_entries_dryer(db: Session, lot_id: int = None, date_str: str = None, dryer: int = None):
     from models import ConditionnementEntry

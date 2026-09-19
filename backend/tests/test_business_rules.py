@@ -150,3 +150,48 @@ def test_partial_lot_keeps_fresh_pulp_and_dried_weight_separate(db):
     crud.cloturer_conditionnement(db, lot.id, today)
     db.refresh(lot)
     assert lot.statut == statuses.EN_MUSSERIE
+
+
+def test_lot_epuise_bascule_seul_vers_conditionne_sans_cloture_finale(db):
+    """Flux continu : figer la journée ne ferme jamais le lot à la main.
+    Quand le lot est épuisé (reste 0, prod terminée, flux > 0), il bascule
+    seul vers 'conditionne'."""
+    product = create_product(db, name="Mangue")
+    lot = models.Lot(
+        code_lot="LOT-EPUISE",
+        produit_id=product.id,
+        poids_frais=1000,
+        quantite_initiale=1000,
+        quantite_restante=500,
+        statut=statuses.EN_PRODUCTION,
+    )
+    db.add(lot)
+    db.commit()
+    prod = models.EtapeProduction(
+        lot_id=lot.id, etape="production", ordre=2, statut=statuses.TERMINE,
+        poids_entree=500, poids_sortie=400, dryer=1,
+    )
+    cond = models.EtapeProduction(
+        lot_id=lot.id, etape="conditionnement", ordre=3, statut="en_cours",
+        poids_entree=400,
+    )
+    db.add_all([prod, cond])
+    db.commit()
+    db.refresh(lot)
+    lot.export_sachets = 40
+    lot.export_poids_sachet = 2.5
+    db.commit()
+
+    # Lot partiel : la journée se fige, le lot reste ouvert, pas d'épuisement.
+    res = crud.cloturer_conditionnement(db, lot.id)
+    db.refresh(lot)
+    assert res["lot_epuise"] is False
+    assert lot.statut == statuses.EN_PRODUCTION
+
+    # Lot épuisé : bascule seule vers 'conditionne', sans clôture finale manuelle.
+    lot.quantite_restante = 0
+    db.commit()
+    res = crud.cloturer_conditionnement(db, lot.id)
+    db.refresh(lot)
+    assert res["lot_epuise"] is True
+    assert lot.statut == statuses.CONDITIONNE
