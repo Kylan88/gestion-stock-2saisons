@@ -101,7 +101,7 @@
           <div class="cloture-row">
             <span v-if="toCanonical(lot.statut) === CONDITIONNE" class="badge badge-success">Lot épuisé ✓ — voir transfert</span>
             <button v-else class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? '...' : 'Figer la journée' }}
+              {{ cloturing ? '...' : 'Valider la journée' }}
             </button>
           </div>
         </div>
@@ -170,9 +170,9 @@
 
     <ConfirmDialog
       :show="!!confirmClotureLot"
-      :title="'Figer la journée du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Figer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot restera ouvert ; s\u2019il est épuisé il basculera seul en chambre froide.'"
-      confirmText="Figer"
+      :title="'Valider la journée du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
+      :message="'Valider le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le stock sera alimenté et le lot restera ouvert ; s\u2019il est épuisé il basculera seul en chambre froide.'"
+      confirmText="Valider"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
       @cancel="confirmClotureLot = null"
@@ -465,7 +465,7 @@ async function cloturer(lot) {
     if (res?.lot_epuise) {
       toast.success(`Lot ${lot.code_lot} épuisé — passage seul en chambre froide` + stockMsg(res?.stock))
     } else {
-      toast.success(`Journée figée pour ${lot.code_lot} — lot toujours ouvert` + stockMsg(res?.stock))
+      toast.success(`Journée validée pour ${lot.code_lot} — lot toujours ouvert` + stockMsg(res?.stock))
     }
     await load()
   } finally { cloturing.value = false }
