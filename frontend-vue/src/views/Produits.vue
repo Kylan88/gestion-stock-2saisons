@@ -51,6 +51,10 @@
       <div v-else>
         <div class="filters" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
           <input v-model="recherche" class="input" placeholder="Rechercher un produit..." style="max-width:260px" />
+          <select v-model="selectedLotId" class="input" style="max-width:260px" title="Filtrer par lot disponible">
+            <option value="">Tous les lots</option>
+            <option v-for="l in lotsDisponibles" :key="l.id" :value="String(l.id)">{{ l.code_lot }}{{ l.type_fruit ? ' — ' + l.type_fruit : '' }}</option>
+          </select>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer">
             <input type="checkbox" v-model="showZeroStock" /> Afficher stock 0
           </label>
@@ -94,8 +98,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, nextTick } from 'vue'
-import { getProduits, createProduit, updateProduit, getCategories } from '../api'
+import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
+import { getProduits, createProduit, updateProduit, getCategories, getStock } from '../api'
 import { useToastStore } from '../stores/toast'
 import { exportCsv } from '../utils/exportCsv'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
@@ -143,9 +147,17 @@ function openEdit(p) {
 }
 
 const showZeroStock = ref(false)
+const selectedLotId = ref('')
+const lotsDisponibles = ref([])
+const produitsParLot = ref({}) // { lotId: Set(produitId) }
 const filteredProduits = computed(() => {
   let res = produits.value
   if (!showZeroStock.value) res = res.filter(p => Number(p.stock_actuel) > 0)
+  if (selectedLotId.value) {
+    const ids = produitsParLot.value[selectedLotId.value]
+    if (!ids) return []
+    res = res.filter(p => ids.has(p.id))
+  }
   if (!recherche.value) return res
   const q = recherche.value.toLowerCase()
   return res.filter(p => p.nom.toLowerCase().includes(q) || p.categorie?.nom?.toLowerCase().includes(q))
@@ -157,11 +169,30 @@ const paginatedProduits = computed(() => {
 })
 const totalStock = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_actuel || 0), 0))
 const totalCartons = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_min || 0), 0))
+watch([recherche, selectedLotId, showZeroStock], () => { page.value = 1 })
 function fmt2(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0.00' }
 
 async function load() {
   loading.value = true
-  try { [produits.value, categories.value] = await Promise.all([getProduits(), getCategories()]) } finally { loading.value = false }
+  try {
+    const [prods, cats, stocks] = await Promise.all([getProduits(), getCategories(), getStock()])
+    produits.value = prods
+    categories.value = cats
+    // Lots disponibles = lots avec au moins une ligne de stock > 0 en zone.
+    const lotsMap = new Map()
+    const parLot = {}
+    for (const s of (stocks || [])) {
+      if (!s?.lot?.id || !(Number(s.quantite) > 0)) continue
+      const lotId = String(s.lot.id)
+      if (!lotsMap.has(lotId)) lotsMap.set(lotId, s.lot)
+      if (!parLot[lotId]) parLot[lotId] = new Set()
+      if (s.produit_id) parLot[lotId].add(s.produit_id)
+      else if (s.produit?.id) parLot[lotId].add(s.produit.id)
+    }
+    lotsDisponibles.value = [...lotsMap.values()].sort((a, b) => (a.code_lot || '').localeCompare(b.code_lot || ''))
+    produitsParLot.value = parLot
+    if (selectedLotId.value && !parLot[selectedLotId.value]) selectedLotId.value = ''
+  } finally { loading.value = false }
 }
 
 function validate() {
