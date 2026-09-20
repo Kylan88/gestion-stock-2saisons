@@ -134,8 +134,8 @@ def main():
         # 5. Production chariots D1 (<= musserie sortie * 1.05)
         def _production():
             chariots = [
-                {"numero_chariot": 1, "heure_remplissage": "08:00", "heure_entree_sechoir": "09:00"},
-                {"numero_chariot": 2, "heure_remplissage": "08:30", "heure_entree_sechoir": "09:30"},
+                {"numero_chariot": 1, "heure_remplissage": "08:00", "heure_entree_dryer": "09:00"},
+                {"numero_chariot": 2, "heure_remplissage": "08:30", "heure_entree_dryer": "09:30"},
             ]
             res = crud.valider_production(
                 db, lot_id, dryer=1, nbre_chariots=2, quantite_totale=900.0,

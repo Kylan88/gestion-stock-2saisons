@@ -509,7 +509,7 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
             quantite_totale=quantite_totale,
             operateur=operateur,
             heure_remplissage=c_data.get("heure_remplissage", ""),
-            heure_entree_sechoir=c_data.get("heure_entree_sechoir", ""),
+            heure_entree_dryer=c_data.get("heure_entree_dryer", ""),
         )
         db.add(chariot)
 
@@ -600,7 +600,7 @@ def get_dryers_production(db: Session, lot_id: int) -> list:
             dryers[d] = {"dryer": d, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale, "poids_frais_net_kg": (ep.poids_entree if ep else c.quantite_totale) or 0, "pulpe_kg": (ep.poids_sortie if ep else c.quantite_totale) or 0, "poids_sec_kg": ep.poids_sec_kg if ep else None, "operateur": c.operateur or "", "chariots": []}
         dryers[d]["chariots"].append({
             "id": c.id, "numero_chariot": c.numero_chariot,
-            "heure_remplissage": c.heure_remplissage, "heure_entree_sechoir": c.heure_entree_sechoir,
+            "heure_remplissage": c.heure_remplissage, "heure_entree_dryer": c.heure_entree_dryer,
         })
     # Inclut les étapes sans chariots détaillés (saisie rapide),
     # mais pas les placeholders créés par cloturer_musserie (pas de chariots, pulpe 0).

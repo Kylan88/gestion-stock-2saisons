@@ -221,13 +221,13 @@ class ChariotCreate(ValidatedInput):
     positive_fields = {"numero_chariot"}
     numero_chariot: int
     heure_remplissage: str = ""
-    heure_entree_sechoir: str = ""
+    heure_entree_dryer: str = ""
 
 class ChariotResponse(BaseModel):
     id: int; etape_production_id: int; lot_id: int
     numero_chariot: int; dryer: int; nbre_chariots: int; total_claies: int
     quantite_totale: float; operateur: str
-    heure_remplissage: str; heure_entree_sechoir: str
+    heure_remplissage: str; heure_entree_dryer: str
     created_at: Optional[datetime] = None
     class Config: from_attributes = True
 

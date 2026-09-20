@@ -97,7 +97,7 @@
               </div>
               <div class="cumul-chariots">
                 <span v-for="c in d.chariots" :key="c.id" class="chariot-pill">
-                  C{{ c.numero_chariot }} {{ c.heure_remplissage }}→{{ c.heure_entree_sechoir }}
+                  C{{ c.numero_chariot }} {{ c.heure_remplissage }}→{{ c.heure_entree_dryer }}
                 </span>
               </div>
             </div>
@@ -163,15 +163,15 @@
               <div class="chariot-header">
                 <span>Chariot</span>
                 <span>Remplissage</span>
-                <span>Entrée séchoir</span>
+                <span>Entrée Dryer</span>
                 <span></span>
               </div>
               <div class="chariot-progress"><div class="chariot-progress-fill" :style="{width: (f[lot.id].chariots.filter(c=>c.enregistre).length / f[lot.id].nbre_chariots * 100) + '%'}"></div></div>
               <div v-for="i in f[lot.id].nbre_chariots" :key="i" class="chariot-row" :class="{ 'chariot-ok': f[lot.id].chariots[i-1].enregistre }">
                 <span class="ch-num">{{ i }}</span>
                 <input type="time" v-model="f[lot.id].chariots[i-1].heure_remplissage" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-                <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_sechoir" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-                <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm" :class="f[lot.id].chariots[i-1].heure_remplissage && f[lot.id].chariots[i-1].heure_entree_sechoir ? 'btn-primary' : 'btn-outline'" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_sechoir" @click="enregistrerChariot(lot.id, i-1)">✓ Valider</button>
+                <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_dryer" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
+                <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm" :class="f[lot.id].chariots[i-1].heure_remplissage && f[lot.id].chariots[i-1].heure_entree_dryer ? 'btn-primary' : 'btn-outline'" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_dryer" @click="enregistrerChariot(lot.id, i-1)">✓ Valider</button>
                 <span v-else class="ch-check">✓ Fait</span>
               </div>
             </div>
@@ -271,7 +271,7 @@ function onDryerChange(lotId) {
 function rebuildChariots(lotId) {
   const d = f[lotId]
   const n = d.nbre_chariots || 0
-  while (d.chariots.length < n) d.chariots.push({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })
+  while (d.chariots.length < n) d.chariots.push({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false })
   while (d.chariots.length > n) d.chariots.pop()
 }
 function calcQté(lotId) { rebuildChariots(lotId) }
@@ -312,7 +312,7 @@ function initForm(lotId) {
     const n = DRYER[d].chariots
     f[lotId] = reactive({
       dryer: d, nbre_chariots: n,
-      operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })),
+      operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false })),
     })
   } else {
     // corrige si dryer actuel n'est plus disponible
@@ -330,7 +330,7 @@ function resetForm(lotId) {
     const n = DRYER[d].chariots
     f[lotId].dryer = d
     f[lotId].nbre_chariots = n
-    f[lotId].chariots = Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false }))
+    f[lotId].chariots = Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false }))
     f[lotId].operateur = ''
   }
 }
@@ -383,7 +383,7 @@ async function enregistrer(lot) {
       chariots: f[lot.id].chariots.map(c => ({
         numero_chariot: f[lot.id].chariots.indexOf(c) + 1,
         heure_remplissage: c.heure_remplissage || '',
-        heure_entree_sechoir: c.heure_entree_sechoir || '',
+        heure_entree_dryer: c.heure_entree_dryer || '',
       })),
     })
     toast.success(`Dryer ${currentDryer} enregistré`)

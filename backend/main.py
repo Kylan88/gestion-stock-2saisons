@@ -37,6 +37,11 @@ for _col in ("rhum_cartons_sortie INTEGER", "rhum_sachets_sortis INTEGER", "rhum
     if _name not in _recond_columns:
         with engine.begin() as connection:
             connection.execute(text(f"ALTER TABLE reconditionnements ADD COLUMN {_col}"))
+# Renommage heure_entree_sechoir -> heure_entree_dryer (données préservées).
+_chariots_columns = {column["name"] for column in inspect(engine).get_columns("chariots")}
+if "heure_entree_sechoir" in _chariots_columns and "heure_entree_dryer" not in _chariots_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE chariots RENAME COLUMN heure_entree_sechoir TO heure_entree_dryer"))
 
 # ── Application FastAPI ──
 app = FastAPI(

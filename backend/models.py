@@ -137,7 +137,7 @@ class Chariot(Base):
     quantite_totale = Column(Float, default=0.0)
     operateur = Column(String(100), default="")
     heure_remplissage = Column(String(10), default="")
-    heure_entree_sechoir = Column(String(10), default="")
+    heure_entree_dryer = Column(String(10), default="")
     created_at = Column(DateTime, default=datetime.now)
 
     etape = relationship("EtapeProduction", back_populates="chariots")
