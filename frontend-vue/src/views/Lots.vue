@@ -25,6 +25,12 @@
       </select>
     </div>
 
+    <div v-if="lots.length > 0 && !loading" class="lots-total">
+      <span><strong>{{ lots.length }}</strong> lot{{ lots.length > 1 ? 's' : '' }}</span>
+      <span class="dot">•</span>
+      <span>Poids total reçu : <strong>{{ formatKg(totalPoidsRecu) }} kg</strong></span>
+    </div>
+
     <LoadingSpinner v-if="loading" />
     <div v-else-if="lots.length === 0" class="empty anim-fade">
       <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
@@ -116,7 +122,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getLots, getProductionsEtapes, updateLotStatut } from '../api'
 import { useToastStore } from '../stores/toast'
@@ -143,6 +149,9 @@ const toast = useToastStore()
 const statuts = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
 
 function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
+
+// Poids total reçu de tous les lots affichés (somme des poids frais).
+const totalPoidsRecu = computed(() => lots.value.reduce((sum, l) => sum + (l.poids_frais || 0), 0))
 
 function lotProgressPct(lot) {
   if (!lot.poids_frais) return 0
@@ -257,6 +266,9 @@ onMounted(loadLots)
 
 <style scoped>
 .filters { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.lots-total { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: var(--text-secondary); }
+.lots-total strong { color: var(--text); font-size: 14px; }
+.lots-total .dot { color: var(--text-muted); }
 .traite-val { font-weight: 600; color: var(--primary); }
 .row-expanded { background: var(--surface); }
 .progress-cell { display: flex; align-items: center; gap: 8px; }
