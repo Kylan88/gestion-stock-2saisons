@@ -42,6 +42,9 @@ _chariots_columns = {column["name"] for column in inspect(engine).get_columns("c
 if "heure_entree_sechoir" in _chariots_columns and "heure_entree_dryer" not in _chariots_columns:
     with engine.begin() as connection:
         connection.execute(text("ALTER TABLE chariots RENAME COLUMN heure_entree_sechoir TO heure_entree_dryer"))
+# Renommage musserie -> murisserie des étapes existantes (données préservées).
+with engine.begin() as connection:
+    connection.execute(text("UPDATE etapes_production SET etape='murisserie' WHERE etape='musserie'"))
 
 # ── Application FastAPI ──
 app = FastAPI(

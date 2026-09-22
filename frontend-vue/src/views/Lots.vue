@@ -7,7 +7,7 @@
           <button class="btn btn-sm" :class="viewMode === 'pipeline' ? 'btn-primary' : 'btn-ghost'" @click="viewMode = 'pipeline'">Pipeline</button>
         </div>
         <button class="btn btn-outline btn-sm" @click="doPrint">Imprimer</button>
-        <button class="btn btn-outline btn-sm" @click="doExport">CSV</button>
+        <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
       </template>
     </PageHeader>
 
@@ -19,7 +19,7 @@
       </select>
       <select v-model="filtreEtape" class="input" @change="loadLots" style="max-width:180px">
         <option value="">Toutes étapes</option>
-        <option value="musserie">Musserie</option>
+        <option value="murisserie">Murisserie</option>
         <option value="production">Production</option>
         <option value="conditionnement">Conditionnement</option>
       </select>
@@ -39,7 +39,7 @@
 
     <!-- Pipeline View -->
     <PipelineView v-else-if="viewMode === 'pipeline'" :lots="lots"
-      @avancer="avancer" @goMusserie="$router.push('/musserie')" @goTransfert="$router.push('/stock/transfert')" />
+      @avancer="avancer" @goMurisserie="$router.push('/murisserie')" @goTransfert="$router.push('/stock/transfert')" />
 
     <!-- Table View -->
     <div v-else class="table-wrap anim-fade">
@@ -49,8 +49,8 @@
             <th>Code Lot</th>
             <th>Produit</th>
             <th>Poids Frais</th>
-            <th title="Reçu − reste backend (même chiffre que la page Musserie)">Traité (réel)</th>
-            <th title="% traité réel en musserie, avancement du parcours ensuite">Progression</th>
+            <th title="Reçu − reste backend (même chiffre que la page Murisserie)">Traité (réel)</th>
+            <th title="% traité réel en murisserie, avancement du parcours ensuite">Progression</th>
             <th>Statut</th>
             <th>Workflow</th>
             <th></th>
@@ -77,8 +77,8 @@
               <td><StatusBadge :status="lot.statut" /></td>
               <td style="min-width:240px"><WorkflowProgress :statut="lot.statut" /></td>
               <td>
-                <button v-if="toCanonical(lot.statut) === RECEPTION" class="btn btn-sm btn-primary" @click.stop="avancer(lot.id, EN_MUSSERIE)">→ Musserie</button>
-                <button v-else-if="toCanonical(lot.statut) === EN_MUSSERIE" class="btn btn-sm btn-outline" @click.stop="$router.push('/musserie')">Ouvrir</button>
+                <button v-if="toCanonical(lot.statut) === RECEPTION" class="btn btn-sm btn-primary" @click.stop="avancer(lot.id, EN_MURISSERIE)">→ Murisserie</button>
+                <button v-else-if="toCanonical(lot.statut) === EN_MURISSERIE" class="btn btn-sm btn-outline" @click.stop="$router.push('/murisserie')">Ouvrir</button>
                 <button v-else-if="toCanonical(lot.statut) === EN_PRODUCTION" class="btn btn-sm btn-outline" @click.stop="$router.push('/production')">Ouvrir</button>
                 <button v-else-if="toCanonical(lot.statut) === EN_CONDITIONNEMENT" class="btn btn-sm btn-outline" @click.stop="$router.push('/conditionnement')">Ouvrir</button>
                 <button v-else-if="toCanonical(lot.statut) === CONDITIONNE" class="btn btn-sm btn-outline" @click.stop="$router.push('/conditionnement')">Ouvrir</button>
@@ -126,14 +126,14 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getLots, getProductionsEtapes, updateLotStatut } from '../api'
 import { useToastStore } from '../stores/toast'
-import { exportCsv } from '../utils/exportCsv'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import WorkflowProgress from '../components/WorkflowProgress.vue'
 import PipelineView from '../components/PipelineView.vue'
 
-import { RECEPTION, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME, toCanonical, TERMINE, EN_COURS, EN_ATTENTE } from '../utils/statuses'
+import { RECEPTION, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME, toCanonical, TERMINE, EN_COURS, EN_ATTENTE } from '../utils/statuses'
 
 const route = useRoute()
 const lots = ref([])
@@ -146,7 +146,7 @@ const expanded = ref(null)
 const viewMode = ref('table')
 const toast = useToastStore()
 
-const statuts = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
+const statuts = [RECEPTION, EN_MURISSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
 
 function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
 
@@ -159,11 +159,11 @@ function lotProgressPct(lot) {
   const total = lot.poids_frais
   const lotEtapes = etapes.value[lot.id] || []
 
-  // Progression : % traité réel pour les étapes poids (musserie/production),
+  // Progression : % traité réel pour les étapes poids (murisserie/production),
   // avancement pondéré du parcours pour les étapes suivantes.
   if (statut === RECEPTION) return 0
-  if (statut === EN_MUSSERIE) {
-    // Même chiffre que la page Musserie : (reçu − reste) / reçu.
+  if (statut === EN_MURISSERIE) {
+    // Même chiffre que la page Murisserie : (reçu − reste) / reçu.
     const restant = lot.quantite_restante ?? total
     return Math.min(100, Math.round(((total - restant) / total) * 100))
   }
@@ -200,11 +200,11 @@ function lotProgressPct(lot) {
 }
 
 function getTraitePoids(lot) {
-  // Même chiffre que la page Musserie : reçu − reste backend.
+  // Même chiffre que la page Murisserie : reçu − reste backend.
   if (!lot.poids_frais) return 0
   const statut = toCanonical(lot.statut)
   if (statut === RECEPTION) return 0
-  if (statut === EN_MUSSERIE || statut === EN_PRODUCTION) {
+  if (statut === EN_MURISSERIE || statut === EN_PRODUCTION) {
     return Math.round((lot.poids_frais || 0) - (lot.quantite_restante ?? lot.poids_frais))
   }
   return Math.round(lot.poids_frais * lotProgressPct(lot) / 100)
@@ -230,7 +230,7 @@ async function loadLots() {
     lots.value = await getLots(params)
     // pré-charger les étapes pour une progression réelle (sans bloquer l'affichage)
     for (const lot of lots.value) {
-      if ([EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(lot.statut)) && !etapes.value[lot.id]) {
+      if ([EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(lot.statut)) && !etapes.value[lot.id]) {
         getProductionsEtapes(lot.id).then(data => { etapes.value[lot.id] = data }).catch(() => {})
       }
     }
@@ -255,10 +255,10 @@ async function avancer(id, statut) {
 
 function doPrint() { window.print() }
 
-function doExport() {
+function doExportExcel() {
   const headers = ['Code Lot', 'Type Fruit', 'Poids Frais (kg)', 'Statut', 'Fournisseur', 'Date Réception']
   const rows = lots.value.map(l => [l.code_lot, l.type_fruit || '', l.poids_frais, l.statut, l.fournisseur_nom || '', l.date_reception ? new Date(l.date_reception).toLocaleDateString('fr-FR') : ''])
-  exportCsv(headers, rows, 'lots.csv')
+  exportExcel(headers, rows, `lots-${todayStamp()}.xlsx`, 'Lots')
 }
 
 onMounted(loadLots)

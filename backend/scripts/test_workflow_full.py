@@ -1,7 +1,7 @@
 """Test bout-en-bout du workflow complet 2Saisons (CRUD direct, sans HTTP).
 
 Chaine testee :
-  reception -> musserie (2 jours) -> production chariots -> conditionnement
+  reception -> murisserie (2 jours) -> production chariots -> conditionnement
   -> transfert CF -> reconditionnement sachets 100g (+ stats, rappels, anomalies)
 
 Usage :
@@ -66,26 +66,26 @@ def main():
             return f"{lot.code_lot} id={lot.id} reste={lot.quantite_restante}"
         step("1. reception (lot cree)", _reception)
 
-        # 2. Musserie jour 1 (D1 partiel) — tri retiré du lot, pas de l'envoi, 2 décimales, MAJ par dryer/jour
-        def _musserie_j1():
-            ep = crud.valider_musserie(
+        # 2. Murisserie jour 1 (D1 partiel) — tri retiré du lot, pas de l'envoi, 2 décimales, MAJ par dryer/jour
+        def _murisserie_j1():
+            ep = crud.valider_murisserie(
                 db, lot_id, fruits_murs_kg=2000.0, dechets_tri_kg=50.0,
                 dechets_lavage_kg=20.0, retour_non_mur_kg=30.0,
                 dechets_production_kg=15.0, operateur="test", dryer=1,
             )
             lot = crud.get_lot(db, lot_id)
-            assert lot.statut == statuses.EN_MUSSERIE, f"statut={lot.statut}"
+            assert lot.statut == statuses.EN_MURISSERIE, f"statut={lot.statut}"
             assert lot.quantite_restante == 950.0, f"reste={lot.quantite_restante} (attendu 3000-2000-50 tri)"
             assert ep.poids_sortie == round(2000 - 30 - 20 - 15, 2), f"sortie={ep.poids_sortie} (tri non déduit)"
             assert f"{ep.poids_sortie:.2f}" == "1935.00", "format 2 décimales"
             return f"sortie={ep.poids_sortie:.2f} reste={lot.quantite_restante:.2f}"
-        step("2. musserie J1 D1", _musserie_j1)
+        step("2. murisserie J1 D1", _murisserie_j1)
 
         # 2b. MAJ même dryer même jour — une seule validation par dryer/jour (écrasement, pas cumul)
-        def _musserie_j1_maj():
-            ep_before = db.query(models.EtapeProduction).filter(models.EtapeProduction.lot_id==lot_id, models.EtapeProduction.etape=="musserie", models.EtapeProduction.dryer==1, models.EtapeProduction.statut!=statuses.TERMINE).first()
+        def _murisserie_j1_maj():
+            ep_before = db.query(models.EtapeProduction).filter(models.EtapeProduction.lot_id==lot_id, models.EtapeProduction.etape=="murisserie", models.EtapeProduction.dryer==1, models.EtapeProduction.statut!=statuses.TERMINE).first()
             id_before = ep_before.id if ep_before else None
-            ep = crud.valider_musserie(
+            ep = crud.valider_murisserie(
                 db, lot_id, fruits_murs_kg=2100.0, dechets_tri_kg=60.0,
                 dechets_lavage_kg=20.0, retour_non_mur_kg=30.0,
                 dechets_production_kg=15.0, operateur="test", dryer=1,
@@ -96,7 +96,7 @@ def main():
             assert lot.quantite_restante == 840.0, f"reste={lot.quantite_restante} (3000-2100-60)"
             assert ep.poids_sortie == round(2100 - 30 - 20 - 15, 2), f"sortie={ep.poids_sortie}"
             # remettre les valeurs initiales pour la suite du workflow (2100->2000)
-            ep2 = crud.valider_musserie(
+            ep2 = crud.valider_murisserie(
                 db, lot_id, fruits_murs_kg=2000.0, dechets_tri_kg=50.0,
                 dechets_lavage_kg=20.0, retour_non_mur_kg=30.0,
                 dechets_production_kg=15.0, operateur="test", dryer=1,
@@ -104,34 +104,34 @@ def main():
             assert ep2.id == id_before, "retour aux valeurs initiales doit garder même id"
             assert db.get(models.Lot, lot_id).quantite_restante == 950.0
             return f"MAJ OK id={ep.id} sortie={ep.poids_sortie:.2f} reste={lot.quantite_restante:.2f}"
-        step("2b. MAJ musserie J1 D1 (même dryer/jour)", _musserie_j1_maj)
+        step("2b. MAJ murisserie J1 D1 (même dryer/jour)", _murisserie_j1_maj)
 
-        # 3. Cloture jour (reste > 0 -> reste en_musserie)
+        # 3. Cloture jour (reste > 0 -> reste en_murisserie)
         def _cloture_jour():
             from datetime import date
-            res = crud.cloturer_musserie(db, lot_id, date.today().isoformat())
+            res = crud.cloturer_murisserie(db, lot_id, date.today().isoformat())
             lot = crud.get_lot(db, lot_id)
-            assert lot.statut == statuses.EN_MUSSERIE, f"statut={lot.statut}"
+            assert lot.statut == statuses.EN_MURISSERIE, f"statut={lot.statut}"
             assert res["action"] == "jour", f"action={res['action']}"
             return f"action=jour statut={lot.statut}"
-        step("3. cloture musserie jour", _cloture_jour)
+        step("3. cloture murisserie jour", _cloture_jour)
 
-        # 4. Musserie jour 2 (solde) + cloture finale -> en_production
-        def _musserie_j2():
-            crud.valider_musserie(
+        # 4. Murisserie jour 2 (solde) + cloture finale -> en_production
+        def _murisserie_j2():
+            crud.valider_murisserie(
                 db, lot_id, fruits_murs_kg=1000.0, dechets_tri_kg=20.0,
                 dechets_lavage_kg=10.0, retour_non_mur_kg=10.0,
                 dechets_production_kg=5.0, operateur="test", dryer=1,
                 reste_kg=0,
             )
-            res = crud.cloturer_musserie(db, lot_id)
+            res = crud.cloturer_murisserie(db, lot_id)
             lot = crud.get_lot(db, lot_id)
             assert lot.statut == statuses.EN_PRODUCTION, f"statut={lot.statut}"
             assert res["action"] == "tout", f"action={res['action']}"
             return f"statut={lot.statut}"
-        step("4. musserie J2 + cloture finale", _musserie_j2)
+        step("4. murisserie J2 + cloture finale", _murisserie_j2)
 
-        # 5. Production chariots D1 (<= musserie sortie * 1.05)
+        # 5. Production chariots D1 (<= murisserie sortie * 1.05)
         def _production():
             chariots = [
                 {"numero_chariot": 1, "heure_remplissage": "08:00", "heure_entree_dryer": "09:00"},

@@ -106,7 +106,7 @@ class EtapeProduction(Base):
     rendement_pourcentage = Column(Float, nullable=True)
     operateur = Column(String(100), default="")
     notes = Column(Text, default="")
-    # Musserie — détails de tri (Tableau 1 & 2)
+    # Murisserie — détails de tri (Tableau 1 & 2)
     fruits_murs_kg = Column(Float, default=0.0)
     dechets_tri_kg = Column(Float, default=0.0)
     dechets_lavage_kg = Column(Float, default=0.0)

@@ -2,7 +2,7 @@
   <div class="page">
     <PageHeader title="Commandes" subtitle="Gestion des commandes clients">
       <template #actions>
-        <button v-if="!showForm" class="btn btn-outline btn-sm" @click="doExport">CSV</button>
+        <button v-if="!showForm" class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
         <button v-if="!showForm" class="btn btn-primary" @click="showForm = true">+ Nouvelle</button>
       </template>
     </PageHeader>
@@ -129,7 +129,7 @@
 import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import { getCommandes, createCommande, updateCommandeStatut, getProduits, getLots, getStock } from '../api'
 import { useToastStore } from '../stores/toast'
-import { exportCsv } from '../utils/exportCsv'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -233,10 +233,12 @@ async function changerStatut(id, statut) {
   try { await updateCommandeStatut(id, statut); toast.success('Statut mis à jour'); await load() } catch {}
 }
 
-function doExport() {
-  const headers = ['Client', 'Date', 'Statut', 'Lignes']
-  const rows = filteredCommandes.value.map(c => [c.client_nom || '', c.date_commande ? new Date(c.date_commande).toLocaleDateString('fr-FR') : '', c.statut, (c.lignes || []).map(l => `${produitLabel(l.produit)}${l.lot ? ' (' + l.lot.code_lot + ')' : ''}: ${l.quantite} ${unitePluriel(uniteLigne(l))}`).join(' | ')])
-  exportCsv(headers, rows, 'commandes.csv')
+function commandeRows() {
+  return filteredCommandes.value.map(c => [c.client_nom || '', c.date_commande ? new Date(c.date_commande).toLocaleDateString('fr-FR') : '', c.statut, (c.lignes || []).map(l => `${produitLabel(l.produit)}${l.lot ? ' (' + l.lot.code_lot + ')' : ''}: ${l.quantite} ${unitePluriel(uniteLigne(l))}`).join(' | ')])
+}
+
+function doExportExcel() {
+  exportExcel(['Client', 'Date', 'Statut', 'Lignes'], commandeRows(), `commandes-${todayStamp()}.xlsx`, 'Commandes')
 }
 
 onMounted(load)

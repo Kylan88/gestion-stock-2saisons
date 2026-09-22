@@ -10,6 +10,7 @@
             Historique
           </button>
         </div>
+        <button v-if="activeView === 'historique'" class="btn btn-outline btn-sm" @click="doExportExcelHist">Excel</button>
       </template>
     </PageHeader>
 
@@ -78,9 +79,9 @@
         </div>
         <template v-if="expandedLotId === lot.id">
 
-         <!-- Déjà conditionné -->
+         <!-- Conditionné du jour (la veille disparaît chaque matin) -->
         <div v-if="hasCumul(lot)" class="cumul-section">
-          <div class="cumul-section-title">Déjà conditionné (cumul lot)</div>
+          <div class="cumul-section-title">Conditionné aujourd'hui</div>
           <div class="flux-grid">
             <div v-for="flux in getFluxList(lot)" :key="'cum-'+flux.key" class="flux-card">
               <div class="flux-head" :style="{ borderColor: flux.color }">
@@ -183,13 +184,14 @@
 <script setup>
 import { ref, reactive, onMounted, watch, nextTick } from 'vue'
 import { getLots, getProductionsEtapes, validerConditionnement, cloturerConditionnement, getHistoriqueConditionnement, getZonesStock, creerDemandeTransfert, validerDemandeTransfert, getConditionnementDryersDisponibles, validerConditionnementDryer, getConditionnementEntries } from '../api'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
-import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
+import { toCanonical, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const lots = ref([])
 const zones = ref([])
@@ -235,6 +237,16 @@ function isCondValidated(lotId, dryer) { return !!condTodayEntries[lotId + '_' +
 async function loadHistorique() {
   loadingHist.value = true
   try { historique.value = await getHistoriqueConditionnement() } finally { loadingHist.value = false }
+}
+
+function doExportExcelHist() {
+  const headers = ['Date', 'Lot', 'Poids entrée (kg)', 'Poids sortie (kg)', 'Rendement (%)', 'Opérateur']
+  const rows = historique.value.map(ep => [
+    ep.date_debut ? new Date(ep.date_debut).toLocaleDateString('fr-FR') : '',
+    ep.lot?.code_lot || ep.lot_id, ep.poids_entree ?? '', ep.poids_sortie ?? '',
+    ep.rendement_pourcentage ?? '', ep.operateur || '',
+  ])
+  exportExcel(headers, rows, `conditionnement-historique-${todayStamp()}.xlsx`, 'Conditionnement')
 }
 
 const allFluxes = [
@@ -293,27 +305,50 @@ function recalcDryer(lotId, dryer) {
 }
 
 function hasCumul(lot) {
-  return (lot.export_cartons || 0) + (lot.local_cartons || 0) + (lot.dechets_cartons || 0) +
-         (lot.rhum_cartons || 0) + (lot['fitini_fe_cartons'] || 0) > 0
+  // Entrées du jour uniquement : celles de la veille disparaissent chaque matin.
+  return todayEntriesList(lot).some(e =>
+    (e.export_cartons || 0) + (e.local_cartons || 0) + (e.dechets_cartons || 0) +
+    (e.rhum_cartons || 0) + (e.fitini_fe_cartons || 0) +
+    (e.export_sachets || 0) + (e.local_sachets || 0) + (e.dechets_sachets || 0) +
+    (e.rhum_sachets || 0) + (e.fitini_fe_sachets || 0) > 0)
+}
+
+function todayEntriesList(lot) {
+  const prefix = lot.id + '_'
+  const fromAvail = (condDryersAvailable[lot.id] || [])
+    .map(d => condTodayEntries[prefix + d])
+    .filter(Boolean)
+  if (fromAvail.length) return fromAvail
+  return Object.keys(condTodayEntries)
+    .filter(k => k.startsWith(prefix))
+    .map(k => condTodayEntries[k])
+    .filter(Boolean)
+}
+
+function entryPoidsSachet(e, key) {
+  const field = key === 'fitini_fe' ? 'fitini_fe_poids_sachet' : key + '_poids_sachet'
+  return e[field] || 2.5
 }
 
 function getCumulCartons(lot, key) {
   const field = key === 'fitini_fe' ? 'fitini_fe_cartons' : key + '_cartons'
-  return lot[field] || 0
+  return todayEntriesList(lot).reduce((s, e) => s + (e[field] || 0), 0)
 }
 function getCumulSachets(lot, key) {
   const field = key === 'fitini_fe' ? 'fitini_fe_sachets' : key + '_sachets'
-  return lot[field] || 0
+  return todayEntriesList(lot).reduce((s, e) => s + (e[field] || 0), 0)
 }
 function getPoidsSachet(lot, key) {
+  const list = todayEntriesList(lot)
+  if (list.length) return entryPoidsSachet(list[list.length - 1], key)
   const field = key === 'fitini_fe' ? 'fitini_fe_poids_sachet' : key + '_poids_sachet'
   return lot[field] || 2.5
 }
 function cumulPoidsFlux(lot, key) {
-  const cartons = getCumulCartons(lot, key)
-  const sachets = getCumulSachets(lot, key)
-  const p = getPoidsSachet(lot, key)
-  return Math.round(((cartons * 6) + sachets) * p * 100) / 100
+  const cartonsF = key === 'fitini_fe' ? 'fitini_fe_cartons' : key + '_cartons'
+  const sachetsF = key === 'fitini_fe' ? 'fitini_fe_sachets' : key + '_sachets'
+  return Math.round(todayEntriesList(lot).reduce((s, e) =>
+    s + (((e[cartonsF] || 0) * 6) + (e[sachetsF] || 0)) * entryPoidsSachet(e, key), 0) * 100) / 100
 }
 function totalCumulPoids(lot) {
   return Math.round(getFluxList(lot).reduce((s, fl) => s + cumulPoidsFlux(lot, fl.key), 0) * 100) / 100
@@ -357,7 +392,7 @@ async function load() {
     zones.value = z.filter(zz => zz.actif)
 
     const result = []
-    const filtered = raw.filter(l => [EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
+    const filtered = raw.filter(l => [EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
     for (const lot of filtered) {
       etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
       const prodEtapes = etapesData.value[lot.id].filter(e => e.etape === 'production')

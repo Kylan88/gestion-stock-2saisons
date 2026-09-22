@@ -27,7 +27,7 @@ TABLES_AND_ATTRS = [
 # mapping canonical -> legacy variants
 LEGACY_MAP = {
     statuses.RECEPTION: ["réception", "reception"],
-    statuses.EN_MUSSERIE: ["en musserie", "en_musserie", "en-musserie"],
+    statuses.EN_MURISSERIE: ["en murisserie", "en_murisserie", "en-murisserie"],
     statuses.EN_PRODUCTION: ["en production", "en_production", "en-production"],
     statuses.EN_SECHAGE: ["en séchage", "en sechage", "en_sechage", "ensechage"],
     statuses.CONDITIONNE: ["conditionné", "conditionne", "conditionne"] ,

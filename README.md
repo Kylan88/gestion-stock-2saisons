@@ -5,7 +5,7 @@ Application de gestion de stock et traçabilité de production pour **2Saisons**
 ## Processus de production (flux continu)
 
 ```
-Réception → Musserie (Tri) → Production (Chariots → Dryers) → Conditionnement (5 flux) → Chambre froide → Stock → Commandes
+Réception → Murisserie (Tri) → Production (Chariots → Dryers) → Conditionnement (5 flux) → Chambre froide → Stock → Commandes
 ```
 
 Plusieurs lots peuvent être traités le même jour. Il n'y a **plus de clôture finale manuelle** : chaque saisie journalière passe toujours (lot épuisé ou non) et le lot bascule **seul** vers `conditionne` quand il est épuisé (reste ≤ 0, productions terminées, flux non vide).
@@ -15,8 +15,8 @@ Plusieurs lots peuvent être traités le même jour. Il n'y a **plus de clôture
 | Règle | Détail |
 |-------|--------|
 | Chiffres uniques | Reste, traité, sortie, perte : une seule formule côté backend, affichée partout pareil |
-| Musserie | 1 saisie par (lot, dryer, jour) — la 2e écrase ; sortie = mûrs − retours − lavage − déchets (tri exclu, c'est un écart lot) |
-| Production | Entrée = frais net musserie, sortie = pulpe chargée ; clôturer = valider la journée, le lot reste ouvert |
+| Murisserie | 1 saisie par (lot, dryer, jour) — la 2e écrase ; sortie = mûrs − retours − lavage − déchets (tri exclu, c'est un écart lot) |
+| Production | Entrée = frais net murisserie, sortie = pulpe chargée ; clôturer = valider la journée, le lot reste ouvert |
 | Conditionnement | 5 flux (export, local, déchets, rhum, fitini fê) ; saisie par dryer J+1 sur poids sec ; « Valider la journée » ne ferme jamais le lot |
 | Stock auto | Chaque saisie alimente la chambre froide (delta uniquement, idempotent) ; le transfert manuel ne peut renvoyer que le reste |
 | Reconditionnement | Cartons local/fitini fê → sachets 100 g (+ rhum arrangé obtenu : cartons, sachets, vrac kg → stock Rhum arrangé) |
@@ -87,7 +87,7 @@ python -m pytest tests -q
 │   ├── seed.py               # Données de démo
 │   └── routers/
 │       ├── lots.py           # CRUD lots
-│       ├── production.py     # Musserie + Production (chariots, dryers)
+│       ├── production.py     # Murisserie + Production (chariots, dryers)
 │       ├── conditionnement.py # Conditionnement global + par dryer J+1
 │       ├── transfert.py      # Transferts chambre froide + reconditionnement
 │       ├── produits.py       # Catalogue produits
@@ -103,7 +103,7 @@ python -m pytest tests -q
 │   │   │   ├── Dashboard.vue
 │   │   │   ├── Reception.vue
 │   │   │   ├── Lots.vue
-│   │   │   ├── Musserie.vue
+│   │   │   ├── Murisserie.vue
 │   │   │   ├── Production.vue
 │   │   │   ├── ProductionChariots.vue
 │   │   │   ├── Conditionnement.vue
@@ -131,7 +131,7 @@ python -m pytest tests -q
 | `fournisseurs` | Fournisseurs (référentiel, nom libre) |
 | `produits` | Catalogue produits |
 | `lots` | Lots : type_fruit, fournisseur_nom, poids, cartons (5 flux) |
-| `etapes_production` | Étapes : musserie, production, conditionnement (+ poids sec) |
+| `etapes_production` | Étapes : murisserie, production, conditionnement (+ poids sec) |
 | `chariots` | Chariots par dryer (heures remplissage/entrée séchoir) |
 | `mouvements_stock` | Entrées/sorties |
 | `zones_stockage` | Zones froid/ambiant |
@@ -147,8 +147,8 @@ python -m pytest tests -q
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
 | GET/POST | `/api/lots/` | Liste / créer un lot |
-| POST | `/api/production/musserie/{lot_id}` | Saisie journalière musserie (1/jour/dryer) |
-| POST | `/api/production/musserie/{lot_id}/cloturer?date=` | Clôturer la musserie du jour |
+| POST | `/api/production/murisserie/{lot_id}` | Saisie journalière murisserie (1/jour/dryer) |
+| POST | `/api/production/murisserie/{lot_id}/cloturer?date=` | Clôturer la murisserie du jour |
 | POST | `/api/production/valider/{lot_id}` | Valider production (chariots → dryer) |
 | POST | `/api/production/cloturer/{lot_id}?date=` | Valider la journée (lot reste ouvert) |
 | POST | `/api/conditionnement/lots/{lot_id}` | Saisie conditionnement (5 flux, alimente le stock) |
@@ -169,5 +169,5 @@ python -m pytest tests -q
 
 Le seed inclut :
 - 5 catégories, 11 produits, 3 fournisseurs
-- 4 lots (1 en stock, 1 en production, 1 en musserie, 1 en réception)
+- 4 lots (1 en stock, 1 en production, 1 en murisserie, 1 en réception)
 - 2 chambres froides, stocks et mouvements d'exemple

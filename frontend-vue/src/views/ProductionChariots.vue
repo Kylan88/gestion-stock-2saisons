@@ -10,6 +10,7 @@
             Historique
           </button>
         </div>
+        <button v-if="activeView === 'historique'" class="btn btn-outline btn-sm" @click="doExportExcelHist">Excel</button>
       </template>
      </PageHeader>
     <RappelsBanner />
@@ -71,13 +72,13 @@
           </div>
         </div>
 
-        <!-- Musserie disponible pour production aujourd'hui -->
-        <div v-if="musserieData[lot.id] && musserieData[lot.id].length > 0" class="musserie-available">
-          <div class="musserie-available-title">Frais net issu de la musserie du jour :</div>
-          <div class="musserie-available-grid">
-            <div v-for="m in musserieData[lot.id]" :key="m.dryer" class="musserie-available-item">
-              <span class="musserie-dryer">Dryer {{ m.dryer }}</span>
-              <strong class="musserie-poids">{{ m.poids_sortie }} kg</strong>
+        <!-- Murisserie disponible pour production aujourd'hui -->
+        <div v-if="murisserieData[lot.id] && murisserieData[lot.id].length > 0" class="murisserie-available">
+          <div class="murisserie-available-title">Frais net issu de la murisserie du jour :</div>
+          <div class="murisserie-available-grid">
+            <div v-for="m in murisserieData[lot.id]" :key="m.dryer" class="murisserie-available-item">
+              <span class="murisserie-dryer">Dryer {{ m.dryer }}</span>
+              <strong class="murisserie-poids">{{ m.poids_sortie }} kg</strong>
             </div>
           </div>
         </div>
@@ -116,8 +117,8 @@
           </div>
         </div>
 
-          <!-- Formulaire nouveau dryer : caché si pas de musserie aujourd'hui -->
-         <div v-if="availableDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune musserie aujourd'hui pour ce lot — effectuer la musserie d'abord.</div>
+          <!-- Formulaire nouveau dryer : caché si pas de murisserie aujourd'hui -->
+         <div v-if="availableDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune murisserie aujourd'hui pour ce lot — effectuer la murisserie d'abord.</div>
          <div v-else class="prod-form compact">
             <div class="dryers-title" style="margin-top:12px">
               {{ dryers[lot.id] && dryers[lot.id].length > 0 ? 'Ajouter un dryer' : 'Nouveau dryer' }}
@@ -214,14 +215,15 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { getLots, getProductionsEtapes, validerProduction, getDryersProduction, cloturerProduction, getHistoriqueProduction, getMusserieByDateDryer } from '../api'
+import { getLots, getProductionsEtapes, validerProduction, getDryersProduction, cloturerProduction, getHistoriqueProduction, getMurisserieByDateDryer } from '../api'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import RappelsBanner from '../components/RappelsBanner.vue'
-import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, TERMINE } from '../utils/statuses'
+import { toCanonical, EN_MURISSERIE, EN_PRODUCTION, TERMINE } from '../utils/statuses'
 
 const DRYER = { 1: { chariots: 6, claies: 42, kg_par_claie: 6.25 }, 2: { chariots: 12, claies: 20, kg_par_claie: 6.25 } }
 
@@ -240,6 +242,17 @@ async function loadHistorique() {
   try { historique.value = await getHistoriqueProduction() } finally { loadingHist.value = false }
 }
 
+function doExportExcelHist() {
+  const headers = ['Date', 'Lot', 'Poids entrée (kg)', 'Poids sortie (kg)', 'Rendement (%)', 'Dryer', 'Chariots', 'Opérateur']
+  const rows = historique.value.map(ep => [
+    ep.date_debut ? new Date(ep.date_debut).toLocaleDateString('fr-FR') : '',
+    ep.lot?.code_lot || ep.lot_id, ep.poids_entree ?? '', ep.poids_sortie ?? '',
+    ep.rendement_pourcentage ?? '', ep.dryer ? 'D' + ep.dryer : '',
+    ep.nbre_chariots ?? '', ep.operateur || '',
+  ])
+  exportExcel(headers, rows, `chariots-historique-${todayStamp()}.xlsx`, 'Chariots')
+}
+
 watch(showHistorique, (v) => { if (v) loadHistorique() })
 
 const lots = ref([])
@@ -250,7 +263,7 @@ const toast = useToastStore()
 const f = reactive({})
 const dryers = reactive({})
 const etapesData = reactive({})
-const musserieData = reactive({}) // { lotId: { dryer: { date: poids_sortie } } }
+const murisserieData = reactive({}) // { lotId: { dryer: { date: poids_sortie } } }
 const activeView = ref('saisie')
 
 function maxChariots(lotId) { return DRYER[f[lotId]?.dryer || 1].chariots }
@@ -291,15 +304,15 @@ function totalChariots(lotId) {
   return dryers[lotId].reduce((sum, d) => sum + (d.nbre_chariots || 0), 0)
 }
 
-function getMusseriePoids(lotId, dryer) {
-  const data = musserieData[lotId]
+function getMurisseriePoids(lotId, dryer) {
+  const data = murisserieData[lotId]
   if (!data) return 0
   const entry = data.find(m => m.dryer === dryer)
   return entry?.poids_sortie || 0
 }
 
 function availableDryers(lotId) {
-  return (musserieData[lotId] || []).map(m => m.dryer)
+  return (murisserieData[lotId] || []).map(m => m.dryer)
 }
 function isDryerAvailable(lotId, dryer) {
   return availableDryers(lotId).includes(dryer)
@@ -340,13 +353,13 @@ async function loadDryers(lotId) {
   dryers[lotId] = data
 }
 
-async function loadMusserieForToday(lotId) {
+async function loadMurisserieForToday(lotId) {
     const today = new Date().toISOString().split('T')[0]
     try {
-      const data = await getMusserieByDateDryer(lotId, today)
-      musserieData[lotId] = data
+      const data = await getMurisserieByDateDryer(lotId, today)
+      murisserieData[lotId] = data
     } catch {
-      musserieData[lotId] = []
+      murisserieData[lotId] = []
     }
   }
 
@@ -354,7 +367,7 @@ async function loadMusserieForToday(lotId) {
     loading.value = true
     try {
       const raw = await getLots()
-      const filtered = raw.filter(l => [EN_MUSSERIE, EN_PRODUCTION].includes(toCanonical(l.statut)))
+      const filtered = raw.filter(l => [EN_MURISSERIE, EN_PRODUCTION].includes(toCanonical(l.statut)))
       const result = []
       for (const lot of filtered) {
         const etapes = await getProductionsEtapes(lot.id)
@@ -362,7 +375,7 @@ async function loadMusserieForToday(lotId) {
         if (prodEtapes.length > 0 && prodEtapes.every(e => toCanonical(e.statut) === TERMINE)) {
           continue
         }
-        await loadMusserieForToday(lot.id)
+        await loadMurisserieForToday(lot.id)
         initForm(lot.id)
         await loadDryers(lot.id)
         result.push(lot)
@@ -387,7 +400,7 @@ async function enregistrer(lot) {
       })),
     })
     toast.success(`Dryer ${currentDryer} enregistré`)
-    // bascule auto vers le prochain dryer disponible du jour (si musserie validée)
+    // bascule auto vers le prochain dryer disponible du jour (si murisserie validée)
     const avail = availableDryers(lot.id)
     const next = avail.find(d => d !== currentDryer && !dryers[lot.id]?.some(x => x.dryer === d && x.chariots?.length))
     // fallback : prochain dans la liste
@@ -398,7 +411,7 @@ async function enregistrer(lot) {
     if (target) {
       f[lot.id].dryer = target
       onDryerChange(lot.id)
-      toast.success(`Basculé sur Dryer ${target} (musserie du jour)`)
+      toast.success(`Basculé sur Dryer ${target} (murisserie du jour)`)
     }
   } finally { saving.value = false }
 }
@@ -499,15 +512,15 @@ onMounted(load)
 
 .cloture-row { margin-top: 12px; text-align: right; }
 
-.musserie-available {
+.murisserie-available {
   margin-top: 12px; padding: 12px;
   background: var(--info-light); border: 1px solid var(--info); border-radius: var(--radius-sm);
 }
-.musserie-available-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--info); letter-spacing: 0.3px; margin-bottom: 8px; }
-.musserie-available-grid { display: flex; gap: 16px; flex-wrap: wrap; }
-.musserie-available-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.musserie-dryer { color: var(--text-secondary); }
-.musserie-poids { color: var(--info); font-weight: 700; }
+.murisserie-available-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--info); letter-spacing: 0.3px; margin-bottom: 8px; }
+.murisserie-available-grid { display: flex; gap: 16px; flex-wrap: wrap; }
+.murisserie-available-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.murisserie-dryer { color: var(--text-secondary); }
+.murisserie-poids { color: var(--info); font-weight: 700; }
 
 .saisie-section { border-top: 1px solid var(--border-light); padding-top: 14px; margin-top: 14px; }
 .saisie-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px; margin-bottom: 10px; }

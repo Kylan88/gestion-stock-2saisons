@@ -252,9 +252,9 @@ def demarrer_etape(db: Session, etape_id: int, operateur: str = "") -> Optional[
     db.commit(); db.refresh(ep)
     return ep
 
-# ── MUSSERIE (cumul journalier) ──
+# ── MURISSERIE (cumul journalier) ──
 
-def valider_musserie(db: Session, lot_id: int,
+def valider_murisserie(db: Session, lot_id: int,
                      fruits_murs_kg: float = 0.0,
                      dechets_tri_kg: float = 0.0,
                      dechets_lavage_kg: float = 0.0,
@@ -275,7 +275,7 @@ def valider_musserie(db: Session, lot_id: int,
     # Si une étape ouverte existe pour ce dryer AUJOURD'HUI, on la MET À JOUR (écrasement)
     # sinon on crée une nouvelle entrée du jour (permet MAJ sans cumul, et multi-jours sans doublon)
     ep = db.query(EtapeProduction).filter(
-        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie",
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "murisserie",
         EtapeProduction.dryer == (dryer or None),
         EtapeProduction.statut != statuses.TERMINE,
         EtapeProduction.date_debut >= today_start(),
@@ -284,7 +284,7 @@ def valider_musserie(db: Session, lot_id: int,
     # fallback : si aucune entrée du jour, mais une ancienne ouverte sans date (compat), on la réutilise pour MAJ du jour même
     if not ep:
         ep = db.query(EtapeProduction).filter(
-            EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie",
+            EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "murisserie",
             EtapeProduction.dryer == (dryer or None),
             EtapeProduction.statut != statuses.TERMINE,
         ).first()
@@ -294,7 +294,7 @@ def valider_musserie(db: Session, lot_id: int,
     is_update = ep is not None and ep.id is not None
     old_retour_mure = (ep.retour_mure_kg or 0) if is_update else 0
     if not ep:
-        ep = EtapeProduction(lot_id=lot_id, etape="musserie", ordre=1, statut="en_cours", dryer=dryer or None)
+        ep = EtapeProduction(lot_id=lot_id, etape="murisserie", ordre=1, statut="en_cours", dryer=dryer or None)
         db.add(ep); db.flush()
     if not ep.date_debut:
         ep.date_debut = datetime.now()
@@ -329,16 +329,16 @@ def valider_musserie(db: Session, lot_id: int,
     ep.rendement_pourcentage = round((poids_sortie / total_consomme) * 100, 1) if total_consomme > 0 else None
 
     # Reste lot = reçu - Σ(net mûrs) - Σ(tri)  — tri retiré du lot, pas de l'envoi journalier
-    # Multi-dryer : somme sur toutes les étapes musserie du lot
+    # Multi-dryer : somme sur toutes les étapes murisserie du lot
     db.flush()
     all_mus = db.query(EtapeProduction).filter(
-        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie"
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "murisserie"
     ).all()
     total_net = sum((e.fruits_murs_kg or 0) - (e.retour_mure_kg or 0) for e in all_mus)
     total_tri = sum(e.dechets_tri_kg or 0 for e in all_mus)
     lot.quantite_restante = round(max(0, (lot.poids_frais or 0) - total_net - total_tri), 2)
     if statuses.normalize(lot.statut) == statuses.RECEPTION:
-        lot.statut = statuses.EN_MUSSERIE
+        lot.statut = statuses.EN_MURISSERIE
 
     db.commit()
     db.refresh(ep)
@@ -346,19 +346,19 @@ def valider_musserie(db: Session, lot_id: int,
 
 from datetime import date as date_type
 
-def cloturer_musserie(db: Session, lot_id: int, date_str: str | None = None):
-    """Clôture les étapes musserie d'un lot et crée les entrées production correspondantes.
-    - Si date_str fourni: clôture seulement les entrées de ce jour, crée production pour ce jour (lot reste EN_MUSSERIE)
+def cloturer_murisserie(db: Session, lot_id: int, date_str: str | None = None):
+    """Clôture les étapes murisserie d'un lot et crée les entrées production correspondantes.
+    - Si date_str fourni: clôture seulement les entrées de ce jour, crée production pour ce jour (lot reste EN_MURISSERIE)
     - Si date_str None: clôture tout, crée production pour tout, passe le lot en EN_PRODUCTION
     """
     lot = db.get(Lot, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
-    if statuses.normalize(lot.statut) not in (statuses.EN_MUSSERIE, statuses.RECEPTION):
-        raise ValueError(f"Le lot {lot.code_lot} n'est pas en musserie (statut: {lot.statut})")
+    if statuses.normalize(lot.statut) not in (statuses.EN_MURISSERIE, statuses.RECEPTION):
+        raise ValueError(f"Le lot {lot.code_lot} n'est pas en murisserie (statut: {lot.statut})")
 
     query = db.query(EtapeProduction).filter(
-        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie"
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "murisserie"
     )
     if date_str:
         try:
@@ -370,12 +370,12 @@ def cloturer_musserie(db: Session, lot_id: int, date_str: str | None = None):
     else:
         action = "tout"
 
-    etapes_musserie = query.all()
-    if not etapes_musserie:
-        raise ValueError(f"Aucune étape musserie trouvée pour le lot {lot.code_lot} ({action})")
+    etapes_murisserie = query.all()
+    if not etapes_murisserie:
+        raise ValueError(f"Aucune étape murisserie trouvée pour le lot {lot.code_lot} ({action})")
 
-    # Pour chaque entrée musserie clôturée, créer l'entrée production correspondante
-    for ep in etapes_musserie:
+    # Pour chaque entrée murisserie clôturée, créer l'entrée production correspondante
+    for ep in etapes_murisserie:
         if ep.statut != statuses.TERMINE:
             ep.statut = statuses.TERMINE
             if not ep.date_fin:
@@ -383,7 +383,7 @@ def cloturer_musserie(db: Session, lot_id: int, date_str: str | None = None):
             if not ep.poids_sortie and ep.fruits_murs_kg:
                 ep.poids_sortie = round(max(0, ep.fruits_murs_kg - ep.retour_non_mur_kg - ep.dechets_lavage_kg - ep.dechets_production_kg), 2)
 
-            # Créer l'étape production correspondante avec le poids sortie de la musserie
+            # Créer l'étape production correspondante avec le poids sortie de la murisserie
             if ep.poids_sortie and ep.poids_sortie > 0:
                 existing_prod = db.query(EtapeProduction).filter(
                     EtapeProduction.lot_id == lot_id,
@@ -406,7 +406,7 @@ def cloturer_musserie(db: Session, lot_id: int, date_str: str | None = None):
                     db.add(prod_ep)
 
     if not date_str:
-        # Clôture finale : plus de musserie possible, passage en production
+        # Clôture finale : plus de murisserie possible, passage en production
         statuses.validate_transition(lot.statut, statuses.EN_PRODUCTION)
         lot.statut = statuses.EN_PRODUCTION
     elif (lot.quantite_restante or 0) <= 0:
@@ -415,14 +415,14 @@ def cloturer_musserie(db: Session, lot_id: int, date_str: str | None = None):
         lot.statut = statuses.EN_PRODUCTION
 
     db.commit()
-    for ep in etapes_musserie:
+    for ep in etapes_murisserie:
         db.refresh(ep)
     db.refresh(lot)
-    return {"lot": lot, "etapes": etapes_musserie, "action": action}
+    return {"lot": lot, "etapes": etapes_murisserie, "action": action}
 
 
-def get_musserie_by_date_dryer(db: Session, lot_id: int, date_str: str):
-    """Retourne les étapes musserie d'un lot pour une date donnée, groupées par dryer."""
+def get_murisserie_by_date_dryer(db: Session, lot_id: int, date_str: str):
+    """Retourne les étapes murisserie d'un lot pour une date donnée, groupées par dryer."""
     try:
         target_date = date_type.fromisoformat(date_str)
     except ValueError:
@@ -430,7 +430,7 @@ def get_musserie_by_date_dryer(db: Session, lot_id: int, date_str: str):
 
     etapes = db.query(EtapeProduction).filter(
         EtapeProduction.lot_id == lot_id,
-        EtapeProduction.etape == "musserie",
+        EtapeProduction.etape == "murisserie",
         EtapeProduction.date_debut >= target_date,
         EtapeProduction.date_debut < target_date + timedelta(days=1),
         EtapeProduction.statut == statuses.TERMINE
@@ -484,18 +484,18 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
     ep.dryer = dryer
     ep.nbre_chariots = nbre_chariots
 
-    ep_musserie = db.query(EtapeProduction).filter(
-        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie",
+    ep_murisserie = db.query(EtapeProduction).filter(
+        EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "murisserie",
         EtapeProduction.dryer == dryer
     ).first()
-    if not ep_musserie:
-        ep_musserie = db.query(EtapeProduction).filter(
-            EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "musserie"
+    if not ep_murisserie:
+        ep_murisserie = db.query(EtapeProduction).filter(
+            EtapeProduction.lot_id == lot_id, EtapeProduction.etape == "murisserie"
         ).first()
-    dechets_prod = ep_musserie.dechets_production_kg if ep_musserie else 0.0
+    dechets_prod = ep_murisserie.dechets_production_kg if ep_murisserie else 0.0
     ep.dechets_production_kg = dechets_prod
-    # Frais net issu de la musserie (référence), pulpe chargée = saisie jour.
-    frais_net = (ep_musserie.poids_sortie or 0.0) if ep_musserie else 0.0
+    # Frais net issu de la murisserie (référence), pulpe chargée = saisie jour.
+    frais_net = (ep_murisserie.poids_sortie or 0.0) if ep_murisserie else 0.0
 
     validate_weight_flow(db, lot_id, "production", quantite_totale)
 
@@ -520,7 +520,7 @@ def valider_production(db: Session, lot_id: int, dryer: int, nbre_chariots: int,
     for c in all_chariots:
         if c.dryer not in dryers_seen:
             dryers_seen[c.dryer] = {"dryer": c.dryer, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale}
-    # Poids entrée = frais net musserie ; sortie = pulpe chargée ; perte = écart.
+    # Poids entrée = frais net murisserie ; sortie = pulpe chargée ; perte = écart.
     # Un dryer journalier ne clôture jamais le lot : le reste frais est suivi via le lot.
     if frais_net > 0:
         ep.poids_entree = round(frais_net, 2)
@@ -572,10 +572,10 @@ def cloturer_production(db: Session, lot_id: int, date_str: str | None = None) -
     if main is None:
         main = eps[-1]
     lot = db.get(models.Lot, lot_id)
-    # Clôture journalière : le lot reste ouvert (flux continu musserie⇄production).
+    # Clôture journalière : le lot reste ouvert (flux continu murisserie⇄production).
     if not date_str:
         if lot and statuses.normalize(lot.statut) == statuses.EN_PRODUCTION:
-            # flux continu : on n'avance le statut que si le lot a fini sa musserie
+            # flux continu : on n'avance le statut que si le lot a fini sa murisserie
             statuses.validate_transition(lot.statut, statuses.EN_CONDITIONNEMENT)
             lot.statut = statuses.EN_CONDITIONNEMENT
     db.commit(); db.refresh(main)
@@ -603,7 +603,7 @@ def get_dryers_production(db: Session, lot_id: int) -> list:
             "heure_remplissage": c.heure_remplissage, "heure_entree_dryer": c.heure_entree_dryer,
         })
     # Inclut les étapes sans chariots détaillés (saisie rapide),
-    # mais pas les placeholders créés par cloturer_musserie (pas de chariots, pulpe 0).
+    # mais pas les placeholders créés par cloturer_murisserie (pas de chariots, pulpe 0).
     for ep in eps:
         if ep.dryer and ep.dryer not in dryers:
             if not (ep.poids_sortie or 0) > 0:
@@ -1352,7 +1352,7 @@ def get_stats_production(db: Session) -> dict:
         ).scalar()
 
     prod_jour = sum_etapes_jour("production")
-    musserie_jour = sum_etapes_jour("musserie", "poids_sortie")
+    murisserie_jour = sum_etapes_jour("murisserie", "poids_sortie")
     conditionnement_jour = sum_etapes_jour("conditionnement", "poids_sortie")
     return {
         "lots_suivi": lots_suivi,
@@ -1360,7 +1360,7 @@ def get_stats_production(db: Session) -> dict:
         "etapes_en_cours": etapes_en_cours,
         "rendement_moyen_frais_sec": get_rendement_moyen_global(db),
         "production_jour_kg": round(prod_jour, 1),
-        "musserie_jour_kg": round(musserie_jour, 1),
+        "murisserie_jour_kg": round(murisserie_jour, 1),
         "conditionnement_jour_kg": round(conditionnement_jour, 1),
     }
 
@@ -1393,7 +1393,7 @@ def creer_demande_transfert(db: Session, lot_id: int, lignes: list,
     lot = get_lot(db, lot_id)
     if not lot:
         raise ValueError(f"Lot {lot_id} introuvable")
-    if statuses.normalize(lot.statut) not in (statuses.EN_MUSSERIE, statuses.EN_PRODUCTION,
+    if statuses.normalize(lot.statut) not in (statuses.EN_MURISSERIE, statuses.EN_PRODUCTION,
                                                statuses.EN_CONDITIONNEMENT, statuses.CONDITIONNE):
         raise ValueError(f"Le lot {lot.code_lot} n'a pas de cartons à transférer (statut: {lot.statut})")
     if not lignes:
@@ -1826,10 +1826,10 @@ def detecter_anomalies(db: Session) -> list:
         lot_statut_norm = statuses.normalize(lot.statut)
 
         if lot_statut_norm in [statuses.EN_PRODUCTION, statuses.EN_CONDITIONNEMENT, statuses.CONDITIONNE]:
-            musserie = next((e for e in etapes if e.etape == "musserie" and statuses.normalize(e.statut) == statuses.TERMINE), None)
-            if not musserie:
-                anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "production_sans_musserie",
-                                  "message": f"{lot.code_lot} est en {lot.statut} mais n'a pas de musserie terminée",
+            murisserie = next((e for e in etapes if e.etape == "murisserie" and statuses.normalize(e.statut) == statuses.TERMINE), None)
+            if not murisserie:
+                anomalies.append({"lot": lot.code_lot, "lot_id": lot.id, "type": "production_sans_murisserie",
+                                  "message": f"{lot.code_lot} est en {lot.statut} mais n'a pas de murisserie terminée",
                                   "severite": "error"})
 
         if lot_statut_norm in [statuses.EN_CONDITIONNEMENT, statuses.CONDITIONNE]:
@@ -1868,7 +1868,7 @@ def get_rappels(db: Session, seuil_heures: int = 24) -> list:
     rappels = []
     lots = db.query(Lot).filter(Lot.statut.notin_([statuses.EXPEDIE, statuses.PERIME, statuses.EN_STOCK])).all()
     for lot in lots:
-        # dernière étape du lot (musserie ou production ou conditionnement)
+        # dernière étape du lot (murisserie ou production ou conditionnement)
         last = db.query(EtapeProduction).filter(EtapeProduction.lot_id == lot.id).order_by(EtapeProduction.date_debut.desc()).first()
         if not last:
             continue
@@ -1887,29 +1887,29 @@ def get_rappels(db: Session, seuil_heures: int = 24) -> list:
                 "message": f"{lot.code_lot} bloqué en {last.etape} (D{last.dryer or '?'}) depuis {age_h}h — statut lot {lot.statut}",
                 "severite": "warning" if age_h < 48 else "error",
             })
-        # cas musserie d'hier non suivie de chariots — ne rappelle que si AUCUNE production n'existe pour ce dryer après la musserie
-        if lot.statut in [statuses.EN_MUSSERIE, statuses.EN_PRODUCTION]:
-            musserie_hier = db.query(EtapeProduction).filter(
-                EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "musserie", EtapeProduction.statut == statuses.TERMINE,
+        # cas murisserie d'hier non suivie de chariots — ne rappelle que si AUCUNE production n'existe pour ce dryer après la murisserie
+        if lot.statut in [statuses.EN_MURISSERIE, statuses.EN_PRODUCTION]:
+            murisserie_hier = db.query(EtapeProduction).filter(
+                EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "murisserie", EtapeProduction.statut == statuses.TERMINE,
                 func.date(EtapeProduction.date_debut) == (now - timedelta(days=1)).date()
             ).first()
-            if musserie_hier:
-                # s'il existe déjà une production pour ce dryer à partir de la musserie, pas de rappel
-                prod_apres_musserie = db.query(EtapeProduction).filter(
+            if murisserie_hier:
+                # s'il existe déjà une production pour ce dryer à partir de la murisserie, pas de rappel
+                prod_apres_murisserie = db.query(EtapeProduction).filter(
                     EtapeProduction.lot_id == lot.id, EtapeProduction.etape == "production",
-                    EtapeProduction.dryer == musserie_hier.dryer,
-                    EtapeProduction.date_debut >= musserie_hier.date_debut,
+                    EtapeProduction.dryer == murisserie_hier.dryer,
+                    EtapeProduction.date_debut >= murisserie_hier.date_debut,
                 ).first()
-                if not prod_apres_musserie:
+                if not prod_apres_murisserie:
                     rappels.append({
                         "lot_id": lot.id,
                         "code_lot": lot.code_lot,
                         "statut": lot.statut,
                         "etape": "production",
-                        "dryer": musserie_hier.dryer,
-                        "derniere_action": musserie_hier.date_fin.isoformat() if musserie_hier.date_fin else musserie_hier.date_debut.isoformat(),
+                        "dryer": murisserie_hier.dryer,
+                        "derniere_action": murisserie_hier.date_fin.isoformat() if murisserie_hier.date_fin else murisserie_hier.date_debut.isoformat(),
                         "heures_bloque": 24,
-                        "message": f"{lot.code_lot} — musserie D{musserie_hier.dryer} d'hier sans chariots aujourd'hui",
+                        "message": f"{lot.code_lot} — murisserie D{murisserie_hier.dryer} d'hier sans chariots aujourd'hui",
                         "severite": "warning",
                     })
     # dédupliquer par lot+dryer
@@ -1923,11 +1923,11 @@ def get_rappels(db: Session, seuil_heures: int = 24) -> list:
     return uniq
 
 
-# ── HISTORIQUE MUSSERIE ──
+# ── HISTORIQUE MURISSERIE ──
 
-def get_historique_musserie(db: Session, lot_id: int = None):
+def get_historique_murisserie(db: Session, lot_id: int = None):
     from models import EtapeProduction
-    q = db.query(EtapeProduction).filter(EtapeProduction.etape == "musserie")
+    q = db.query(EtapeProduction).filter(EtapeProduction.etape == "murisserie")
     if lot_id:
         q = q.filter(EtapeProduction.lot_id == lot_id)
     return q.order_by(EtapeProduction.date_debut.desc()).all()
@@ -1949,7 +1949,7 @@ def get_historique_conditionnement(db: Session, lot_id: int = None):
     return q.order_by(EtapeProduction.date_debut.desc()).all()
 
 
-# ── PRODUCTION / RENDEMENT (Calculé automatiquement depuis la musserie) ──
+# ── PRODUCTION / RENDEMENT (Calculé automatiquement depuis la murisserie) ──
 
 DRYER_CAPACITY = {1: 1575.0, 2: 1500.0}  # 6.25 kg/claie × 42×6 et 20×12
 
@@ -1992,9 +1992,9 @@ def update_company_settings(db: Session, data: dict) -> dict:
     return get_company_settings(db)
 
 
-def _get_musserie_aggregated(db: Session, date_from: str = None, date_to: str = None,
+def _get_murisserie_aggregated(db: Session, date_from: str = None, date_to: str = None,
                               fruit_type: str = None, lot_id: int = None) -> list:
-    """Agrège les étapes musserie terminées par lot × date × dryer.
+    """Agrège les étapes murisserie terminées par lot × date × dryer.
     Frais total dryer = fruits_murs + dechets_lavage + dechets_production + retour_non_mur (sans dechets_tri)
     Pulpe = capacité dryer (1575 D1, 1500 D2) issue de 6.25 kg/claie.
     Rendement dryer = capacité / frais_total
@@ -2015,7 +2015,7 @@ def _get_musserie_aggregated(db: Session, date_from: str = None, date_to: str = 
         func.sum(EtapeProduction.retour_non_mur_kg).label("total_retour"),
         func.sum(EtapeProduction.poids_sortie).label("total_pulpe_actual"),
     ).join(EtapeProduction, EtapeProduction.lot_id == Lot.id).filter(
-        EtapeProduction.etape == "musserie",
+        EtapeProduction.etape == "murisserie",
         EtapeProduction.statut == "termine",
     )
 
@@ -2076,14 +2076,14 @@ def _get_musserie_aggregated(db: Session, date_from: str = None, date_to: str = 
 def get_production_entries(db: Session, date_from: str = None, date_to: str = None,
                             fruit_type: str = None, saison_id: int = None,
                             skip: int = 0, limit: int = 100) -> list:
-    """Liste les entrées de production calculées depuis la musserie (par lot/date)."""
-    entries = _get_musserie_aggregated(db, date_from, date_to, fruit_type)
+    """Liste les entrées de production calculées depuis la murisserie (par lot/date)."""
+    entries = _get_murisserie_aggregated(db, date_from, date_to, fruit_type)
     return entries[skip:skip + limit]
 
 
 def get_production_stats(db: Session) -> dict:
     """Stats globales : tout est par dryer (frais total sans dechets_tri, pulpe = capacité dryer)."""
-    entries = _get_musserie_aggregated(db)
+    entries = _get_murisserie_aggregated(db)
     if not entries:
         return {"total_kg_frais": 0.0, "total_pulpe_kg": 0.0, "total_pulpe_capacity_kg": 0.0, "total_dryers": 0,
                 "rendement_moyen": 0.0, "rendement_global": 0.0, "par_fruit": {}, "par_lot": {}, "par_dryer": {}}

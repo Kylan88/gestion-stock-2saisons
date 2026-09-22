@@ -101,7 +101,7 @@
           <div class="reception-ok-icon">✓</div>
           <div class="reception-ok-text">
             <strong>Réception à jour</strong>
-            <span>{{ allLots.length }} lot(s) dans l'atelier — rien en attente de tri</span>
+            <span>{{ allLots.length }} lot(s) en murisserie — en attente de tri</span>
           </div>
           <div style="display:flex;gap:8px">
             <button v-if="!showForm" class="btn btn-primary btn-sm" @click="showForm = true; resetForm(); $nextTick(() => firstInput?.focus())">
@@ -112,6 +112,9 @@
         </div>
 
         <div class="recent-title">Derniers lots enregistrés</div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
+        </div>
         <div class="table-wrap anim-fade">
           <table>
             <thead>
@@ -145,9 +148,12 @@
           <div style="font-size:13px;color:var(--text-muted)">
             <strong>{{ lots.length }}</strong> lot(s) en réception
           </div>
+          <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
           <button v-if="!showForm" class="btn btn-outline btn-sm" @click="showForm = true; resetForm(); $nextTick(() => firstInput?.focus())">
             + Nouveau Lot
           </button>
+          </div>
         </div>
 
         <table>
@@ -173,7 +179,7 @@
               <td><StatusBadge :status="lot.statut" /></td>
               <td style="min-width:260px"><WorkflowProgress :statut="lot.statut" /></td>
               <td>
-                <button class="btn btn-sm btn-primary" @click="lancerMusserie(lot)">→ Musserie</button>
+                <button class="btn btn-sm btn-primary" @click="lancerMurisserie(lot)">→ Murisserie</button>
               </td>
             </tr>
           </tbody>
@@ -186,8 +192,9 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick, computed, watch } from 'vue'
 import { getLots, createLot, updateLotStatut, getFournisseurs } from '../api'
+import { exportWorkbook, todayStamp } from '../utils/exportExcel'
 import { getProductionConfig } from '../api'
-import { RECEPTION, EN_MUSSERIE } from '../utils/statuses'
+import { RECEPTION, EN_MURISSERIE } from '../utils/statuses'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -307,12 +314,26 @@ async function save() {
   }
 }
 
-async function lancerMusserie(lot) {
+async function lancerMurisserie(lot) {
   try {
-    await updateLotStatut(lot.id, EN_MUSSERIE)
-    toast.success(`${lot.code_lot} envoyé en musserie`)
+    await updateLotStatut(lot.id, EN_MURISSERIE)
+    toast.success(`${lot.code_lot} envoyé en murisserie`)
     await load()
   } catch {}
+}
+
+function lotRow(l) {
+  return [l.code_lot || '', l.type_fruit || l.produit?.nom || '', l.fournisseur_nom || l.fournisseur?.nom || '',
+    l.poids_frais ?? '', (l.date_reception || '').slice(0, 10), l.statut || '']
+}
+
+function doExportExcel() {
+  const headers = ['Code Lot', 'Produit', 'Fournisseur', 'Poids (kg)', 'Date', 'Statut']
+  const sheets = []
+  if (lots.value.length) sheets.push({ name: 'En réception', headers, rows: lots.value.map(lotRow) })
+  if (recentLots.value.length) sheets.push({ name: 'Derniers lots', headers, rows: recentLots.value.map(lotRow) })
+  if (!sheets.length) { toast.warning('Rien à exporter'); return }
+  exportWorkbook(sheets, `reception-${todayStamp()}.xlsx`)
 }
 
 onMounted(async () => {

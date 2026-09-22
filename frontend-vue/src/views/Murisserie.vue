@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <PageHeader title="Musserie & Tri" subtitle="Tri et pesée journalière des fruits — chaque saisie s'ajoute au cumul du lot">
+    <PageHeader title="Murisserie & Tri" subtitle="Tri et pesée journalière des fruits — chaque saisie s'ajoute au cumul du lot">
       <template #actions>
         <div class="tabs">
           <button class="tab" :class="{ active: activeView === 'saisie' }" @click="activeView = 'saisie'">
@@ -10,6 +10,7 @@
             Historique
           </button>
         </div>
+        <button v-if="activeView === 'historique'" class="btn btn-outline btn-sm" @click="doExportExcelHist">Excel</button>
       </template>
 </PageHeader>
 
@@ -27,7 +28,7 @@
     <div v-if="activeView === 'historique'" class="anim-fade" key="historique">
       <LoadingSpinner v-if="loadingHist" />
       <div v-if="!loadingHist && historique.length === 0" class="empty">
-        <div class="empty-text">Aucune saisie de musserie enregistrée</div>
+        <div class="empty-text">Aucune saisie de murisserie enregistrée</div>
       </div>
       <div v-if="!loadingHist && historique.length > 0" class="table-wrap">
         <table class="table">
@@ -60,7 +61,7 @@
       <LoadingSpinner v-if="loading" />
       <div v-if="lots.length === 0" class="empty anim-fade">
         <div class="empty-icon empty-no-emoji">—</div>
-        <div class="empty-text">Aucun lot en attente de musserie</div>
+        <div class="empty-text">Aucun lot en attente de murisserie</div>
       </div>
 
       <!-- Navigation rapide lots -->
@@ -92,16 +93,16 @@
         <!-- Barre de progression -->
         <div class="lot-progress">
           <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: progressMusserie(lot) + '%' }"></div>
+            <div class="progress-fill" :style="{ width: progressMurisserie(lot) + '%' }"></div>
           </div>
-          <span class="progress-label">{{ progressMusserie(lot) }}% traité</span>
+          <span class="progress-label">{{ progressMurisserie(lot) }}% traité</span>
         </div>
 
-        <!-- Cumul enregistré -->
-        <div v-if="getEtapes(lot).length > 0" class="cumul-section">
-          <div class="cumul-section-title">Déjà enregistré</div>
+        <!-- Cumul enregistré du jour (la veille disparaît chaque matin) -->
+        <div v-if="getEtapesJour(lot).length > 0" class="cumul-section">
+          <div class="cumul-section-title">Enregistré aujourd'hui</div>
           <div class="cumul-row">
-            <div v-for="ep in getEtapes(lot)" :key="ep.id" class="cumul-box">
+            <div v-for="ep in getEtapesJour(lot)" :key="ep.id" class="cumul-box">
               <div class="cumul-box-header">Dryer {{ ep.dryer || '—' }}</div>
               <div class="cumul-box-body">
                 <div class="cumul-stat"><span>Fruits mûrs</span><strong>{{ fmt(ep.fruits_murs_kg) }} kg</strong></div>
@@ -137,7 +138,7 @@
         </div>
 
         <!-- Résumé calculé en temps réel -->
-        <div v-if="getEtapes(lot).length > 0" class="resume-section">
+        <div v-if="getEtapesJour(lot).length > 0" class="resume-section">
           <div class="resume-section-title">Résumé de la saisie</div>
           <div class="resume-grid">
             <div class="resume-item">
@@ -161,7 +162,7 @@
 
         <!-- Formulaire de saisie unifié -->
         <div class="saisie-section">
-          <div class="saisie-section-title">{{ getEtapes(lot).length > 0 ? 'Ajouter la journée' : 'Première saisie' }}</div>
+          <div class="saisie-section-title">{{ getEtapesJour(lot).length > 0 ? 'Ajouter la journée' : 'Première saisie' }}</div>
 
           <div class="dryers-form-row compact">
             <div v-for="d in [1, 2]" :key="d" class="dryer-form">
@@ -242,14 +243,15 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
-import { getLots, getProductionsEtapes, validerMusserie, cloturerMusserie, getHistoriqueMusserie } from '../api'
+import { getLots, getProductionsEtapes, validerMurisserie, cloturerMurisserie, getHistoriqueMurisserie } from '../api'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
 import RappelsBanner from '../components/RappelsBanner.vue'
-import { toCanonical, RECEPTION, EN_MUSSERIE, TERMINE } from '../utils/statuses'
+import { toCanonical, RECEPTION, EN_MURISSERIE, TERMINE } from '../utils/statuses'
 
 const lots = ref([])
 const etapesData = ref({})
@@ -273,7 +275,19 @@ function formatDate(d) {
 
 async function loadHistorique() {
   loadingHist.value = true
-  try { historique.value = await getHistoriqueMusserie() } finally { loadingHist.value = false }
+  try { historique.value = await getHistoriqueMurisserie() } finally { loadingHist.value = false }
+}
+
+function doExportExcelHist() {
+  const headers = ['Date', 'Lot', 'Dryer', 'Fruits mûrs (kg)', 'Tri (kg)', 'Lavage (kg)', 'Déchets prod. (kg)', 'Retour non mûr (kg)', 'Retour mûr (kg)', 'Poids sortie (kg)', 'Rendement (%)', 'Opérateur']
+  const rows = historique.value.map(e => [
+    e.date_debut ? new Date(e.date_debut).toLocaleDateString('fr-FR') : '',
+    e.lot?.code_lot || e.lot_id, e.dryer ? 'D' + e.dryer : '',
+    e.fruits_murs_kg ?? '', e.dechets_tri_kg ?? '', e.dechets_lavage_kg ?? '', e.dechets_production_kg ?? '',
+    e.retour_non_mur_kg ?? '', e.retour_mure_kg ?? '', e.poids_sortie ?? '',
+    e.rendement_pourcentage ?? '', e.operateur || '',
+  ])
+  exportExcel(headers, rows, `murisserie-historique-${todayStamp()}.xlsx`, 'Murisserie')
 }
 
 watch(showHistorique, (v) => { if (v) loadHistorique() })
@@ -282,7 +296,14 @@ function round(v) { return Math.round((v || 0) * 100) / 100 }
 function fmt(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '—' }
 
 function getEtapes(lot) {
-  return (etapesData.value[lot.id] || []).filter(e => e.etape === 'musserie')
+  return (etapesData.value[lot.id] || []).filter(e => e.etape === 'murisserie')
+}
+
+// Saisies du jour uniquement : celles de la veille disparaissent chaque matin.
+// Les totaux « cumulés » restent calculés sur tout le lot (voir totalCumul*).
+function getEtapesJour(lot) {
+  const today = todayLocal()
+  return getEtapes(lot).filter(e => String(e.date_debut || '').slice(0, 10) === today)
 }
 
 function getEtapeForDryer(lot, dryer) {
@@ -335,7 +356,7 @@ function totalCumulRendement(lot) {
   return totalFM > 0 ? Math.round((totalPS / totalFM) * 1000) / 10 : null
 }
 
-function progressMusserie(lot) {
+function progressMurisserie(lot) {
   // % traité réel, même source que le Reste affiché (lot.quantite_restante backend).
   if (!lot.poids_frais) return 0
   const reste = resteATraiter(lot)
@@ -474,11 +495,11 @@ async function load() {
   loading.value = true
   try {
     const raw = await getLots()
-    const filtered = raw.filter(l => [RECEPTION, EN_MUSSERIE].includes(toCanonical(l.statut)))
+    const filtered = raw.filter(l => [RECEPTION, EN_MURISSERIE].includes(toCanonical(l.statut)))
     for (const lot of filtered) {
       etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
       for (const d of [1, 2]) {
-        const epToday = (etapesData.value[lot.id] || []).find(e => e.etape === 'musserie' && e.dryer === d && e.statut !== TERMINE && String(e.date_debut || '').slice(0,10) === todayLocal())
+        const epToday = (etapesData.value[lot.id] || []).find(e => e.etape === 'murisserie' && e.dryer === d && e.statut !== TERMINE && String(e.date_debut || '').slice(0,10) === todayLocal())
         initForm(lot.id, d, epToday)
       }
       recalcAll(lot.id)
@@ -492,7 +513,7 @@ async function enregistrer(lot, dryer) {
   const maj = isValidated(lot, dryer)
   saving[dryer] = true
   try {
-    await validerMusserie(lot.id, {
+    await validerMurisserie(lot.id, {
       fruits_murs_kg: Number(f[lot.id][dryer].fruits_murs_kg) || 0,
       dechets_tri_kg: Number(f[lot.id][dryer].dechets_tri_kg) || 0,
       dechets_lavage_kg: Number(f[lot.id][dryer].dechets_lavage_kg) || 0,
@@ -514,11 +535,11 @@ async function cloturerJour(lot) {
   cloturing.value = true
   try {
     const today = todayLocal()
-    const res = await cloturerMusserie(lot.id, today)
+    const res = await cloturerMurisserie(lot.id, today)
     if (res?.lot?.statut?.includes('production')) {
-      toast.success(`Musserie clôturée pour ${lot.code_lot} — passage en production`)
+      toast.success(`Murisserie clôturée pour ${lot.code_lot} — passage en production`)
     } else {
-      toast.success(`Journée musserie clôturée pour ${lot.code_lot} — lot reste en musserie`)
+      toast.success(`Journée murisserie clôturée pour ${lot.code_lot} — lot reste en murisserie`)
     }
     await load()
   } catch (e) {

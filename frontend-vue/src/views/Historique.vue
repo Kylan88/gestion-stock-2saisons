@@ -3,7 +3,7 @@
     <PageHeader title="Historique global" subtitle="Consultation de toutes les étapes de production">
       <template #actions>
         <button class="btn btn-outline btn-sm" @click="loadData">↻ Actualiser</button>
-        <button v-if="data.length > 0" class="btn btn-outline btn-sm" @click="exportCSV">↓ Export CSV</button>
+        <button v-if="data.length > 0" class="btn btn-outline btn-sm" @click="exportXLSX">↓ Export Excel</button>
       </template>
     </PageHeader>
 
@@ -11,7 +11,7 @@
       :step="5"
       eyebrow="Suivi complet"
       title="Historique de production"
-      description="Retrouvez toutes les saisies musserie, production, conditionnement et transferts du site."
+      description="Retrouvez toutes les saisies murisserie, production, conditionnement et transferts du site."
     >
       <template #meta>
         <div class="flow-metric">
@@ -33,9 +33,9 @@
 
     <LoadingSpinner v-if="loading" />
 
-    <!-- MUSSERIE -->
-    <div v-else-if="activeTab === 'musserie'" class="anim-fade">
-      <div v-if="filteredData.length === 0" class="empty"><div class="empty-text">Aucun enregistrement musserie</div></div>
+    <!-- MURISSERIE -->
+    <div v-else-if="activeTab === 'murisserie'" class="anim-fade">
+      <div v-if="filteredData.length === 0" class="empty"><div class="empty-text">Aucun enregistrement murisserie</div></div>
       <div v-else class="table-wrap">
         <table>
           <thead><tr><th>Date</th><th>Lot</th><th>Dryer</th><th>Fruits mûrs</th><th>Tri</th><th>Lavage</th><th>Dép.</th><th>Sortie</th><th>Rdt</th><th>Opérateur</th></tr></thead>
@@ -130,20 +130,21 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { getHistoriqueMusserie, getHistoriqueProduction, getHistoriqueConditionnement, getDemandesTransfert } from '../api'
+import { getHistoriqueMurisserie, getHistoriqueProduction, getHistoriqueConditionnement, getDemandesTransfert } from '../api'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
 
 const tabs = [
-  { key: 'musserie', label: 'Musserie' },
+  { key: 'murisserie', label: 'Murisserie' },
   { key: 'production', label: 'Production' },
   { key: 'conditionnement', label: 'Conditionnement' },
   { key: 'transfert', label: 'Transfert CF' },
 ]
 
-const activeTab = ref('musserie')
+const activeTab = ref('murisserie')
 const data = ref([])
 const loading = ref(false)
 const recherche = ref('')
@@ -173,13 +174,13 @@ async function loadData() {
   data.value = []
   try {
     const [mus, prod, cond, transf] = await Promise.all([
-      getHistoriqueMusserie(),
+      getHistoriqueMurisserie(),
       getHistoriqueProduction(),
       getHistoriqueConditionnement(),
       getDemandesTransfert(),
     ])
-    counts.value = { musserie: mus.length, production: prod.length, conditionnement: cond.length, transfert: transf.length }
-    if (activeTab.value === 'musserie') data.value = mus
+    counts.value = { murisserie: mus.length, production: prod.length, conditionnement: cond.length, transfert: transf.length }
+    if (activeTab.value === 'murisserie') data.value = mus
     else if (activeTab.value === 'production') data.value = prod
     else if (activeTab.value === 'conditionnement') data.value = cond
     else if (activeTab.value === 'transfert') data.value = transf
@@ -190,25 +191,29 @@ function switchTab(key) {
   activeTab.value = key
 }
 
-function exportCSV() {
+function exportXLSX() {
   const rows = filteredData.value
   if (!rows.length) return
-  const keys = Object.keys(rows[0])
-  const csv = [
-    keys.join(';'),
-    ...rows.map(r => keys.map(k => {
-      let v = r[k]
-      if (v && typeof v === 'object') v = JSON.stringify(v)
-      return `"${(v ?? '').toString().replace(/"/g, '""')}"`
-    }).join(';'))
-  ].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${activeTab.value}_historique.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  const d = (v) => v ? new Date(v).toLocaleDateString('fr-FR') : ''
+  const lotOf = (e) => e.lot?.code_lot || e.lot_id
+  const dryerOf = (e) => e.dryer ? 'D' + e.dryer : ''
+  const rdtOf = (e) => e.rendement_pourcentage != null ? e.rendement_pourcentage + '%' : ''
+  let headers = [], data = []
+  if (activeTab.value === 'murisserie') {
+    headers = ['Date', 'Lot', 'Dryer', 'Fruits mûrs (kg)', 'Tri (kg)', 'Lavage (kg)', 'Déchets prod. (kg)', 'Sortie (kg)', 'Rendement', 'Opérateur']
+    data = rows.map(e => [d(e.date_debut), lotOf(e), dryerOf(e), e.fruits_murs_kg ?? '', e.dechets_tri_kg ?? '', e.dechets_lavage_kg ?? '', e.dechets_production_kg ?? '', e.poids_sortie ?? '', rdtOf(e), e.operateur || ''])
+  } else if (activeTab.value === 'production') {
+    headers = ['Date', 'Lot', 'Dryer', 'Chariots', 'Claies', 'Entrée (kg)', 'Sortie (kg)', 'Rendement', 'Opérateur']
+    data = rows.map(e => [d(e.date_debut), lotOf(e), dryerOf(e), e.nbre_chariots ?? '', e.total_claies ?? '', e.poids_entree ?? '', e.poids_sortie ?? '', rdtOf(e), e.operateur || ''])
+  } else if (activeTab.value === 'conditionnement') {
+    headers = ['Date', 'Lot', 'Statut', 'Entrée (kg)', 'Sortie (kg)', 'Rendement', 'Opérateur']
+    data = rows.map(e => [d(e.date_debut), lotOf(e), e.statut || '', e.poids_entree ?? '', e.poids_sortie ?? '', rdtOf(e), e.operateur || ''])
+  } else {
+    headers = ['Date', 'Lot', 'Statut', 'Responsable', 'Détail']
+    data = rows.map(e => [d(e.date_demande || e.date_creation), lotOf(e), e.statut || '', e.responsable || '', (e.lignes || []).map(l => `${l.nb_cartons} ${l.type_flux} → ${l.zone?.nom || ''}`).join(' | ')])
+  }
+  const tabLabel = tabs.find(t => t.key === activeTab.value)?.label || activeTab.value
+  exportExcel(headers, data, `historique-${activeTab.value}-${todayStamp()}.xlsx`, tabLabel)
 }
 
 watch(activeTab, () => loadData(), { immediate: true })

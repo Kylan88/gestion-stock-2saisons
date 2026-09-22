@@ -11,6 +11,7 @@
       <div v-else>
         <div class="filters">
           <input v-model="recherche" class="input" placeholder="Rechercher un fournisseur..." style="max-width:260px" />
+          <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
         </div>
         <div class="table-wrap anim-fade">
           <table>
@@ -38,6 +39,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { getLots } from '../api'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import PageHeader from '../components/PageHeader.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -49,6 +51,12 @@ const page = ref(1)
 const pageSize = 15
 
 function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
+
+function doExportExcel() {
+  const headers = ['Nom', 'Lots', 'Poids total (kg)', 'Dernière réception']
+  const rows = filteredFournisseurs.value.map(f => [f.nom, f.nb_lots, f.poids_total, f.derniere_reception || ''])
+  exportExcel(headers, rows, `fournisseurs-${todayStamp()}.xlsx`, 'Fournisseurs')
+}
 
 const filteredFournisseurs = computed(() => {
   if (!recherche.value) return fournisseurs.value

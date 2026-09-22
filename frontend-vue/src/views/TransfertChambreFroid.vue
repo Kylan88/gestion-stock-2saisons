@@ -102,7 +102,7 @@ import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
-import { toCanonical, CONDITIONNE, EN_STOCK, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT } from '../utils/statuses'
+import { toCanonical, CONDITIONNE, EN_STOCK, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT } from '../utils/statuses'
 
 const lots = ref([])
 const demandes = ref([])
@@ -176,9 +176,9 @@ async function load() {
       }
     }
     // Flux continu : tout lot avec des cartons conditionnés non transférés,
-    // quel que soit son statut (musserie/production/conditionnement/conditionne).
+    // quel que soit son statut (murisserie/production/conditionnement/conditionne).
     lots.value = raw.filter(l =>
-      [EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut))
+      [EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut))
       && restantTotal(l) > 0
     )
     for (const lot of lots.value) {

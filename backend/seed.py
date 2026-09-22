@@ -84,7 +84,7 @@ def seed_database():
         db.add_all(produits); db.flush()
 
         # ── LOT 1 : Mangue 100% terminé, multi-journées ──
-        # Réception → musserie (2 jours) → production (2 jours) → conditionnement → en stock
+        # Réception → murisserie (2 jours) → production (2 jours) → conditionnement → en stock
         lot1 = Lot(code_lot="LOT-2026-001", type_fruit="Mangue",
                    fournisseur_nom="Coopérative de Bazré",
                    produit_id=produits[1].id, fournisseur_id=fournisseurs[0].id,
@@ -93,13 +93,13 @@ def seed_database():
                    date_reception=datetime(2026, 6, 15))
         db.add(lot1); db.flush()
 
-        mus1_j1 = EtapeProduction(lot_id=lot1.id, etape="musserie", ordre=1,
+        mus1_j1 = EtapeProduction(lot_id=lot1.id, etape="murisserie", ordre=1,
             statut=statuses.TERMINE, dryer=1,
             date_debut=datetime(2026, 6, 16, 8, 0), date_fin=datetime(2026, 6, 16, 12, 0),
             fruits_murs_kg=300, dechets_tri_kg=10, dechets_lavage_kg=8,
             retour_non_mur_kg=5, dechets_production_kg=5,
             poids_sortie=282, perte=23, rendement_pourcentage=94.0, operateur="Kouassi J.")
-        mus1_j2 = EtapeProduction(lot_id=lot1.id, etape="musserie", ordre=1,
+        mus1_j2 = EtapeProduction(lot_id=lot1.id, etape="murisserie", ordre=1,
             statut=statuses.TERMINE, dryer=2,
             date_debut=datetime(2026, 6, 17, 8, 0), date_fin=datetime(2026, 6, 17, 11, 0),
             fruits_murs_kg=200, dechets_tri_kg=8, dechets_lavage_kg=5,
@@ -126,7 +126,7 @@ def seed_database():
         _make_chariots(db, prod1_j1, 1, 5, 282, "Kouassi J.")
         _make_chariots(db, prod1_j2, 2, 12, 180, "Kouassi J.")
 
-        # ── LOT 2 : Ananas en production (musserie terminée, production multi-jours en cours) ──
+        # ── LOT 2 : Ananas en production (murisserie terminée, production multi-jours en cours) ──
         lot2 = Lot(code_lot="LOT-2026-002", type_fruit="Ananas",
                    fournisseur_nom="Plantations du Sud",
                    produit_id=produits[0].id, fournisseur_id=fournisseurs[1].id,
@@ -135,7 +135,7 @@ def seed_database():
                    date_reception=datetime(2026, 6, 20))
         db.add(lot2); db.flush()
 
-        mus2_j1 = EtapeProduction(lot_id=lot2.id, etape="musserie", ordre=1,
+        mus2_j1 = EtapeProduction(lot_id=lot2.id, etape="murisserie", ordre=1,
             statut=statuses.TERMINE, dryer=1,
             date_debut=datetime(2026, 7, 1, 8, 0), date_fin=datetime(2026, 7, 1, 12, 0),
             fruits_murs_kg=350, dechets_tri_kg=15, dechets_lavage_kg=8,
@@ -156,17 +156,17 @@ def seed_database():
         db.add_all([mus2_j1, prod2_j1, prod2_j2]); db.flush()
         _make_chariots(db, prod2_j1, 1, 6, 335, "Kouassi J.")
 
-        # ── LOT 3 : Mangue en musserie (saisie du jour en cours → clôture quotidienne) ──
+        # ── LOT 3 : Mangue en murisserie (saisie du jour en cours → clôture quotidienne) ──
         lot3 = Lot(code_lot="LOT-2026-003", type_fruit="Mangue",
                    fournisseur_nom="Ferme Agro-Bélier",
                    produit_id=produits[1].id, fournisseur_id=fournisseurs[2].id,
-                   statut=statuses.EN_MUSSERIE, quantite_initiale=200, quantite_restante=200,
+                   statut=statuses.EN_MURISSERIE, quantite_initiale=200, quantite_restante=200,
                    poids_frais=200, poids_sec_final=0, rendement_global=None,
                    date_reception=datetime(2026, 7, 22))
         db.add(lot3); db.flush()
 
         now = datetime.now()
-        mus3_jour = EtapeProduction(lot_id=lot3.id, etape="musserie", ordre=1,
+        mus3_jour = EtapeProduction(lot_id=lot3.id, etape="murisserie", ordre=1,
             statut=statuses.EN_COURS, dryer=1,
             date_debut=now, date_fin=None,
             fruits_murs_kg=80, dechets_tri_kg=5, dechets_lavage_kg=3,
@@ -214,7 +214,7 @@ def seed_database():
                 date_mouvement=now - timedelta(days=5)),
             MouvementStock(produit_id=produits[1].id, lot_id=lot1.id, type_mouvement="sortie",
                 quantite=500, quantite_avant=500, quantite_apres=0,
-                motif="Transfert vers musserie", responsable="Kouassi J.",
+                motif="Transfert vers murisserie", responsable="Kouassi J.",
                 date_mouvement=now - timedelta(days=63)),
         ]
         db.add_all(mouvements)
@@ -222,7 +222,7 @@ def seed_database():
 
         print("[OK] Données de démonstration insérées avec succès !")
         print(f"   {len(cats)} catégories, {len(produits)} produits, {len(fournisseurs)} fournisseurs")
-        print(f"   4 lots (1 en stock, 1 en production, 1 en musserie, 1 en réception)")
+        print(f"   4 lots (1 en stock, 1 en production, 1 en murisserie, 1 en réception)")
         print(f"   2 zones, {len(stocks_zone)} stocks zone, {len(mouvements)} mouvements")
 
     finally:

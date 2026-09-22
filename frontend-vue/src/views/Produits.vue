@@ -2,7 +2,7 @@
   <div class="page">
     <PageHeader title="Produits" subtitle="Catalogue des produits">
       <template #actions>
-        <button v-if="!showForm" class="btn btn-outline btn-sm" @click="doExport">CSV</button>
+        <button v-if="!showForm" class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
         <button v-if="!showForm" class="btn btn-primary" @click="openCreate">+ Nouveau</button>
       </template>
     </PageHeader>
@@ -101,7 +101,7 @@
 import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import { getProduits, createProduit, updateProduit, getCategories, getStock } from '../api'
 import { useToastStore } from '../stores/toast'
-import { exportCsv } from '../utils/exportCsv'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -222,10 +222,10 @@ async function save() {
 
 function confirmDelete() { showConfirm.value = false }
 
-function doExport() {
+function doExportExcel() {
   const headers = ['Catégorie', 'Stock Actuel', 'Cartons', 'Unité']
   const rows = filteredProduits.value.map(p => [p.categorie?.nom || p.nom, p.stock_actuel, p.stock_min, p.unite_mesure])
-  exportCsv(headers, rows, 'produits.csv')
+  exportExcel(headers, rows, `produits-${todayStamp()}.xlsx`, 'Produits')
 }
 
 onMounted(load)

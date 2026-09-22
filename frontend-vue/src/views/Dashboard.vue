@@ -41,10 +41,10 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
           </div>
           <div class="pipeline-info">
-            <span class="pipeline-value">{{ lotsMusserie.length }}</span>
-            <span class="pipeline-label">En Musserie</span>
+            <span class="pipeline-value">{{ lotsMurisserie.length }}</span>
+            <span class="pipeline-label">En Murisserie</span>
           </div>
-          <span class="pipeline-weight">{{ formatKg(totalMusserieJour) }} kg/jour</span>
+          <span class="pipeline-weight">{{ formatKg(totalMurisserieJour) }} kg/jour</span>
         </div>
         <div class="pipeline-arrow">→</div>
         <div class="pipeline-stage">
@@ -141,7 +141,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import RappelsBanner from '../components/RappelsBanner.vue'
 import StatCard from '../components/StatCard.vue'
-import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
+import { toCanonical, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const loading = ref(true)
 const error = ref(null)
@@ -158,16 +158,16 @@ const todayDate = computed(() => {
 function formatNum(v) { return Number(v || 0).toLocaleString('fr-FR') }
 function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
 
-const lotsMusserie = computed(() => allLots.value.filter(l => [EN_MUSSERIE].includes(toCanonical(l.statut))))
+const lotsMurisserie = computed(() => allLots.value.filter(l => [EN_MURISSERIE].includes(toCanonical(l.statut))))
 const lotsProduction = computed(() => allLots.value.filter(l => [EN_PRODUCTION].includes(toCanonical(l.statut))))
 const lotsConditionnement = computed(() => allLots.value.filter(l => [EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut))))
 
-const totalMusserieJour = computed(() => prod.value.musserie_jour_kg || 0)
+const totalMurisserieJour = computed(() => prod.value.murisserie_jour_kg || 0)
 const totalProductionJour = computed(() => prod.value.production_jour_kg || 0)
 const totalConditionnementJour = computed(() => prod.value.conditionnement_jour_kg || 0)
 
 const lotsEnCours = computed(() => {
-  return allLots.value.filter(l => [EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
+  return allLots.value.filter(l => [EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
 })
 
 function round(v) { return Math.round((v || 0) * 100) / 100 }
@@ -176,20 +176,12 @@ function getEtapes(lotId) {
   return etapesData.value[lotId] || []
 }
 
-function getMusserieEtapes(lotId) {
-  return getEtapes(lotId).filter(e => e.etape === 'musserie')
-}
-
 function getProductionEtapes(lotId) {
   return getEtapes(lotId).filter(e => e.etape === 'production')
 }
 
 function getConditionnementEtapes(lotId) {
   return getEtapes(lotId).filter(e => e.etape === 'conditionnement')
-}
-
-function totalCumulFruitsMusserie(lotId) {
-  return round(getMusserieEtapes(lotId).reduce((s, e) => s + (e.fruits_murs_kg || 0), 0))
 }
 
 function totalCumulPoidsSortieProduction(lotId) {
@@ -205,9 +197,11 @@ function lotProgressPct(lot) {
   const poidsTotal = lot.poids_frais || 0
   if (!poidsTotal) return 0
 
-  if (statut === EN_MUSSERIE) {
-    const traite = totalCumulFruitsMusserie(lot.id)
-    return Math.min(100, Math.round((traite / poidsTotal) * 100))
+  if (statut === EN_MURISSERIE) {
+    // Même référence que Lots/Murisserie (chiffre unique backend) :
+    // (reçu − reste) / reçu — pas les mûrs bruts (tri et retour mûr inclus).
+    const restant = lot.quantite_restante ?? poidsTotal
+    return Math.min(100, Math.round(((poidsTotal - restant) / poidsTotal) * 100))
   }
   if (statut === EN_PRODUCTION) {
     const traite = totalCumulPoidsSortieProduction(lot.id)
@@ -240,7 +234,7 @@ async function load() {
 
     // Fetch etapes for each lot to calculate real progress
     for (const lot of lots) {
-      if ([EN_MUSSERIE, EN_PRODUCTION, CONDITIONNE].includes(toCanonical(lot.statut))) {
+      if ([EN_MURISSERIE, EN_PRODUCTION, CONDITIONNE].includes(toCanonical(lot.statut))) {
         etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
       }
     }

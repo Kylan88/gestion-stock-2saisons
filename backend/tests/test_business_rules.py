@@ -113,15 +113,15 @@ def test_partial_lot_keeps_fresh_pulp_and_dried_weight_separate(db):
 
     # 2 543,40 kg mûrs - 30 lavage - 50 déchets production - 20 retour non mûr
     # - 17,90 retour mûr = 2 425,50 kg frais net.
-    musserie = crud.valider_musserie(
+    murisserie = crud.valider_murisserie(
         db, lot.id, dryer=1, fruits_murs_kg=2543.4,
         dechets_lavage_kg=30.0, dechets_production_kg=50.0,
         retour_non_mur_kg=20.0, retour_mure_kg=17.9,
     )
-    assert musserie.poids_sortie == 2425.5
+    assert murisserie.poids_sortie == 2425.5
 
     today = datetime.now().date().isoformat()
-    crud.cloturer_musserie(db, lot.id, today)
+    crud.cloturer_murisserie(db, lot.id, today)
     production = crud.valider_production(
         db, lot.id, dryer=1, nbre_chariots=6, quantite_totale=1575.0,
     )["etape"]
@@ -131,7 +131,7 @@ def test_partial_lot_keeps_fresh_pulp_and_dried_weight_separate(db):
 
     crud.cloturer_production(db, lot.id, today)
     db.refresh(lot)
-    assert lot.statut == statuses.EN_MUSSERIE
+    assert lot.statut == statuses.EN_MURISSERIE
     assert lot.quantite_restante > 0
 
     # Le conditionnement se fait le lendemain sur le poids sec, pas sur 1 575 kg.
@@ -149,7 +149,7 @@ def test_partial_lot_keeps_fresh_pulp_and_dried_weight_separate(db):
     assert production.poids_sec_kg == 400.0
     crud.cloturer_conditionnement(db, lot.id, today)
     db.refresh(lot)
-    assert lot.statut == statuses.EN_MUSSERIE
+    assert lot.statut == statuses.EN_MURISSERIE
 
 
 def test_lot_epuise_bascule_seul_vers_conditionne_sans_cloture_finale(db):
@@ -280,7 +280,7 @@ def test_reconditionnement_rhum_obtenu_alimente_stock_rhum(db):
     assert lot.local_cartons == 1
 
 
-def test_musserie_meme_jour_ecrase_au_lieu_de_cumuler(db):
+def test_murisserie_meme_jour_ecrase_au_lieu_de_cumuler(db):
     """Une seule saisie par (lot, dryer, jour) : la 2e écrase, ne s'additionne pas."""
     product = create_product(db, name="Mangue")
     lot = models.Lot(
@@ -290,17 +290,17 @@ def test_musserie_meme_jour_ecrase_au_lieu_de_cumuler(db):
     db.add(lot)
     db.commit()
 
-    crud.valider_musserie(db, lot.id, dryer=1, fruits_murs_kg=100.0, dechets_tri_kg=10.0)
+    crud.valider_murisserie(db, lot.id, dryer=1, fruits_murs_kg=100.0, dechets_tri_kg=10.0)
     db.refresh(lot)
     assert lot.quantite_restante == 890.0
 
-    ep = crud.valider_musserie(db, lot.id, dryer=1, fruits_murs_kg=200.0, dechets_tri_kg=10.0)
+    ep = crud.valider_murisserie(db, lot.id, dryer=1, fruits_murs_kg=200.0, dechets_tri_kg=10.0)
     db.refresh(lot)
     assert lot.quantite_restante == 790.0
     assert ep.poids_sortie == 200.0
     nb = db.query(models.EtapeProduction).filter(
         models.EtapeProduction.lot_id == lot.id,
-        models.EtapeProduction.etape == "musserie",
+        models.EtapeProduction.etape == "murisserie",
     ).count()
     assert nb == 1
 
@@ -311,7 +311,7 @@ def test_saisie_conditionnement_ne_change_jamais_le_statut(db):
     product = create_product(db, name="Mangue")
     lot = models.Lot(
         code_lot="LOT-SAISIE", produit_id=product.id, poids_frais=1000,
-        quantite_initiale=1000, quantite_restante=500, statut=statuses.EN_MUSSERIE,
+        quantite_initiale=1000, quantite_restante=500, statut=statuses.EN_MURISSERIE,
     )
     production = models.EtapeProduction(
         lot=lot, etape="production", ordre=2, statut=statuses.TERMINE, poids_sortie=50,
@@ -321,7 +321,7 @@ def test_saisie_conditionnement_ne_change_jamais_le_statut(db):
 
     res = crud.valider_conditionnement(db, lot.id, local_cartons=1)
     db.refresh(lot)
-    assert lot.statut == statuses.EN_MUSSERIE
+    assert lot.statut == statuses.EN_MURISSERIE
     assert res["lot_epuise"] is False
     assert res["stock"]["alimente"] is False
     etape = db.query(models.EtapeProduction).filter(
@@ -332,7 +332,7 @@ def test_saisie_conditionnement_ne_change_jamais_le_statut(db):
 
     res_jour = crud.cloturer_conditionnement(db, lot.id)
     db.refresh(lot)
-    assert lot.statut == statuses.EN_MUSSERIE
+    assert lot.statut == statuses.EN_MURISSERIE
     assert res_jour["lot_epuise"] is False
 
 

@@ -125,7 +125,7 @@ class EtapeProductionResponse(EtapeProductionBase):
     id: int
     class Config: from_attributes = True
 
-class MusserieCreate(ValidatedInput):
+class MurisserieCreate(ValidatedInput):
     non_negative_fields = {
         "fruits_murs_kg", "dechets_tri_kg", "dechets_lavage_kg", "retour_non_mur_kg",
         "dechets_production_kg", "reste_kg", "retour_mure_kg", "quantite_acceptee_kg",
@@ -249,7 +249,7 @@ class DashboardProduction(BaseModel):
     lots_suivi: int; etapes_terminees: int; etapes_en_cours: int
     rendement_moyen_frais_sec: Optional[float] = None
     production_jour_kg: float = 0.0
-    musserie_jour_kg: float = 0.0
+    murisserie_jour_kg: float = 0.0
     conditionnement_jour_kg: float = 0.0
 
 # ── DEMANDE DE TRANSFERT CHAMBRE FROIDE ──

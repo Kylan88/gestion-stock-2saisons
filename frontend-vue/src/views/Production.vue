@@ -2,6 +2,7 @@
   <div class="page">
     <PageHeader title="Production" subtitle="Rendement par dryer — frais total (sans tri) → pulpe capacité (6,25 kg × claies)">
       <template #actions>
+        <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
         <button class="btn btn-primary" @click="showConfig = true">Config</button>
       </template>
     </PageHeader>
@@ -56,7 +57,7 @@
       <div v-else-if="entries.length === 0" class="empty">
         <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
         <div class="empty-text">Aucune production</div>
-        <div class="empty-sub">Termine une musserie (avec dryer 1 ou 2) pour voir le rendement</div>
+        <div class="empty-sub">Termine une murisserie (avec dryer 1 ou 2) pour voir le rendement</div>
       </div>
       <div v-else class="table-wrap">
         <table class="table">
@@ -193,6 +194,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { useToastStore } from '../stores/toast'
+import { exportWorkbook, todayStamp } from '../utils/exportExcel'
 import PageHeader from '../components/PageHeader.vue'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 const toast = useToastStore()
@@ -236,6 +238,31 @@ async function saveConfig(){
 }
 function formatKg(v){ return (v||0).toLocaleString('fr-FR',{minimumFractionDigits:2, maximumFractionDigits:2})}
 function formatDate(d){ return new Date(d).toLocaleDateString('fr-FR')}
+function pct(v){ return v == null ? '' : (Number(v)*100).toFixed(1) + '%' }
+function doExportExcel() {
+  const sheets = []
+  if (entries.value.length) {
+    sheets.push({ name: 'Entrées', headers: ['Date', 'Lot', 'Dryer', 'Fruit', 'Frais total (kg)', 'Pulpe (kg)', 'Rendement'],
+      rows: entries.value.map(e => [e.date ? new Date(e.date).toLocaleDateString('fr-FR') : '', e.code_lot || '', e.dryer ? 'D' + e.dryer : '', e.fruit_type || '', e.frais_total_kg ?? '', e.pulpe_capacity_kg ?? '', pct(e.rendement)]) })
+  }
+  const parDryer = Object.values(stats.value.par_dryer || {})
+  if (parDryer.length) {
+    sheets.push({ name: 'Par dryer', headers: ['Dryer', 'Entrées', 'Capacité unitaire (kg)', 'Kg frais (kg)', 'Pulpe (kg)', 'Rendement'],
+      rows: parDryer.map(d => [d.dryer ? 'D' + d.dryer : '', d.entries ?? '', d.capacity_kg ?? '', d.kg_frais ?? '', d.pulpe_capacity_kg ?? '', pct(d.rendement)]) })
+  }
+  const parFruit = Object.entries(stats.value.par_fruit || {})
+  if (parFruit.length) {
+    sheets.push({ name: 'Par fruit', headers: ['Fruit', 'Dryers', 'Kg frais (kg)', 'Pulpe (kg)', 'Rendement'],
+      rows: parFruit.map(([fruit, f]) => [fruit, f.dryers ?? '', f.kg_frais ?? '', f.pulpe_capacity_kg ?? '', pct(f.rendement)]) })
+  }
+  const parLot = Object.values(stats.value.par_lot || {})
+  if (parLot.length) {
+    sheets.push({ name: 'Par lot', headers: ['Lot', 'Fruit', 'Dryers', 'Kg frais (kg)', 'Pulpe (kg)', 'Rendement global'],
+      rows: parLot.map(l => [l.code_lot || '', l.fruit_type || '', l.dryers ?? '', l.kg_frais ?? '', l.pulpe_capacity_kg ?? '', pct(l.rendement_global)]) })
+  }
+  if (!sheets.length) { toast.warning('Rien à exporter'); return }
+  exportWorkbook(sheets, `production-${todayStamp()}.xlsx`)
+}
 onMounted(loadAll)
 watch(filters,loadEntries,{deep:true})
 </script>

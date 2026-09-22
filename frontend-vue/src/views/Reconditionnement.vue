@@ -15,6 +15,9 @@
         <div class="empty-text">Aucun reconditionnement enregistré</div>
       </div>
       <div v-if="!loadingHist && historique.length > 0" class="table-wrap">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
+        </div>
         <table class="table">
           <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets</th><th>Déchet kg</th></tr></thead>
           <tbody>
@@ -161,10 +164,11 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { getLots, creerReconditionnement, getReconditionnements, getStock, getZonesStock } from '../api'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import PageHeader from '../components/PageHeader.vue'
-import { toCanonical, CONDITIONNE, EN_STOCK, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT } from '../utils/statuses'
+import { toCanonical, CONDITIONNE, EN_STOCK, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT } from '../utils/statuses'
 
 const lots = ref([])
 const historique = ref([])
@@ -192,6 +196,14 @@ async function loadHistorique() {
 function lotCode(lotId) {
   return lots.value.find(l => Number(l.id) === Number(lotId))?.code_lot || ('Lot #' + lotId)
 }
+function doExportExcel() {
+  const headers = ['Date', 'Lot', 'Source', 'Cartons', 'Sachets', 'Déchet (kg)']
+  const rows = historique.value.map(r => [
+    r.date_reconditionnement ? new Date(r.date_reconditionnement).toLocaleDateString('fr-FR') : '',
+    lotCode(r.lot_id), r.type_source || '', r.nb_cartons_entree ?? '', r.nb_sachets_100g_sortie ?? '', r.dechet_kg ?? 0,
+  ])
+  exportExcel(headers, rows, `reconditionnement-${todayStamp()}.xlsx`, 'Reconditionnement')
+}
 function stockInitial(lotId, type) {
   const key = lotId + '_' + type
   return stocks.value[key] ?? 0
@@ -218,7 +230,7 @@ async function load() {
     const raw = await getLots()
     // Flux continu : tout lot avec des cartons local/fitini_fe, quel que soit
     // son statut (le backend contrôle les dispos, sans filtre statut).
-    lots.value = raw.filter(l => [EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK].includes(toCanonical(l.statut)) && (l.local_cartons > 0 || l.fitini_fe_cartons > 0))
+    lots.value = raw.filter(l => [EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK].includes(toCanonical(l.statut)) && (l.local_cartons > 0 || l.fitini_fe_cartons > 0))
     try {
       const z = await getZonesStock()
       zones.value = (z || []).filter(zz => zz.actif)

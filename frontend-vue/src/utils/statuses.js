@@ -1,6 +1,6 @@
 // Frontend status utilities: canonical names / normalization / labels / badge classes
 export const RECEPTION = 'reception'
-export const EN_MUSSERIE = 'en_musserie'
+export const EN_MURISSERIE = 'en_murisserie'
 export const EN_PRODUCTION = 'en_production'
 export const EN_CONDITIONNEMENT = 'en_conditionnement'
 export const CONDITIONNE = 'conditionne'
@@ -20,7 +20,7 @@ export const EN_SECHAGE = 'en_sechage'
 
 const LEGACY_MAP = {
   [RECEPTION]: ['réception', 'reception'],
-  [EN_MUSSERIE]: ['en musserie', 'en_musserie', 'en-musserie'],
+  [EN_MURISSERIE]: ['en murisserie', 'en_murisserie', 'en-murisserie'],
   [EN_PRODUCTION]: ['en production', 'en_production', 'en-production'],
   [EN_CONDITIONNEMENT]: ['en conditionnement', 'en_conditionnement', 'en-conditionnement'],
   [EN_SECHAGE]: ['en séchage', 'en sechage', 'en_sechage', 'ensechage'],
@@ -58,7 +58,7 @@ export function toCanonical(status) {
 
 export const LABELS = {
   [RECEPTION]: 'Réception',
-  [EN_MUSSERIE]: 'En musserie',
+  [EN_MURISSERIE]: 'En murisserie',
   [EN_PRODUCTION]: 'En production',
   [EN_CONDITIONNEMENT]: 'En conditionnement',
   [EN_SECHAGE]: 'En séchage',
@@ -76,7 +76,7 @@ export const LABELS = {
 
 export const BADGE_CLASS = {
   [RECEPTION]: 'badge-primary',
-  [EN_MUSSERIE]: 'badge-warning',
+  [EN_MURISSERIE]: 'badge-warning',
   [EN_PRODUCTION]: 'badge-info',
   [EN_CONDITIONNEMENT]: 'badge-warning',
   [EN_SECHAGE]: 'badge-info',
