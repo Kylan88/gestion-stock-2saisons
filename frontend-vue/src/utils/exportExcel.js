@@ -1,10 +1,11 @@
 import ExcelJS from 'exceljs'
 
-// Palette 2Saisons (verts de l'application).
-const BRAND_GREEN = 'FF00853E'
-const BRAND_DARK = 'FF0B2E20'
-const BAND_FILL = 'FFF0F7F2'
-const BORDER_COLOR = 'FFD9D9D9'
+// Palette reprise du template (thème navy type Excel).
+const NAVY = 'FF1F4E79'
+const NAVY_DARK = 'FF17395B'
+const BAND = 'FFD9E2F3'
+const BORDER_COLOR = 'FFB4C6E7'
+const FONT_NAME = 'Arial'
 const THIN_BORDER = {
   top: { style: 'thin', color: { argb: BORDER_COLOR } },
   left: { style: 'thin', color: { argb: BORDER_COLOR } },
@@ -40,37 +41,38 @@ function styleSheet(ws, title, nCols, nRows) {
   ws.mergeCells(1, 1, 1, nCols)
   const titleCell = ws.getCell(1, 1)
   titleCell.value = title
-  titleCell.font = { size: 14, bold: true, color: { argb: BRAND_DARK } }
+  titleCell.font = { name: FONT_NAME, size: 14, bold: true, color: { argb: NAVY_DARK } }
   titleCell.alignment = { vertical: 'middle' }
   ws.getRow(1).height = 26
   ws.mergeCells(2, 1, 2, nCols)
   const dateCell = ws.getCell(2, 1)
   dateCell.value = `Exporté le ${todayFr()}`
-  dateCell.font = { size: 10, italic: true, color: { argb: 'FF6B7280' } }
+  dateCell.font = { name: FONT_NAME, size: 10, italic: true, color: { argb: 'FF6B7280' } }
 
-  // En-têtes (ligne 3) : fond vert, texte blanc gras, centrées.
+  // En-têtes (ligne 3) : fond navy, texte blanc gras, centrées.
   const headerRow = ws.getRow(3)
   headerRow.height = 22
   for (let c = 1; c <= nCols; c++) {
     const cell = headerRow.getCell(c)
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BRAND_GREEN } }
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } }
+    cell.font = { name: FONT_NAME, bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
     cell.border = THIN_BORDER
   }
 
-  // Corps : bandes alternées + bordures fines.
+  // Corps : bandes bleu clair alternées + bordures fines.
   for (let r = 4; r < 4 + nRows; r++) {
     const row = ws.getRow(r)
     for (let c = 1; c <= nCols; c++) {
       const cell = row.getCell(c)
       cell.border = THIN_BORDER
+      cell.font = { name: FONT_NAME, size: 11, color: { argb: 'FF1F2937' } }
       cell.alignment = {
         vertical: 'middle',
         horizontal: typeof cell.value === 'number' ? 'right' : 'left',
       }
       if ((r - 4) % 2 === 1) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BAND_FILL } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BAND } }
       }
     }
   }

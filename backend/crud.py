@@ -1209,6 +1209,13 @@ def _consommer_stock_commande(db: Session, cmd: Commande):
         p = db.get(Produit, pid)
         if p:
             _recalc_stock_produit(db, p)
+    # Les cartons livrés ne sont plus en stock (colonne Cartons).
+    # Seules les lignes en cartons décrémentent (les lignes kg/sachets n'ont pas d'équivalent carton exact).
+    for li in cmd.lignes:
+        p = db.get(Produit, li.produit_id)
+        unite = (li.unite or _unite_attendue_produit(p)).lower()
+        if p and unite == "carton" and not _est_produit_sachet(p):
+            p.stock_min = max(0, (p.stock_min or 0) - (li.quantite or 0))
 
 def update_commande_statut(db: Session, commande_id: int, statut: str) -> Optional[Commande]:
     cmd = db.get(Commande, commande_id)
@@ -1733,6 +1740,13 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
         StockZone.produit_id == produit.id, StockZone.date_sortie.is_(None)
     ).scalar() or 0
     produit.stock_actuel = float(total_stock_produit)
+
+    # Le stock affiché du produit source doit suivre la déduction en zone,
+    # sinon la page Produits garde l'ancienne valeur (ex. Local resté à 300 kg).
+    if source_produit is not None:
+        _recalc_stock_produit(db, source_produit)
+        # Les cartons consommés ne sont plus en stock (colonne Cartons).
+        source_produit.stock_min = max(0, (source_produit.stock_min or 0) - nb_cartons_entree)
 
     if type_source == "local":
         lot.local_cartons -= nb_cartons_entree

@@ -19,7 +19,7 @@
           <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
         </div>
         <table class="table">
-          <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets</th><th>Déchet kg</th></tr></thead>
+          <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets est.</th><th>Sortis</th><th>Déchet kg</th><th>Rhum obtenu</th><th>Responsable</th></tr></thead>
           <tbody>
             <tr v-for="r in historique" :key="r.id">
               <td>{{ formatDateHist(r.date_reconditionnement) }}</td>
@@ -27,7 +27,10 @@
               <td>{{ r.type_source }}</td>
               <td>{{ r.nb_cartons_entree }}</td>
               <td>{{ fmt(r.nb_sachets_100g_sortie) }}</td>
+              <td>{{ fmt(r.nb_sachets_sortis) }}</td>
               <td>{{ fmt(r.dechet_kg ?? 0) }}</td>
+              <td>{{ rhumTxt(r) }}</td>
+              <td>{{ r.responsable || '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -196,11 +199,19 @@ async function loadHistorique() {
 function lotCode(lotId) {
   return lots.value.find(l => Number(l.id) === Number(lotId))?.code_lot || ('Lot #' + lotId)
 }
+function rhumTxt(r) {
+  const parts = []
+  if (r.rhum_cartons_sortie) parts.push(`${r.rhum_cartons_sortie} cart.`)
+  if (r.rhum_sachets_sortis) parts.push(`${r.rhum_sachets_sortis} sach.`)
+  if (r.rhum_poids_vrac_kg) parts.push(`${r.rhum_poids_vrac_kg} kg vrac`)
+  return parts.length ? parts.join(' / ') : '—'
+}
 function doExportExcel() {
-  const headers = ['Date', 'Lot', 'Source', 'Cartons', 'Sachets', 'Déchet (kg)']
+  const headers = ['Date', 'Lot', 'Source', 'Cartons', 'Sachets est.', 'Sortis', 'Déchet (kg)', 'Rhum obtenu', 'Responsable']
   const rows = historique.value.map(r => [
     r.date_reconditionnement ? new Date(r.date_reconditionnement).toLocaleDateString('fr-FR') : '',
-    lotCode(r.lot_id), r.type_source || '', r.nb_cartons_entree ?? '', r.nb_sachets_100g_sortie ?? '', r.dechet_kg ?? 0,
+    lotCode(r.lot_id), r.type_source || '', r.nb_cartons_entree ?? '', r.nb_sachets_100g_sortie ?? '',
+    r.nb_sachets_sortis ?? '', r.dechet_kg ?? 0, rhumTxt(r), r.responsable || '',
   ])
   exportExcel(headers, rows, `reconditionnement-${todayStamp()}.xlsx`, 'Reconditionnement')
 }

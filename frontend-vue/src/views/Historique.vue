@@ -101,6 +101,29 @@
       </div>
     </div>
 
+    <!-- RECONDITIONNEMENT -->
+    <div v-else-if="activeTab === 'reconditionnement'" class="anim-fade">
+      <div v-if="filteredData.length === 0" class="empty"><div class="empty-text">Aucun reconditionnement enregistré</div></div>
+      <div v-else class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Lot</th><th>Source</th><th>Cartons</th><th>Sachets est.</th><th>Sortis</th><th>Déchet kg</th><th>Rhum obtenu</th><th>Responsable</th></tr></thead>
+          <tbody>
+            <tr v-for="e in filteredData" :key="e.id">
+              <td>{{ fmtDate(e.date_reconditionnement) }}</td>
+              <td><strong>{{ lotCode(e.lot_id) }}</strong></td>
+              <td>{{ e.type_source }}</td>
+              <td>{{ e.nb_cartons_entree }}</td>
+              <td>{{ e.nb_sachets_100g_sortie }}</td>
+              <td>{{ e.nb_sachets_sortis }}</td>
+              <td>{{ e.dechet_kg ?? 0 }}</td>
+              <td>{{ rhumTxt(e) }}</td>
+              <td>{{ e.responsable || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- TRANSFERT CF -->
     <div v-else-if="activeTab === 'transfert'" class="anim-fade">
       <div v-if="filteredData.length === 0" class="empty"><div class="empty-text">Aucune demande de transfert</div></div>
@@ -130,7 +153,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { getHistoriqueMurisserie, getHistoriqueProduction, getHistoriqueConditionnement, getDemandesTransfert } from '../api'
+import { getHistoriqueMurisserie, getHistoriqueProduction, getHistoriqueConditionnement, getDemandesTransfert, getReconditionnements, getLots } from '../api'
 import { exportExcel, todayStamp } from '../utils/exportExcel'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -141,6 +164,7 @@ const tabs = [
   { key: 'murisserie', label: 'Murisserie' },
   { key: 'production', label: 'Production' },
   { key: 'conditionnement', label: 'Conditionnement' },
+  { key: 'reconditionnement', label: 'Reconditionnement' },
   { key: 'transfert', label: 'Transfert CF' },
 ]
 
@@ -149,6 +173,7 @@ const data = ref([])
 const loading = ref(false)
 const recherche = ref('')
 const counts = ref({})
+const lotsMap = ref({})
 
 const totalEntries = computed(() => {
   return Object.values(counts.value).reduce((s, c) => s + c, 0)
@@ -163,26 +188,43 @@ const filteredData = computed(() => {
   if (!recherche.value) return data.value
   const q = recherche.value.toLowerCase()
   return data.value.filter(e => {
-    const code = (e.lot?.code_lot || '').toLowerCase()
+    const code = (e.lot?.code_lot || lotCode(e.lot_id) || '').toLowerCase()
     const fruit = (e.lot?.type_fruit || '').toLowerCase()
     return code.includes(q) || fruit.includes(q)
   })
 })
 
+function lotCode(lotId) {
+  if (lotId == null) return ''
+  return lotsMap.value[lotId] || ('Lot #' + lotId)
+}
+
+function rhumTxt(e) {
+  const parts = []
+  if (e.rhum_cartons_sortie) parts.push(`${e.rhum_cartons_sortie} cart.`)
+  if (e.rhum_sachets_sortis) parts.push(`${e.rhum_sachets_sortis} sach.`)
+  if (e.rhum_poids_vrac_kg) parts.push(`${e.rhum_poids_vrac_kg} kg vrac`)
+  return parts.length ? parts.join(' / ') : '—'
+}
+
 async function loadData() {
   loading.value = true
   data.value = []
   try {
-    const [mus, prod, cond, transf] = await Promise.all([
+    const [mus, prod, cond, reco, transf, lots] = await Promise.all([
       getHistoriqueMurisserie(),
       getHistoriqueProduction(),
       getHistoriqueConditionnement(),
+      getReconditionnements(),
       getDemandesTransfert(),
+      getLots().catch(() => []),
     ])
-    counts.value = { murisserie: mus.length, production: prod.length, conditionnement: cond.length, transfert: transf.length }
+    lotsMap.value = Object.fromEntries((lots || []).map(l => [l.id, l.code_lot]))
+    counts.value = { murisserie: mus.length, production: prod.length, conditionnement: cond.length, reconditionnement: reco.length, transfert: transf.length }
     if (activeTab.value === 'murisserie') data.value = mus
     else if (activeTab.value === 'production') data.value = prod
     else if (activeTab.value === 'conditionnement') data.value = cond
+    else if (activeTab.value === 'reconditionnement') data.value = reco
     else if (activeTab.value === 'transfert') data.value = transf
   } finally { loading.value = false }
 }
@@ -208,6 +250,9 @@ function exportXLSX() {
   } else if (activeTab.value === 'conditionnement') {
     headers = ['Date', 'Lot', 'Statut', 'Entrée (kg)', 'Sortie (kg)', 'Rendement', 'Opérateur']
     data = rows.map(e => [d(e.date_debut), lotOf(e), e.statut || '', e.poids_entree ?? '', e.poids_sortie ?? '', rdtOf(e), e.operateur || ''])
+  } else if (activeTab.value === 'reconditionnement') {
+    headers = ['Date', 'Lot', 'Source', 'Cartons', 'Sachets est.', 'Sortis', 'Déchet (kg)', 'Rhum obtenu', 'Responsable']
+    data = rows.map(e => [d(e.date_reconditionnement), lotCode(e.lot_id), e.type_source || '', e.nb_cartons_entree ?? '', e.nb_sachets_100g_sortie ?? '', e.nb_sachets_sortis ?? '', e.dechet_kg ?? 0, rhumTxt(e), e.responsable || ''])
   } else {
     headers = ['Date', 'Lot', 'Statut', 'Responsable', 'Détail']
     data = rows.map(e => [d(e.date_demande || e.date_creation), lotOf(e), e.statut || '', e.responsable || '', (e.lignes || []).map(l => `${l.nb_cartons} ${l.type_flux} → ${l.zone?.nom || ''}`).join(' | ')])

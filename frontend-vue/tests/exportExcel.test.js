@@ -27,7 +27,7 @@ describe('buildWorkbookBuffer', () => {
     expect(ws.getCell(1, 1).value).toBe('2Saisons — Lots')
     expect(ws.getCell(3, 1).value).toBe('Code')
     expect(ws.getCell(3, 1).fill).toMatchObject({
-      type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00853E' },
+      type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E79' },
     })
     expect(ws.getCell(3, 1).font).toMatchObject({ bold: true })
     // Données : nombres conservés, null → ''.
@@ -35,6 +35,6 @@ describe('buildWorkbookBuffer', () => {
     expect(ws.getCell(4, 2).value).toBe(10)
     expect(ws.getCell(5, 2).value).toBe('')
     // Bande alternée sur la 2e ligne de données.
-    expect(ws.getCell(5, 1).fill).toMatchObject({ fgColor: { argb: 'FFF0F7F2' } })
+    expect(ws.getCell(5, 1).fill).toMatchObject({ fgColor: { argb: 'FFD9E2F3' } })
   })
 })

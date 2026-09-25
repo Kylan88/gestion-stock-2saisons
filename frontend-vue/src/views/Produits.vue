@@ -77,7 +77,7 @@
             <tfoot>
               <tr style="font-weight:700;background:var(--surface);border-top:2px solid var(--border)">
                 <td>Totaux ({{ filteredProduits.length }})</td>
-                <td>{{ fmt2(totalStock) }}</td>
+                <td>{{ fmt2(totalStock) }} kg</td>
                 <td>{{ totalCartons }}</td>
                 <td></td>
                 <td></td>
@@ -167,7 +167,16 @@ const paginatedProduits = computed(() => {
   const start = (page.value - 1) * pageSize
   return filteredProduits.value.slice(start, start + pageSize)
 })
-const totalStock = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_actuel || 0), 0))
+function isSachet(p) {
+  // Même règle que le backend : le stock_actuel des sachets 100g est un NOMBRE de sachets.
+  return !!p && ((p.nom || '').startsWith('Sachet 100g') || p.unite_mesure === 'sachet 100g')
+}
+function stockKg(p) {
+  const v = Number(p.stock_actuel || 0)
+  return isSachet(p) ? Math.round(v * 0.1 * 100) / 100 : v
+}
+// Total en kg : les sachets 100g sont convertis (× 0,1), les autres stocks sont déjà en kg.
+const totalStock = computed(() => Math.round(filteredProduits.value.reduce((s, p) => s + stockKg(p), 0) * 100) / 100)
 const totalCartons = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_min || 0), 0))
 watch([recherche, selectedLotId, showZeroStock], () => { page.value = 1 })
 function fmt2(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0.00' }
