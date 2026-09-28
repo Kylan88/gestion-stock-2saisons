@@ -36,16 +36,18 @@ class FournisseurResponse(FournisseurBase):
     class Config: from_attributes = True
 
 class ProduitBase(ValidatedInput):
-    non_negative_fields = {"stock_min", "stock_actuel", "prix_unitaire"}
+    non_negative_fields = {"stock_min", "stock_actuel", "prix_unitaire", "cartons"}
     nom: str; categorie_id: Optional[int] = None; unite_mesure: str = "kg"
     stock_min: float = 0.0; stock_actuel: float = 0.0; prix_unitaire: float = 0.0
+    cartons: float = 0.0
     description: str = ""; actif: bool = True
 class ProduitCreate(ProduitBase): pass
 class ProduitUpdate(ValidatedInput):
-    non_negative_fields = {"stock_min", "stock_actuel", "prix_unitaire"}
+    non_negative_fields = {"stock_min", "stock_actuel", "prix_unitaire", "cartons"}
     nom: Optional[str] = None; categorie_id: Optional[int] = None
     unite_mesure: Optional[str] = None; stock_min: Optional[float] = None
     stock_actuel: Optional[float] = None; prix_unitaire: Optional[float] = None
+    cartons: Optional[float] = None
     description: Optional[str] = None; actif: Optional[bool] = None
 class ProduitResponse(ProduitBase):
     id: int; date_creation: datetime

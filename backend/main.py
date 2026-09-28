@@ -45,6 +45,18 @@ if "heure_entree_sechoir" in _chariots_columns and "heure_entree_dryer" not in _
 # Renommage musserie -> murisserie des étapes existantes (données préservées).
 with engine.begin() as connection:
     connection.execute(text("UPDATE etapes_production SET etape='murisserie' WHERE etape='musserie'"))
+# Colonne cartons dédiée (séparée du seuil stock_min) + reprise idempotente
+# des compteurs cartons jusque-là stockés dans stock_min (produits de flux).
+_produits_columns = {column["name"] for column in inspect(engine).get_columns("produits")}
+if "cartons" not in _produits_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE produits ADD COLUMN cartons FLOAT DEFAULT 0"))
+with engine.begin() as connection:
+    connection.execute(text(
+        "UPDATE produits SET cartons = stock_min, stock_min = 0 "
+        "WHERE nom IN ('Local', 'Export', 'Fitini Fê', 'Déchets', 'Rhum arrangé') "
+        "AND stock_min <> 0 AND cartons = 0"
+    ))
 
 # ── Application FastAPI ──
 app = FastAPI(

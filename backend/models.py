@@ -31,6 +31,8 @@ class Produit(Base):
     categorie_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     unite_mesure = Column(String(20), default="kg")
     stock_min = Column(Float, default=0.0)
+    # Nombre de cartons en stock (colonne dédiée : stock_min reste le seuil d'alerte).
+    cartons = Column(Float, default=0.0)
     stock_actuel = Column(Float, default=0.0)
     prix_unitaire = Column(Float, default=0.0)
     description = Column(Text, default="")

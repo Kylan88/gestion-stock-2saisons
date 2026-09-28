@@ -29,7 +29,6 @@ LEGACY_MAP = {
     statuses.RECEPTION: ["réception", "reception"],
     statuses.EN_MURISSERIE: ["en murisserie", "en_murisserie", "en-murisserie"],
     statuses.EN_PRODUCTION: ["en production", "en_production", "en-production"],
-    statuses.EN_SECHAGE: ["en séchage", "en sechage", "en_sechage", "ensechage"],
     statuses.CONDITIONNE: ["conditionné", "conditionne", "conditionne"] ,
     statuses.EN_STOCK: ["en stock", "en_stock"],
     statuses.EXPEDIE: ["expédié", "expedie", "expedie"],

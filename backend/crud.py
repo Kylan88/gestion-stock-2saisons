@@ -1215,7 +1215,7 @@ def _consommer_stock_commande(db: Session, cmd: Commande):
         p = db.get(Produit, li.produit_id)
         unite = (li.unite or _unite_attendue_produit(p)).lower()
         if p and unite == "carton" and not _est_produit_sachet(p):
-            p.stock_min = max(0, (p.stock_min or 0) - (li.quantite or 0))
+            p.cartons = max(0, (p.cartons or 0) - (li.quantite or 0))
 
 def update_commande_statut(db: Session, commande_id: int, statut: str) -> Optional[Commande]:
     cmd = db.get(Commande, commande_id)
@@ -1511,8 +1511,8 @@ def valider_demande_transfert(db: Session, demande_id: int) -> "DemandeTransfert
             quantite=quantite, sachets=ligne.nb_cartons * 6,
         )
         db.add(stock)
-        # nb cartons par catégorie (flux) -> champ Cartons du produit
-        produit.stock_min = (produit.stock_min or 0) + ligne.nb_cartons
+        # nb cartons en stock -> colonne dédiée (stock_min reste le seuil d'alerte)
+        produit.cartons = (produit.cartons or 0) + ligne.nb_cartons
         ligne.statut = statuses.VALIDEE
 
     # stock par produit = somme exacte des stocks en zone (flush requis, autoflush=False)
@@ -1746,7 +1746,7 @@ def creer_reconditionnement(db: Session, lot_id: int, type_source: str,
     if source_produit is not None:
         _recalc_stock_produit(db, source_produit)
         # Les cartons consommés ne sont plus en stock (colonne Cartons).
-        source_produit.stock_min = max(0, (source_produit.stock_min or 0) - nb_cartons_entree)
+        source_produit.cartons = max(0, (source_produit.cartons or 0) - nb_cartons_entree)
 
     if type_source == "local":
         lot.local_cartons -= nb_cartons_entree

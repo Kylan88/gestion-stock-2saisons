@@ -32,7 +32,7 @@
           <div class="form-row">
             <div class="form-group">
               <label>Cartons</label>
-              <input type="number" v-model.number="form.stock_min" class="input" step="1" min="0" placeholder="Nombre de cartons" />
+              <input type="number" v-model.number="form.cartons" class="input" step="1" min="0" placeholder="Nombre de cartons" />
             </div>
             <div class="form-group">
               <label>Stock actuel</label>
@@ -67,7 +67,7 @@
               <tr v-for="p in paginatedProduits" :key="p.id">
                 <td><strong>{{ p.categorie?.nom || p.nom }}</strong></td>
                 <td>{{ fmt2(p.stock_actuel) }} {{ p.unite_mesure }}</td>
-                <td>{{ p.stock_min }}</td>
+                <td>{{ p.cartons }}</td>
                 <td><StatusBadge :status="p.stock_actuel > 0 ? 'disponible' : 'rupture'" /></td>
                 <td>
                   <button class="btn btn-ghost btn-sm" @click="openEdit(p)" aria-label="Modifier le produit">✎</button>
@@ -122,10 +122,10 @@ const showConfirm = ref(false)
 const firstInput = ref(null)
 const errors = reactive({ nom: '' })
 
-const form = reactive({ nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0 })
+const form = reactive({ nom: '', categorie_id: '', unite_mesure: 'kg', stock_actuel: 0, cartons: 0 })
 
 function resetForm() {
-  Object.assign(form, { nom: '', categorie_id: '', unite_mesure: 'kg', stock_min: 0, stock_actuel: 0 })
+  Object.assign(form, { nom: '', categorie_id: '', unite_mesure: 'kg', stock_actuel: 0, cartons: 0 })
   editingId.value = null
   errors.nom = ''
 }
@@ -141,7 +141,7 @@ function openCreate() {
 
 function openEdit(p) {
   editingId.value = p.id
-  Object.assign(form, { nom: p.nom, categorie_id: p.categorie?.id || '', unite_mesure: p.unite_mesure || 'kg', stock_min: p.stock_min, stock_actuel: p.stock_actuel })
+  Object.assign(form, { nom: p.nom, categorie_id: p.categorie?.id || '', unite_mesure: p.unite_mesure || 'kg', stock_actuel: p.stock_actuel, cartons: p.cartons })
   showForm.value = true
   nextTick(() => firstInput.value?.focus())
 }
@@ -177,7 +177,7 @@ function stockKg(p) {
 }
 // Total en kg : les sachets 100g sont convertis (× 0,1), les autres stocks sont déjà en kg.
 const totalStock = computed(() => Math.round(filteredProduits.value.reduce((s, p) => s + stockKg(p), 0) * 100) / 100)
-const totalCartons = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.stock_min || 0), 0))
+const totalCartons = computed(() => filteredProduits.value.reduce((s, p) => s + Number(p.cartons || 0), 0))
 watch([recherche, selectedLotId, showZeroStock], () => { page.value = 1 })
 function fmt2(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0.00' }
 
@@ -233,7 +233,7 @@ function confirmDelete() { showConfirm.value = false }
 
 function doExportExcel() {
   const headers = ['Catégorie', 'Stock Actuel', 'Cartons', 'Unité']
-  const rows = filteredProduits.value.map(p => [p.categorie?.nom || p.nom, p.stock_actuel, p.stock_min, p.unite_mesure])
+  const rows = filteredProduits.value.map(p => [p.categorie?.nom || p.nom, p.stock_actuel, p.cartons, p.unite_mesure])
   exportExcel(headers, rows, `produits-${todayStamp()}.xlsx`, 'Produits')
 }
 

@@ -182,7 +182,7 @@ function dispoNombre(ligne) {
     const field = fluxField[p.nom]
     if (lot && field) return Number(lot[field] || 0)
   }
-  return Number(p.stock_min || 0)
+  return Number(p.cartons || 0)
 }
 function dispoTxt(ligne) {
   const p = produits.value.find(x => Number(x.id) === Number(ligne.produit_id))
