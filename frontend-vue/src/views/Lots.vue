@@ -148,7 +148,7 @@ const toast = useToastStore()
 
 const statuts = [RECEPTION, EN_MURISSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
 
-function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
+function formatKg(v) { return Number(v || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) }
 
 // Poids total reçu de tous les lots affichés (somme des poids frais).
 const totalPoidsRecu = computed(() => lots.value.reduce((sum, l) => sum + (l.poids_frais || 0), 0))

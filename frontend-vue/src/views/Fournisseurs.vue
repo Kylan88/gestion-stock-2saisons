@@ -50,7 +50,7 @@ const recherche = ref('')
 const page = ref(1)
 const pageSize = 15
 
-function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
+function formatKg(v) { return Number(v || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) }
 
 function doExportExcel() {
   const headers = ['Nom', 'Lots', 'Poids total (kg)', 'Dernière réception']

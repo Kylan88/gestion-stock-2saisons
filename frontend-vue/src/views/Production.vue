@@ -26,7 +26,7 @@
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Rendement moyen</div>
-        <div class="kpi-value">{{ (stats.rendement_global * 100).toFixed(1) }}%</div>
+        <div class="kpi-value">{{ (stats.rendement_global * 100).toFixed(2) }}%</div>
         <div class="kpi-sub">capacité / frais total</div>
       </div>
     </div>
@@ -82,7 +82,7 @@
                 <td><span class="fruit-badge">{{ e.fruit_type }}</span></td>
                 <td style="font-weight:700">{{ formatKg(e.frais_total_kg) }}</td>
                 <td style="font-weight:700">{{ formatKg(e.pulpe_capacity_kg) }}</td>
-                <td><span class="rendement-badge" :class="rendementClass(e.rendement)">{{ (e.rendement * 100).toFixed(1) }}%</span></td>
+                <td><span class="rendement-badge" :class="rendementClass(e.rendement)">{{ (e.rendement * 100).toFixed(2) }}%</span></td>
                 <td style="font-size:11px;color:var(--text-muted)">{{ expandedKey === e.lot_id + '_' + e.date + '_D' + e.dryer ? '▲' : '▼' }}</td>
               </tr>
               <tr v-if="expandedKey === e.lot_id + '_' + e.date + '_D' + e.dryer" class="detail-row">
@@ -116,7 +116,7 @@
               <td>{{ formatKg(d.capacity_kg) }}</td>
               <td>{{ formatKg(d.kg_frais) }}</td>
               <td>{{ formatKg(d.pulpe_capacity_kg) }}</td>
-              <td><span class="rendement-badge" :class="rendementClass(d.rendement)">{{ (d.rendement*100).toFixed(1) }}%</span></td>
+              <td><span class="rendement-badge" :class="rendementClass(d.rendement)">{{ (d.rendement*100).toFixed(2) }}%</span></td>
             </tr>
           </tbody>
         </table>
@@ -135,7 +135,7 @@
               <td>{{ f.dryers }}</td>
               <td>{{ formatKg(f.kg_frais) }}</td>
               <td>{{ formatKg(f.pulpe_capacity_kg) }}</td>
-              <td><span class="rendement-badge" :class="rendementClass(f.rendement)">{{ (f.rendement*100).toFixed(1) }}%</span></td>
+              <td><span class="rendement-badge" :class="rendementClass(f.rendement)">{{ (f.rendement*100).toFixed(2) }}%</span></td>
             </tr>
           </tbody>
         </table>
@@ -155,7 +155,7 @@
               <td>{{ l.dryers }}</td>
               <td>{{ formatKg(l.kg_frais) }}</td>
               <td>{{ formatKg(l.pulpe_capacity_kg) }}</td>
-              <td><span class="rendement-badge" :class="rendementClass(l.rendement_global)">{{ (l.rendement_global*100).toFixed(1) }}%</span></td>
+              <td><span class="rendement-badge" :class="rendementClass(l.rendement_global)">{{ (l.rendement_global*100).toFixed(2) }}%</span></td>
             </tr>
           </tbody>
         </table>
@@ -238,7 +238,7 @@ async function saveConfig(){
 }
 function formatKg(v){ return (v||0).toLocaleString('fr-FR',{minimumFractionDigits:2, maximumFractionDigits:2})}
 function formatDate(d){ return new Date(d).toLocaleDateString('fr-FR')}
-function pct(v){ return v == null ? '' : (Number(v)*100).toFixed(1) + '%' }
+function pct(v){ return v == null ? '' : (Number(v)*100).toFixed(2) + '%' }
 function doExportExcel() {
   const sheets = []
   if (entries.value.length) {

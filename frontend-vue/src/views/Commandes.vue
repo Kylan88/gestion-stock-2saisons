@@ -196,7 +196,7 @@ function uniteLigne(l) {
   const p = l.produit || produits.value.find(x => Number(x.id) === Number(l.produit_id))
   return uniteDeProduit(p)
 }
-function formatNum(v) { return Number(v || 0).toLocaleString('fr-FR') }
+function formatNum(v) { return Number(v || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) }
 function openBL(cmd) { blCmd.value = cmd }
 function printBL() { window.print() }
 

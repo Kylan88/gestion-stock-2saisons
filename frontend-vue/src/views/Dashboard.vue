@@ -155,8 +155,8 @@ const todayDate = computed(() => {
   return new Date().toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 })
 
-function formatNum(v) { return Number(v || 0).toLocaleString('fr-FR') }
-function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
+function formatNum(v) { return Number(v || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) }
+function formatKg(v) { return Number(v || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) }
 
 const lotsMurisserie = computed(() => allLots.value.filter(l => [EN_MURISSERIE].includes(toCanonical(l.statut))))
 const lotsProduction = computed(() => allLots.value.filter(l => [EN_PRODUCTION].includes(toCanonical(l.statut))))
