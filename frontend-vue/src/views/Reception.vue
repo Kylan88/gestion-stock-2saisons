@@ -237,7 +237,7 @@ const canSave = computed(() => {
 function formatPoids(kg) {
   if (!kg) return '0'
   if (kg >= 1000) return (kg / 1000).toFixed(2) + ' t'
-  return kg + ' kg'
+  return Number(kg).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' kg'
 }
 
 function resetForm() {

@@ -300,6 +300,6 @@ watch(activeTab, () => loadData(), { immediate: true })
   max-width: 200px;
 }
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow: auto; max-height: 380px; }
 .table { min-width: 800px; }
 </style>

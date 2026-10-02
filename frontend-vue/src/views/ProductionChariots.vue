@@ -118,19 +118,30 @@
         </div>
 
           <!-- Formulaire nouveau dryer : caché si pas de murisserie aujourd'hui -->
-         <div v-if="availableDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune murisserie aujourd'hui pour ce lot — effectuer la murisserie d'abord.</div>
-         <div v-else class="prod-form compact">
+          <div v-if="availableDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune murisserie aujourd'hui pour ce lot — effectuer la murisserie d'abord.</div>
+          <div v-else-if="readyDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Tous les dryers du jour sont chargés ✓ — clôturez la journée ci-dessous.</div>
+          <div v-else class="prod-form compact">
             <div class="dryers-title" style="margin-top:12px">
               {{ dryers[lot.id] && dryers[lot.id].length > 0 ? 'Ajouter un dryer' : 'Nouveau dryer' }}
             </div>
 
-            <!-- Dryer + configuration (uniquement dryers du jour) -->
+            <!-- État des dryers du jour : seuls les « prêts » sont saisissables -->
+            <div class="dryer-pills">
+              <div v-for="d in [1, 2]" :key="'pill-'+d" class="dryer-pill" :class="pillClass(lot.id, d)">
+                <strong>Dryer {{ d }}</strong>
+                <span v-if="isDryerLoaded(lot.id, d)">Chargé {{ dryerCharge(lot.id, d) }} kg ✓</span>
+                <span v-else-if="isDryerAvailable(lot.id, d)">Prêt — frais {{ getMurisseriePoids(lot.id, d) }} kg</span>
+                <span v-else>Verrouillé — pas de murisserie aujourd'hui</span>
+                <button v-if="isDryerLoaded(lot.id, d) && isDryerAvailable(lot.id, d) && forceDryer[lot.id] !== d" class="btn btn-ghost btn-sm" @click="completerDryer(lot.id, d)">Compléter</button>
+              </div>
+            </div>
+
+            <!-- Dryer + configuration (uniquement dryers saisissables) -->
             <div class="form-row">
               <div class="form-group">
                 <label class="input-label">Dryer *</label>
                 <select v-model="f[lot.id].dryer" class="input compact" @change="onDryerChange(lot.id)">
-                  <option v-if="isDryerAvailable(lot.id,1)" :value="1">Dryer 1 — 6 chariots, 42 claies/chariot (1575 kg)</option>
-                  <option v-if="isDryerAvailable(lot.id,2)" :value="2">Dryer 2 — 12 chariots, 20 claies/chariot (1500 kg)</option>
+                  <option v-for="d in [1, 2]" :key="'opt-'+d" v-if="isDryerSelectable(lot.id, d)" :value="d">Dryer {{ d }} — {{ DRYER[d].chariots }} chariots, {{ DRYER[d].claies }} claies/chariot</option>
                 </select>
               </div>
              <div class="form-group">
@@ -159,6 +170,14 @@
             </div>
           </div>
 
+          <!-- Reste à charger (garde-fou : la saisie ne doit pas dépasser le frais net du jour) -->
+          <div class="reste-banner" :class="{ 'reste-alert': depasseReste(lot.id) }">
+            <span>Frais net du jour : <strong>{{ fraisNetJour(lot.id) }} kg</strong></span>
+            <span>Déjà chargé : <strong>{{ chargeJour(lot.id) }} kg</strong></span>
+            <span>Reste à charger : <strong>{{ resteJour(lot.id) }} kg</strong></span>
+            <span v-if="depasseReste(lot.id)" class="reste-warn">Dépasse le reste (+5 %) — réduisez les chariots</span>
+          </div>
+
             <!-- Tableau chariots -->
            <div v-if="f[lot.id].nbre_chariots > 0" class="chariot-table">
               <div class="chariot-header">
@@ -183,12 +202,12 @@
                <label class="input-label">Opérateur</label>
                <input v-model="f[lot.id].operateur" class="input compact" placeholder="Nom" />
              </div>
-             <div class="form-group" style="flex:0">
-               <label class="input-label">&nbsp;</label>
-               <button class="btn btn-primary" :disabled="!canSubmit(lot.id) || saving" @click="enregistrer(lot)">
-                 {{ saving ? 'Enregistrement...' : 'Enregistrer ce dryer' }}
-               </button>
-             </div>
+              <div class="form-group" style="flex:0">
+                <label class="input-label">&nbsp;</label>
+                <button class="btn btn-primary" :disabled="!canSubmit(lot.id) || saving || depasseReste(lot.id)" @click="confirmDryer = lot">
+                  {{ saving ? 'Enregistrement...' : 'Vérifier et enregistrer' }}
+                </button>
+              </div>
            </div>
 
           <!-- Clôturer -->
@@ -209,6 +228,16 @@
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
       @cancel="confirmClotureLot = null"
+    />
+
+    <ConfirmDialog
+      :show="!!confirmDryer"
+      :title="'Charger Dryer ' + (confirmDryer ? f[confirmDryer.id]?.dryer : '') + ' ?'"
+      :message="confirmDryer ? recapText(confirmDryer) : ''"
+      confirmText="Enregistrer"
+      variant="info"
+      @confirm="validerDryer(confirmDryer)"
+      @cancel="confirmDryer = null"
     />
   </div>
 </template>
@@ -231,6 +260,8 @@ const showHistorique = ref(false)
 const historique = ref([])
 const loadingHist = ref(false)
 const confirmClotureLot = ref(null)
+const confirmDryer = ref(null)
+const forceDryer = reactive({})
 
 function formatDate(d) {
   if (!d) return '—'
@@ -274,6 +305,7 @@ function qtéTotale(lotId) { return Math.round(totalClaies(lotId) * kgParClaie(l
 function canSubmit(lotId) {
   const d = f[lotId]
   if (!d || !d.dryer || d.nbre_chariots <= 0) return false
+  if (!isDryerSelectable(lotId, d.dryer)) return false
   return d.chariots.every(c => c.enregistre)
 }
 function onDryerChange(lotId) {
@@ -318,9 +350,67 @@ function isDryerAvailable(lotId, dryer) {
   return availableDryers(lotId).includes(dryer)
 }
 
+function todayLocal() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+// Dryers déjà chargés aujourd'hui (date backend, pas tout l'historique).
+function dryersToday(lotId) {
+  const t = todayLocal()
+  return (dryers[lotId] || []).filter(d => String(d.date || '').slice(0, 10) === t)
+}
+function isDryerLoaded(lotId, dryer) {
+  return dryersToday(lotId).some(x => x.dryer === dryer)
+}
+function dryerCharge(lotId, dryer) {
+  const d = dryersToday(lotId).find(x => x.dryer === dryer)
+  return d ? (d.pulpe_kg ?? d.quantite_totale ?? 0) : 0
+}
+// Seuls les dryers prêts (murisserie du jour, pas encore chargés) sont saisissables.
+function readyDryers(lotId) {
+  return availableDryers(lotId).filter(d => !isDryerLoaded(lotId, d))
+}
+function isDryerSelectable(lotId, dryer) {
+  return readyDryers(lotId).includes(dryer) || forceDryer[lotId] === dryer
+}
+function pillClass(lotId, dryer) {
+  if (isDryerLoaded(lotId, dryer)) return 'pill-loaded'
+  if (isDryerAvailable(lotId, dryer)) return 'pill-ready'
+  return 'pill-locked'
+}
+// Garde-fou quantités : frais net du jour − déjà chargé = reste (tolérance 5 % comme backend).
+function fraisNetJour(lotId) {
+  return Math.round(((murisserieData[lotId] || []).reduce((s, m) => s + (m.poids_sortie || 0), 0)) * 100) / 100
+}
+function chargeJour(lotId) {
+  return Math.round((dryersToday(lotId).reduce((s, d) => s + (d.pulpe_kg ?? d.quantite_totale ?? 0), 0)) * 100) / 100
+}
+function resteJour(lotId) {
+  return Math.max(0, Math.round((fraisNetJour(lotId) - chargeJour(lotId)) * 100) / 100)
+}
+function depasseReste(lotId) {
+  if (!(fraisNetJour(lotId) > 0)) return false
+  return qtéTotale(lotId) > resteJour(lotId) * 1.05
+}
+function completerDryer(lotId, dryer) {
+  // Déverrouillage explicite : compléter un dryer déjà chargé reste possible.
+  forceDryer[lotId] = dryer
+  if (f[lotId]) { f[lotId].dryer = dryer; onDryerChange(lotId) }
+}
+function syncFormDryer(lotId) {
+  // Replie le formulaire sur un dryer saisissable (après chargement ou clôture).
+  if (!f[lotId]) return
+  if (!isDryerSelectable(lotId, f[lotId].dryer)) {
+    delete forceDryer[lotId]
+    const ready = readyDryers(lotId)
+    if (ready.length) { f[lotId].dryer = ready[0]; onDryerChange(lotId) }
+  }
+}
+
 function initForm(lotId) {
   if (!f[lotId]) {
-    const avail = availableDryers(lotId)
+    const ready = readyDryers(lotId)
+    const avail = ready.length ? ready : availableDryers(lotId)
     const d = avail.length ? avail[0] : 1
     const n = DRYER[d].chariots
     f[lotId] = reactive({
@@ -328,12 +418,8 @@ function initForm(lotId) {
       operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false })),
     })
   } else {
-    // corrige si dryer actuel n'est plus disponible
-    const avail = availableDryers(lotId)
-    if (avail.length && !avail.includes(f[lotId].dryer)) {
-      f[lotId].dryer = avail[0]
-      onDryerChange(lotId)
-    }
+    // corrige si dryer actuel n'est plus saisissable
+    syncFormDryer(lotId)
   }
 }
 
@@ -378,14 +464,31 @@ async function loadMurisserieForToday(lotId) {
         await loadMurisserieForToday(lot.id)
         initForm(lot.id)
         await loadDryers(lot.id)
+        syncFormDryer(lot.id)
         result.push(lot)
       }
       lots.value = result
     } finally { loading.value = false }
   }
 
+function recapText(lot) {
+  const d = f[lot.id]
+  const apres = Math.max(0, Math.round((resteJour(lot.id) - qtéTotale(lot.id)) * 100) / 100)
+  return `Dryer ${d.dryer} — ${d.nbre_chariots} chariots (${totalClaies(lot.id)} claies) — ${qtéTotale(lot.id)} kg pour ${lot.code_lot}`
+    + ` • Frais net du jour : ${fraisNetJour(lot.id)} kg, déjà chargé : ${chargeJour(lot.id)} kg, reste après : ${apres} kg.`
+}
+
+function validerDryer(lot) {
+  confirmDryer.value = null
+  enregistrer(lot)
+}
+
 async function enregistrer(lot) {
   const currentDryer = f[lot.id].dryer
+  if (depasseReste(lot.id)) {
+    toast.error(`Quantité (${qtéTotale(lot.id)} kg) supérieure au reste à charger (${resteJour(lot.id)} kg) pour ${lot.code_lot}`)
+    return
+  }
   saving.value = true
   try {
     await validerProduction(lot.id, {
@@ -400,14 +503,12 @@ async function enregistrer(lot) {
       })),
     })
     toast.success(`Dryer ${currentDryer} enregistré`)
-    // bascule auto vers le prochain dryer disponible du jour (si murisserie validée)
-    const avail = availableDryers(lot.id)
-    const next = avail.find(d => d !== currentDryer && !dryers[lot.id]?.some(x => x.dryer === d && x.chariots?.length))
-    // fallback : prochain dans la liste
-    const fallbackNext = avail.find(d => d !== currentDryer)
-    const target = next ?? fallbackNext
+    // bascule auto vers le prochain dryer prêt (murisserie du jour non encore chargée)
+    if (forceDryer[lot.id] === currentDryer) delete forceDryer[lot.id]
     resetForm(lot.id)
     await loadDryers(lot.id)
+    syncFormDryer(lot.id)
+    const target = readyDryers(lot.id).find(d => d !== currentDryer)
     if (target) {
       f[lot.id].dryer = target
       onDryerChange(lot.id)
@@ -486,6 +587,16 @@ onMounted(load)
 .ch-check{ display:inline-flex; align-items:center; gap:4px; font-weight:700; color:var(--success); font-size:12px; background:var(--success-light); padding:4px 10px; border-radius:99px; border:1px solid var(--success)}
 .chariot-ok{ background:rgba(22,101,32,0.04)}
 .chariot-progress{ height:4px; background:var(--border-light); border-radius:99px; overflow:hidden; margin:0 14px 10px}
+.dryer-pills{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 4px}
+.dryer-pill{ display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; font-size:12px; border:1px solid var(--border)}
+.dryer-pill strong{ font-size:12px}
+.pill-ready{ background:#EFF6FF; border-color:#BFDBFE; color:#1D4ED8}
+.pill-loaded{ background:#F0FDF4; border-color:#86EFAC; color:#15803D}
+.pill-locked{ background:var(--surface); color:var(--text-muted)}
+.reste-banner{ display:flex; flex-wrap:wrap; gap:8px 20px; padding:10px 14px; margin-top:12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:13px; color:var(--text-secondary)}
+.reste-banner strong{ color:var(--dark)}
+.reste-alert{ border-color:#FCA5A5; background:#FEF2F2}
+.reste-warn{ color:var(--error); font-weight:700}
 .chariot-progress-fill{ height:100%; background:linear-gradient(90deg,var(--primary),var(--success)); transition:width 0.3s}
 
 .cumul-section { border-top: 1px solid var(--border-light); padding-top: 14px; margin-top: 14px; }

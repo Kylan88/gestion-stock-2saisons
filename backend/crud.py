@@ -597,7 +597,7 @@ def get_dryers_production(db: Session, lot_id: int) -> list:
         d = c.dryer
         ep = by_ep.get(c.etape_production_id)
         if d not in dryers:
-            dryers[d] = {"dryer": d, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale, "poids_frais_net_kg": (ep.poids_entree if ep else c.quantite_totale) or 0, "pulpe_kg": (ep.poids_sortie if ep else c.quantite_totale) or 0, "poids_sec_kg": ep.poids_sec_kg if ep else None, "operateur": c.operateur or "", "chariots": []}
+            dryers[d] = {"dryer": d, "nbre_chariots": c.nbre_chariots, "total_claies": c.total_claies, "quantite_totale": c.quantite_totale, "poids_frais_net_kg": (ep.poids_entree if ep else c.quantite_totale) or 0, "pulpe_kg": (ep.poids_sortie if ep else c.quantite_totale) or 0, "poids_sec_kg": ep.poids_sec_kg if ep else None, "date": ep.date_debut.isoformat() if ep and ep.date_debut else None, "operateur": c.operateur or "", "chariots": []}
         dryers[d]["chariots"].append({
             "id": c.id, "numero_chariot": c.numero_chariot,
             "heure_remplissage": c.heure_remplissage, "heure_entree_dryer": c.heure_entree_dryer,
@@ -608,7 +608,7 @@ def get_dryers_production(db: Session, lot_id: int) -> list:
         if ep.dryer and ep.dryer not in dryers:
             if not (ep.poids_sortie or 0) > 0:
                 continue
-            dryers[ep.dryer] = {"dryer": ep.dryer, "nbre_chariots": ep.nbre_chariots or 0, "total_claies": ep.total_claies or 0, "quantite_totale": ep.poids_sortie or 0, "poids_frais_net_kg": ep.poids_entree or 0, "pulpe_kg": ep.poids_sortie or 0, "poids_sec_kg": ep.poids_sec_kg, "operateur": ep.operateur or "", "chariots": []}
+            dryers[ep.dryer] = {"dryer": ep.dryer, "nbre_chariots": ep.nbre_chariots or 0, "total_claies": ep.total_claies or 0, "quantite_totale": ep.poids_sortie or 0, "poids_frais_net_kg": ep.poids_entree or 0, "pulpe_kg": ep.poids_sortie or 0, "poids_sec_kg": ep.poids_sec_kg, "date": ep.date_debut.isoformat() if ep.date_debut else None, "operateur": ep.operateur or "", "chariots": []}
     return list(dryers.values())
 
 # ── CONDITIONNEMENT (cartons) — cumul journalier ──
@@ -700,11 +700,9 @@ def valider_conditionnement(db: Session, lot_id: int,
     # Flux continu : bascule auto vers 'conditionne' si le lot est épuisé.
     epuise = _bascule_auto_lot_epuise(db, lot)
     db.refresh(lot)
-    # Chaque saisie alimente le stock (delta uniquement, jamais bloquant).
-    try:
-        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
-    except Exception as e:
-        stock = {"alimente": False, "raison": str(e)}
+    # Auto-stock désactivé : la chambre froide n'est alimentée que par
+    # validation manuelle d'une demande de transfert (page Transfert).
+    stock = {"alimente": False, "raison": "Transfert manuel requis"}
     db.refresh(lot)
 
     return {
@@ -800,11 +798,8 @@ def cloturer_conditionnement(db: Session, lot_id: int, date_str: str | None = No
     db.commit(); db.refresh(lot); db.refresh(etape_cond)
     epuise = _bascule_auto_lot_epuise(db, lot)
     db.refresh(lot); db.refresh(etape_cond)
-    # Figer alimente aussi le stock (delta uniquement, jamais bloquant).
-    try:
-        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
-    except Exception as e:
-        stock = {"alimente": False, "raison": str(e)}
+    # Auto-stock désactivé : voir transfert manuel (page Transfert).
+    stock = {"alimente": False, "raison": "Transfert manuel requis"}
     db.refresh(lot)
 
     return {
@@ -984,11 +979,8 @@ def valider_conditionnement_dryer(db: Session, lot_id: int, dryer: int, **data) 
     # Flux continu : bascule auto vers 'conditionne' si le lot est épuisé.
     epuise = _bascule_auto_lot_epuise(db, lot)
     db.refresh(lot)
-    # Chaque saisie alimente le stock (delta uniquement, jamais bloquant).
-    try:
-        stock = alimenter_stock_depuis_conditionnement(db, lot_id)
-    except Exception as e:
-        stock = {"alimente": False, "raison": str(e)}
+    # Auto-stock désactivé : voir transfert manuel (page Transfert).
+    stock = {"alimente": False, "raison": "Transfert manuel requis"}
     db.refresh(lot)
     return {"entry": entry, "lot": lot, "is_update": is_update, "poids_sec_kg": prod.poids_sec_kg or 0.0, "production_id": prod.id, "lot_epuise": epuise, "stock": stock}
 

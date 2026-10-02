@@ -133,7 +133,7 @@ function sachetsStock(type) {
 }
 const sachets100g = computed(() => sachetsStock('local'))
 const sachetsFF = computed(() => sachetsStock('fitini_fe'))
-function formatKg(value) { return Number(value || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) }
+function formatKg(value) { return Number(value || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) }
 
 onMounted(load)
 </script>
@@ -150,7 +150,7 @@ onMounted(load)
 .zone-icon-wrap { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink:0}
 .zone-froid { background: #EFF6FF; color:var(--info)}
 .zone-ambiant { background: var(--primary-50); }
-.zone-stocks { border-top: 1px solid var(--border-light); margin-top: 14px; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.zone-stocks { border-top: 1px solid var(--border-light); margin-top: 14px; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
 .stock-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; font-size: 13px; background:var(--surface); border:1px solid var(--border-light); border-radius:var(--radius-sm)}
 .stock-row:hover{ border-color:var(--border); background:white}
 .stock-info { display: flex; align-items: center; gap: 10px; }

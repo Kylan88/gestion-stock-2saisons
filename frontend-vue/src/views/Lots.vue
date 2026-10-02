@@ -51,6 +51,7 @@
             <th>Poids Frais</th>
             <th title="Reçu − reste backend (même chiffre que la page Murisserie)">Traité (réel)</th>
             <th title="% traité réel en murisserie, avancement du parcours ensuite">Progression</th>
+            <th title="Poids sec final / poids frais — renseigné à la clôture du conditionnement">Rendement</th>
             <th>Statut</th>
             <th>Workflow</th>
             <th></th>
@@ -74,6 +75,10 @@
                   <span class="progress-pct">{{ lotProgressPct(lot) }}%</span>
                 </div>
               </td>
+              <td>
+                <span v-if="lot.rendement_global != null" class="rendement-val">{{ lot.rendement_global }}%</span>
+                <span v-else class="text-muted">—</span>
+              </td>
               <td><StatusBadge :status="lot.statut" /></td>
               <td style="min-width:240px"><WorkflowProgress :statut="lot.statut" /></td>
               <td>
@@ -86,7 +91,7 @@
               </td>
             </tr>
             <tr v-if="expanded === lot.id && etapes[lot.id]" class="etapes-row">
-              <td colspan="8" style="padding:0">
+              <td colspan="9" style="padding:0">
                 <div class="etapes-expand anim-expand">
                   <div v-for="e in etapes[lot.id]" :key="e.id" class="etape-item">
                     <div class="etape-left">
@@ -148,7 +153,7 @@ const toast = useToastStore()
 
 const statuts = [RECEPTION, EN_MURISSERIE, EN_PRODUCTION, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
 
-function formatKg(v) { return Math.round(v || 0).toLocaleString('fr-FR') }
+function formatKg(v) { return Number(v || 0).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) }
 
 // Poids total reçu de tous les lots affichés (somme des poids frais).
 const totalPoidsRecu = computed(() => lots.value.reduce((sum, l) => sum + (l.poids_frais || 0), 0))
@@ -266,6 +271,7 @@ onMounted(loadLots)
 
 <style scoped>
 .filters { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.rendement-val { font-weight: 700; color: var(--primary); }
 .lots-total { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: var(--text-secondary); }
 .lots-total strong { color: var(--text); font-size: 14px; }
 .lots-total .dot { color: var(--text-muted); }

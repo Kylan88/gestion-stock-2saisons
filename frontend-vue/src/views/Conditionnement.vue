@@ -172,7 +172,7 @@
     <ConfirmDialog
       :show="!!confirmClotureLot"
       :title="'Valider la journée du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Valider le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le stock sera alimenté et le lot restera ouvert ; s\u2019il est épuisé il basculera seul en chambre froide.'"
+      :message="'Valider le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot restera ouvert ; pensez ensuite au transfert vers la chambre froide.'"
       confirmText="Valider"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"

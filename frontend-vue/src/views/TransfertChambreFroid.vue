@@ -13,7 +13,7 @@
     <div v-else-if="lots.length === 0" class="empty anim-fade">
       <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
       <div class="empty-text">Aucun carton en attente de transfert</div>
-      <div style="font-size:12px;color:var(--text-muted);margin-top:6px">Les saisies alimentent déjà la chambre froide — voir les demandes récentes ci-dessous</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:6px">Les cartons arrivent ici après chaque saisie de conditionnement — créez une demande puis validez-la</div>
     </div>
 
     <div v-for="lot in lots" :key="lot.id" class="card anim-fade" style="margin-bottom:16px">
