@@ -92,13 +92,13 @@ export async function updateEtape(etapeId, payload) {
   const { data } = await api.put(`/production/etapes/${etapeId}`, payload)
   return data
 }
-export async function validerMusserie(lotId, payload) {
-  const { data } = await api.post(`/production/musserie/${lotId}`, payload)
+export async function validerMurisserie(lotId, payload) {
+  const { data } = await api.post(`/production/murisserie/${lotId}`, payload)
   return data
 }
-export async function cloturerMusserie(lotId, date = null) {
+export async function cloturerMurisserie(lotId, date = null) {
   const params = date ? { date } : {}
-  const { data } = await api.post(`/production/musserie/${lotId}/cloturer`, null, { params })
+  const { data } = await api.post(`/production/murisserie/${lotId}/cloturer`, null, { params })
   return data
 }
 export async function validerProduction(lotId, payload) {
@@ -109,8 +109,9 @@ export async function getDryersProduction(lotId) {
   const { data } = await api.get(`/production/dryers/${lotId}`)
   return data
 }
-export async function cloturerProduction(lotId) {
-  const { data } = await api.post(`/production/cloturer/${lotId}`)
+export async function cloturerProduction(lotId, date = null) {
+  const params = date ? { date } : {}
+  const { data } = await api.post(`/production/cloturer/${lotId}`, null, { params })
   return data
 }
 
@@ -119,8 +120,9 @@ export async function validerConditionnement(lotId, payload) {
   const { data } = await api.post(`/conditionnement/lots/${lotId}`, payload)
   return data
 }
-export async function cloturerConditionnement(lotId) {
-  const { data } = await api.post(`/conditionnement/lots/${lotId}/cloturer`)
+export async function cloturerConditionnement(lotId, date = null) {
+  const params = date ? { date } : {}
+  const { data } = await api.post(`/conditionnement/lots/${lotId}/cloturer`, null, { params })
   return data
 }
 export async function getConditionnementDryersDisponibles(lotId, date = null) {
@@ -141,6 +143,10 @@ export async function getConditionnementEntries(params = {}) {
 // ── Stock / Zones ──
 export async function getZonesStock(params = {}) {
   const { data } = await api.get('/stock/zones', { params })
+  return data
+}
+export async function createZoneStock(payload) {
+  const { data } = await api.post('/stock/zones', payload)
   return data
 }
 export async function getStock(params = {}) {
@@ -230,9 +236,9 @@ export async function getReconditionnements(params = {}) {
   return data
 }
 
-// ── Historique Musserie ──
-export async function getHistoriqueMusserie(params = {}) {
-  const { data } = await api.get('/production/musserie/historique', { params })
+// ── Historique Murisserie ──
+export async function getHistoriqueMurisserie(params = {}) {
+  const { data } = await api.get('/production/murisserie/historique', { params })
   return data
 }
 
@@ -242,9 +248,9 @@ export async function getHistoriqueProduction(params = {}) {
   return data
 }
 
-// ── Musserie by date/dryer for production ──
-export async function getMusserieByDateDryer(lotId, date) {
-  const { data } = await api.get(`/production/musserie/${lotId}/by-date-dryer`, { params: { date } })
+// ── Murisserie by date/dryer for production ──
+export async function getMurisserieByDateDryer(lotId, date) {
+  const { data } = await api.get(`/production/murisserie/${lotId}/by-date-dryer`, { params: { date } })
   return data
 }
 

@@ -27,7 +27,7 @@ def liste_statuts():
     """Liste des statuts possibles pour les lots."""
     return [
         statuses.RECEPTION,
-        statuses.EN_MUSSERIE,
+        statuses.EN_MURISSERIE,
         statuses.EN_PRODUCTION,
         statuses.EN_CONDITIONNEMENT,
         statuses.CONDITIONNE,
@@ -52,7 +52,7 @@ def creer_lot(data: schemas.LotCreate, db: Session = Depends(get_db)):
 @router.put("/{lot_id}/statut", response_model=schemas.LotResponse)
 def mettre_a_jour_statut(lot_id: int, statut: str = Query(..., description="Nouveau statut"),
                          db: Session = Depends(get_db)):
-    """Change le statut d'un lot (ex: reception → en musserie → etc.)."""
+    """Change le statut d'un lot (ex: reception → en murisserie → etc.)."""
     try:
         lot = crud.changer_statut_lot(db, lot_id, statut)
     except ValueError as e:

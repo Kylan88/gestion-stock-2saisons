@@ -17,10 +17,10 @@
             <span v-if="lot.rendement_global" class="lot-rdt">{{ lot.rendement_global }}%</span>
           </div>
           <div v-if="col.key === 'reception'" class="lot-action">
-            <button class="btn btn-sm btn-primary" @click.stop="$emit('avancer', lot.id, 'en_musserie')">→ Musserie</button>
+            <button class="btn btn-sm btn-primary" @click.stop="$emit('avancer', lot.id, 'en_murisserie')">→ Murisserie</button>
           </div>
-          <div v-else-if="col.key === 'en_musserie'" class="lot-action">
-            <button class="btn btn-sm btn-outline" @click.stop="$emit('goMusserie')">Ouvrir</button>
+          <div v-else-if="col.key === 'en_murisserie'" class="lot-action">
+            <button class="btn btn-sm btn-outline" @click.stop="$emit('goMurisserie')">Ouvrir</button>
           </div>
           <div v-else-if="col.key === 'conditionne'" class="lot-action">
             <button class="btn btn-sm btn-outline" @click.stop="$emit('goTransfert')">Transférer CF</button>
@@ -37,7 +37,7 @@ import { toCanonical } from '../utils/statuses'
 
 const COLS = [
   { key: 'reception', label: 'Réception', color: '#165B3D' },
-  { key: 'en_musserie', label: 'Musserie', color: '#F59E0B' },
+  { key: 'en_murisserie', label: 'Murisserie', color: '#F59E0B' },
   { key: 'en_production', label: 'Production', color: '#3B82F6' },
   { key: 'conditionne', label: 'Conditionnement', color: '#8B5CF6' },
   { key: 'en_stock', label: 'Stock', color: '#22C55E' },
@@ -47,7 +47,7 @@ const props = defineProps({
   lots: { type: Array, default: () => [] },
 })
 
-defineEmits(['selectLot', 'avancer', 'goMusserie', 'goTransfert'])
+defineEmits(['selectLot', 'avancer', 'goMurisserie', 'goTransfert'])
 
 const columns = computed(() => {
   return COLS.map(col => ({

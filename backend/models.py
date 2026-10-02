@@ -31,6 +31,8 @@ class Produit(Base):
     categorie_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     unite_mesure = Column(String(20), default="kg")
     stock_min = Column(Float, default=0.0)
+    # Nombre de cartons en stock (colonne dédiée : stock_min reste le seuil d'alerte).
+    cartons = Column(Float, default=0.0)
     stock_actuel = Column(Float, default=0.0)
     prix_unitaire = Column(Float, default=0.0)
     description = Column(Text, default="")
@@ -99,11 +101,14 @@ class EtapeProduction(Base):
     date_fin = Column(DateTime, nullable=True)
     poids_entree = Column(Float, default=0.0)
     poids_sortie = Column(Float, default=0.0)
+    # Production : poids de pulpe avant séchage. Le poids sec est saisi à la
+    # sortie du dryer et sert de référence au conditionnement.
+    poids_sec_kg = Column(Float, nullable=True)
     perte = Column(Float, default=0.0)
     rendement_pourcentage = Column(Float, nullable=True)
     operateur = Column(String(100), default="")
     notes = Column(Text, default="")
-    # Musserie — détails de tri (Tableau 1 & 2)
+    # Murisserie — détails de tri (Tableau 1 & 2)
     fruits_murs_kg = Column(Float, default=0.0)
     dechets_tri_kg = Column(Float, default=0.0)
     dechets_lavage_kg = Column(Float, default=0.0)
@@ -134,7 +139,7 @@ class Chariot(Base):
     quantite_totale = Column(Float, default=0.0)
     operateur = Column(String(100), default="")
     heure_remplissage = Column(String(10), default="")
-    heure_entree_sechoir = Column(String(10), default="")
+    heure_entree_dryer = Column(String(10), default="")
     created_at = Column(DateTime, default=datetime.now)
 
     etape = relationship("EtapeProduction", back_populates="chariots")
@@ -205,6 +210,7 @@ class LigneCommande(Base):
     produit_id = Column(Integer, ForeignKey("produits.id"), nullable=False)
     lot_id = Column(Integer, ForeignKey("lots.id"), nullable=True)
     quantite = Column(Float, nullable=False)
+    unite = Column(String(10), default="carton")
     prix_unitaire = Column(Float, default=0.0)
 
     commande = relationship("Commande", back_populates="lignes")
@@ -249,6 +255,12 @@ class Reconditionnement(Base):
     nb_sachets_100g_sortie = Column(Integer, default=0)
     dechet_kg = Column(Float, default=0.0)
     nb_sachets_sortis = Column(Integer, default=0)
+    # Rhum arrangé obtenu depuis ces cartons (source local ou fitini fê uniquement)
+    rhum_cartons_sortie = Column(Integer, default=0)
+    rhum_sachets_sortis = Column(Integer, default=0)
+    rhum_poids_sachet = Column(Float, default=2.5)
+    # Rhum en vrac (kg) : quand la quantité obtenue ne remplit ni cartons ni sachets
+    rhum_poids_vrac_kg = Column(Float, default=0.0)
     responsable = Column(String(100), default="")
     notes = Column(Text, default="")
     statut = Column(String(20), default=statuses.TERMINE)

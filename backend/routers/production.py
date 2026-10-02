@@ -9,31 +9,31 @@ from models import Lot
 
 router = APIRouter(prefix="/api/production", tags=["Production"])
 
-@router.post("/musserie/{lot_id}", response_model=schemas.EtapeProductionResponse)
-def valider_musserie(lot_id: int, data: schemas.MusserieCreate,
+@router.post("/murisserie/{lot_id}", response_model=schemas.EtapeProductionResponse)
+def valider_murisserie(lot_id: int, data: schemas.MurisserieCreate,
                      db: Session = Depends(get_db)):
-    """Enregistre une session journalière de musserie (cumul)."""
+    """Enregistre une session journalière de murisserie (cumul)."""
     try:
-        ep = crud.valider_musserie(db, lot_id, **data.model_dump())
+        ep = crud.valider_murisserie(db, lot_id, **data.model_dump())
         if not ep:
             raise HTTPException(404, f"Lot {lot_id} introuvable")
         return ep
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-@router.post("/musserie/{lot_id}/cloturer")
-def cloturer_musserie(lot_id: int, date: str | None = Query(None, description="Date ISO (YYYY-MM-DD) pour clôturer seulement ce jour"), db: Session = Depends(get_db)):
-    """Clôture la musserie d'un lot. Si date fournie, clôture seulement ce jour ; sinon clôture tout et passe en production."""
+@router.post("/murisserie/{lot_id}/cloturer")
+def cloturer_murisserie(lot_id: int, date: str | None = Query(None, description="Date ISO (YYYY-MM-DD) pour clôturer seulement ce jour"), db: Session = Depends(get_db)):
+    """Clôture la murisserie d'un lot. Si date fournie, clôture seulement ce jour ; sinon clôture tout et passe en production."""
     try:
-        return crud.cloturer_musserie(db, lot_id, date)
+        return crud.cloturer_murisserie(db, lot_id, date)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-@router.get("/musserie/{lot_id}/by-date-dryer")
-def get_musserie_by_date_dryer(lot_id: int, date: str = Query(..., description="Date ISO (YYYY-MM-DD)"), db: Session = Depends(get_db)):
-    """Retourne les étapes musserie d'un lot pour une date donnée, groupées par dryer."""
+@router.get("/murisserie/{lot_id}/by-date-dryer")
+def get_murisserie_by_date_dryer(lot_id: int, date: str = Query(..., description="Date ISO (YYYY-MM-DD)"), db: Session = Depends(get_db)):
+    """Retourne les étapes murisserie d'un lot pour une date donnée, groupées par dryer."""
     try:
-        return crud.get_musserie_by_date_dryer(db, lot_id, date)
+        return crud.get_murisserie_by_date_dryer(db, lot_id, date)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -53,10 +53,10 @@ def get_dryers(lot_id: int, db: Session = Depends(get_db)):
     return crud.get_dryers_production(db, lot_id)
 
 @router.post("/cloturer/{lot_id}", response_model=schemas.EtapeProductionResponse)
-def cloturer_production(lot_id: int, db: Session = Depends(get_db)):
-    """Clôture la production d'un lot (passe le statut à terminé)."""
+def cloturer_production(lot_id: int, date: str | None = Query(None, description="Date ISO YYYY-MM-DD pour clôturer seulement cette journée"), db: Session = Depends(get_db)):
+    """Clôture les dryers d'une journée sans fermer le lot."""
     try:
-        ep = crud.cloturer_production(db, lot_id)
+        ep = crud.cloturer_production(db, lot_id, date)
         return ep
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -64,7 +64,7 @@ def cloturer_production(lot_id: int, db: Session = Depends(get_db)):
 @router.get("/etapes", response_model=List[schemas.EtapeProductionResponse])
 def lister_etapes(lot_id: int = Query(..., description="ID du lot"),
                   db: Session = Depends(get_db)):
-    """Liste les étapes de production d'un lot (musserie → conditionnement)."""
+    """Liste les étapes de production d'un lot (murisserie → conditionnement)."""
     return crud.get_etapes_lot(db, lot_id)
 
 @router.get("/etapes/{etape_id}", response_model=schemas.EtapeProductionResponse)
@@ -111,11 +111,11 @@ def mettre_a_jour_etape(etape_id: int, data: schemas.EtapeProductionUpdate,
             db.commit()
     return ep
 
-# ── HISTORIQUE MUSSERIE ──
+# ── HISTORIQUE MURISSERIE ──
 
-@router.get("/musserie/historique")
-def historique_musserie(lot_id: int = None, db: Session = Depends(get_db)):
-    return crud.get_historique_musserie(db, lot_id)
+@router.get("/murisserie/historique")
+def historique_murisserie(lot_id: int = None, db: Session = Depends(get_db)):
+    return crud.get_historique_murisserie(db, lot_id)
 
 @router.get("/production/historique")
 def historique_production(lot_id: int = None, db: Session = Depends(get_db)):
@@ -134,11 +134,11 @@ def detecter_anomalies(db: Session = Depends(get_db)):
 
 @router.get("/rappels")
 def get_rappels(seuil_heures: int = Query(24, ge=1, le=168), db: Session = Depends(get_db)):
-    """Lots bloqués à une étape depuis > seuil_heures (musserie d'hier sans chariots aujourd'hui, etc.)."""
+    """Lots bloqués à une étape depuis > seuil_heures (murisserie d'hier sans chariots aujourd'hui, etc.)."""
     return crud.get_rappels(db, seuil_heures)
 
 
-# ── PRODUCTION / RENDEMENT (Calculé automatiquement depuis la musserie) ──
+# ── PRODUCTION / RENDEMENT (Calculé automatiquement depuis la murisserie) ──
 
 @router.get("/config", response_model=schemas.CompanySettingsResponse)
 def get_production_config(db: Session = Depends(get_db)):
@@ -162,11 +162,11 @@ def list_production_entries(
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    """Liste les entrées de production calculées depuis la musserie (par lot/date)."""
+    """Liste les entrées de production calculées depuis la murisserie (par lot/date)."""
     return crud.get_production_entries(db, date_from, date_to, fruit_type, saison_id, skip, limit)
 
 
 @router.get("/stats", response_model=schemas.ProductionStats)
 def get_production_stats(db: Session = Depends(get_db)):
-    """Stats globales calculées depuis la musserie."""
+    """Stats globales calculées depuis la murisserie."""
     return crud.get_production_stats(db)

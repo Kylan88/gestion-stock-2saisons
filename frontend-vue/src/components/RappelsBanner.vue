@@ -3,14 +3,14 @@
     <div class="rappels-header">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <strong>{{ rappels.length }} lot(s) en attente</strong>
-      <span style="font-size:11px;color:var(--text-muted)">— musserie d'hier sans chariots aujourd'hui ou étape bloquée >24h</span>
+      <span style="font-size:11px;color:var(--text-muted)">— murisserie d'hier sans chariots aujourd'hui ou étape bloquée >24h</span>
     </div>
     <div class="rappels-list">
       <div v-for="r in rappels" :key="r.lot_id + '_' + r.dryer + '_' + r.etape" class="rappel-item" :class="r.severite">
         <span class="rappel-lot">{{ r.code_lot }}</span>
         <span class="rappel-msg">{{ r.message }}</span>
         <router-link v-if="r.etape==='production'" :to="'/production/chariots'" class="btn btn-sm btn-outline">Aller → Chariots</router-link>
-        <router-link v-else-if="r.etape==='musserie'" :to="'/musserie'" class="btn btn-sm btn-outline">Aller → Musserie</router-link>
+        <router-link v-else-if="r.etape==='murisserie'" :to="'/murisserie'" class="btn btn-sm btn-outline">Aller → Murisserie</router-link>
       </div>
     </div>
   </div>

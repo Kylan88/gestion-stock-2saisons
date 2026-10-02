@@ -18,10 +18,10 @@ def valider_conditionnement(lot_id: int, data: schemas.ConditionnementCreate,
         raise HTTPException(400, str(e))
 
 @router.post("/lots/{lot_id}/cloturer", response_model=dict)
-def cloturer_conditionnement(lot_id: int, db: Session = Depends(get_db)):
-    """Clôture le conditionnement et passe le lot à conditionne."""
+def cloturer_conditionnement(lot_id: int, date: Optional[str] = Query(None, description="Date ISO YYYY-MM-DD de la journée à figer"), db: Session = Depends(get_db)):
+    """Fige la journée de conditionnement. Ne ferme jamais le lot : bascule auto vers 'conditionne' si épuisé."""
     try:
-        return crud.cloturer_conditionnement(db, lot_id)
+        return crud.cloturer_conditionnement(db, lot_id, date)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -38,7 +38,8 @@ def valider_conditionnement_dryer(lot_id: int, data: schemas.ConditionnementEntr
     """Conditionnement pour 1 dryer à J+1 (vérifie prod veille)."""
     try:
         res = crud.valider_conditionnement_dryer(db, lot_id, data.dryer, **data.model_dump(exclude={"dryer"}))
-        return {"ok": True, "entry_id": res["entry"].id, "lot_id": lot_id, "dryer": data.dryer}
+        stock = res.get("stock") or {}
+        return {"ok": True, "entry_id": res["entry"].id, "lot_id": lot_id, "dryer": data.dryer, "poids_sec_kg": res.get("poids_sec_kg", 0.0), "is_update": res.get("is_update", False), "lot_epuise": res.get("lot_epuise", False), "stock_alimente": stock.get("alimente", False), "stock_cartons": stock.get("cartons", 0), "stock_zones": stock.get("zones", [])}
     except ValueError as e:
         raise HTTPException(400, str(e))
 

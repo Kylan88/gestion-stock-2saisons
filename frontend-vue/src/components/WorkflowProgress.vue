@@ -27,7 +27,7 @@ import { toCanonical } from '../utils/statuses'
 
 const WORKFLOW = [
   { key: 'reception', label: 'Réception' },
-  { key: 'en_musserie', label: 'Musserie' },
+  { key: 'en_murisserie', label: 'Murisserie' },
   { key: 'en_production', label: 'Production' },
   { key: 'en_conditionnement', label: 'Conditionnement' },
   { key: 'conditionne', label: 'Conditionné' },

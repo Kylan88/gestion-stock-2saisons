@@ -90,20 +90,70 @@
     <!-- Liste des lots -->
     <LoadingSpinner v-if="loading" />
     <template v-else>
-      <EmptyState v-if="lots.length === 0" text="Aucun lot réceptionné" subtext="Créez votre premier lot avec le bouton ci-dessus">
+      <EmptyState v-if="lots.length === 0 && allLots.length === 0" text="Aucun lot réceptionné" subtext="Créez votre premier lot avec le bouton ci-dessus">
         <button v-if="!showForm" class="btn btn-outline" @click="showForm = true; resetForm(); $nextTick(() => firstInput?.focus())">
           + Nouveau Lot
         </button>
       </EmptyState>
+
+      <div v-else-if="lots.length === 0" class="anim-fade">
+        <div class="reception-ok">
+          <div class="reception-ok-icon">✓</div>
+          <div class="reception-ok-text">
+            <strong>Réception à jour</strong>
+            <span>{{ allLots.length }} lot(s) en murisserie — en attente de tri</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button v-if="!showForm" class="btn btn-primary btn-sm" @click="showForm = true; resetForm(); $nextTick(() => firstInput?.focus())">
+              + Nouveau Lot
+            </button>
+            <router-link to="/lots" class="btn btn-ghost btn-sm">Voir les lots →</router-link>
+          </div>
+        </div>
+
+        <div class="recent-title">Derniers lots enregistrés</div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
+        </div>
+        <div class="table-wrap anim-fade">
+          <table>
+            <thead>
+              <tr>
+                <th>Code Lot</th>
+                <th>Produit</th>
+                <th>Fournisseur</th>
+                <th>Poids</th>
+                <th>Date</th>
+                <th>Statut</th>
+                <th>Workflow</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="lot in recentLots" :key="lot.id">
+                <td><strong>{{ lot.code_lot }}</strong></td>
+                <td>{{ lot.type_fruit || lot.produit?.nom || '—' }}</td>
+                <td>{{ lot.fournisseur_nom || lot.fournisseur?.nom || '—' }}</td>
+                <td>{{ lot.poids_frais }} kg</td>
+                <td>{{ lot.date_reception?.slice(0, 10) }}</td>
+                <td><StatusBadge :status="lot.statut" /></td>
+                <td style="min-width:260px"><WorkflowProgress :statut="lot.statut" /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div v-else class="table-wrap anim-fade">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <div style="font-size:13px;color:var(--text-muted)">
             <strong>{{ lots.length }}</strong> lot(s) en réception
           </div>
+          <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" @click="doExportExcel">Excel</button>
           <button v-if="!showForm" class="btn btn-outline btn-sm" @click="showForm = true; resetForm(); $nextTick(() => firstInput?.focus())">
             + Nouveau Lot
           </button>
+          </div>
         </div>
 
         <table>
@@ -129,7 +179,7 @@
               <td><StatusBadge :status="lot.statut" /></td>
               <td style="min-width:260px"><WorkflowProgress :statut="lot.statut" /></td>
               <td>
-                <button class="btn btn-sm btn-primary" @click="lancerMusserie(lot)">→ Musserie</button>
+                <button class="btn btn-sm btn-primary" @click="lancerMurisserie(lot)">→ Murisserie</button>
               </td>
             </tr>
           </tbody>
@@ -142,8 +192,9 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick, computed, watch } from 'vue'
 import { getLots, createLot, updateLotStatut, getFournisseurs } from '../api'
+import { exportWorkbook, todayStamp } from '../utils/exportExcel'
 import { getProductionConfig } from '../api'
-import { RECEPTION, EN_MUSSERIE } from '../utils/statuses'
+import { RECEPTION, EN_MURISSERIE } from '../utils/statuses'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -153,6 +204,12 @@ import WorkflowProgress from '../components/WorkflowProgress.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
 
 const lots = ref([])
+const allLots = ref([])
+const recentLots = computed(() => {
+  return [...allLots.value]
+    .sort((a, b) => new Date(b.date_reception || 0) - new Date(a.date_reception || 0))
+    .slice(0, 5)
+})
 const loading = ref(true)
 const saving = ref(false)
 const showForm = ref(false)
@@ -180,7 +237,7 @@ const canSave = computed(() => {
 function formatPoids(kg) {
   if (!kg) return '0'
   if (kg >= 1000) return (kg / 1000).toFixed(2) + ' t'
-  return kg + ' kg'
+  return Number(kg).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) + ' kg'
 }
 
 function resetForm() {
@@ -222,7 +279,9 @@ async function loadFournisseurs() {
 async function load() {
   loading.value = true
   try {
-    lots.value = await getLots({ statut: RECEPTION })
+    const [rec, all] = await Promise.all([getLots({ statut: RECEPTION }), getLots()])
+    lots.value = rec
+    allLots.value = all || []
   } finally {
     loading.value = false
   }
@@ -255,12 +314,26 @@ async function save() {
   }
 }
 
-async function lancerMusserie(lot) {
+async function lancerMurisserie(lot) {
   try {
-    await updateLotStatut(lot.id, EN_MUSSERIE)
-    toast.success(`${lot.code_lot} envoyé en musserie`)
+    await updateLotStatut(lot.id, EN_MURISSERIE)
+    toast.success(`${lot.code_lot} envoyé en murisserie`)
     await load()
   } catch {}
+}
+
+function lotRow(l) {
+  return [l.code_lot || '', l.type_fruit || l.produit?.nom || '', l.fournisseur_nom || l.fournisseur?.nom || '',
+    l.poids_frais ?? '', (l.date_reception || '').slice(0, 10), l.statut || '']
+}
+
+function doExportExcel() {
+  const headers = ['Code Lot', 'Produit', 'Fournisseur', 'Poids (kg)', 'Date', 'Statut']
+  const sheets = []
+  if (lots.value.length) sheets.push({ name: 'En réception', headers, rows: lots.value.map(lotRow) })
+  if (recentLots.value.length) sheets.push({ name: 'Derniers lots', headers, rows: recentLots.value.map(lotRow) })
+  if (!sheets.length) { toast.warning('Rien à exporter'); return }
+  exportWorkbook(sheets, `reception-${todayStamp()}.xlsx`)
 }
 
 onMounted(async () => {
@@ -300,6 +373,27 @@ onMounted(async () => {
   color: var(--text-secondary);
 }
 .action-info strong { color: var(--dark); font-weight: 700; }
+
+/* Bandeau réception à jour + derniers lots */
+.reception-ok {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 20px; margin-bottom: 16px;
+  background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+  border: 1px solid #86efac; border-radius: var(--radius-sm);
+}
+.reception-ok-icon {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: #16a34a; color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; flex-shrink: 0;
+}
+.reception-ok-text { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.reception-ok-text strong { font-size: 15px; color: #14532d; }
+.reception-ok-text span { font-size: 12px; color: var(--text-secondary); }
+.recent-title {
+  font-size: 13px; font-weight: 700; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px 2px;
+}
 
 @media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr !important; }
