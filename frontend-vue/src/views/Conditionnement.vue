@@ -23,6 +23,8 @@
       <template #meta><div class="flow-metric"><strong>{{ lots.length }}</strong><span>à finaliser</span></div></template>
     </WorkflowFrame>
 
+    <RappelsBanner />
+
     <!-- HISTORIQUE -->
     <div v-if="activeView === 'historique'" class="anim-fade">
       <LoadingSpinner v-if="loadingHist" />
@@ -60,7 +62,7 @@
 
       <div v-if="lots.length > 1" class="lot-nav">
         <span class="lot-nav-label">Aller à :</span>
-        <button v-for="lot in lots" :key="lot.id" class="lot-nav-pill" :class="{active: expandedLotId === lot.id}" @click="scrollToLot(lot.id)">{{ lot.code_lot }}</button>
+        <button v-for="lot in lots" :key="lot.id" class="lot-nav-pill" :class="{active: expandedLotId === lot.id}" @click="scrollToLot(lot.id)">{{ lot.code_lot }} <small>({{ totalCartonsLot(lot) }} cart.)</small></button>
         <button class="lot-nav-pill ghost" @click="expandedLotId = expandedLotId ? null : lots[0]?.id">{{ expandedLotId ? 'Tout réduire' : 'Tout ouvrir' }}</button>
       </div>
 
@@ -74,8 +76,17 @@
             <span style="font-size:11px;color:var(--text-muted)">J+1</span>
           </div>
           <div class="lot-header-right">
+            <span class="lot-recap"><strong>{{ totalCartonsLot(lot) }}</strong> cartons</span>
+            <span class="lot-recap reste">Dryers : <strong>{{ dryersProgress(lot).done }}/{{ dryersProgress(lot).total }}</strong></span>
             <span class="expand-icon">{{ expandedLotId === lot.id ? '▲' : '▼' }}</span>
           </div>
+        </div>
+        <!-- Progression dryers du jour -->
+        <div class="lot-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: dryersProgressPct(lot) + '%' }"></div>
+          </div>
+          <span class="progress-label">{{ dryersProgressPct(lot) }}% saisi</span>
         </div>
         <template v-if="expandedLotId === lot.id">
 
@@ -187,6 +198,7 @@ import { getLots, getProductionsEtapes, validerConditionnement, cloturerConditio
 import { exportExcel, todayStamp } from '../utils/exportExcel'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import RappelsBanner from '../components/RappelsBanner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -304,6 +316,22 @@ function recalcDryer(lotId, dryer) {
   ecarts[key] = ecartValDryer(lotId, dryer)
 }
 
+// Récap en-tête : cartons conditionnés + avancement dryers du jour.
+function totalCartonsLot(lot) {
+  return (lot.export_cartons || 0) + (lot.local_cartons || 0) + (lot.dechets_cartons || 0) +
+         (lot.rhum_cartons || 0) + (lot.fitini_fe_cartons || 0)
+}
+function dryersProgress(lot) {
+  const total = (condDryersAvailable[lot.id] || []).length
+  const done = (condDryersAvailable[lot.id] || []).filter(d => isCondValidated(lot.id, d)).length
+  return { done, total }
+}
+function dryersProgressPct(lot) {
+  const { done, total } = dryersProgress(lot)
+  if (!total) return 0
+  return Math.min(100, Math.round((done / total) * 100))
+}
+
 function hasCumul(lot) {
   // Entrées du jour uniquement : celles de la veille disparaissent chaque matin.
   return todayEntriesList(lot).some(e =>
@@ -358,18 +386,6 @@ function ecartCumul(lot) {
   const total = totalCumulPoids(lot)
   if (!ref || !total) return null
   return Math.round(Math.abs(ref - total) / ref * 10000) / 100
-}
-
-function resteConditionnement(lot) {
-  const ref = refEntree(lot)
-  const cond = totalCumulPoids(lot)
-  return Math.round(Math.max(0, ref - cond) * 100) / 100
-}
-
-function progressConditionnement(lot) {
-  const ref = refEntree(lot)
-  if (!ref) return 0
-  return Math.min(100, Math.round((totalCumulPoids(lot) / ref) * 100))
 }
 
 function scrollToLot(lotId) {

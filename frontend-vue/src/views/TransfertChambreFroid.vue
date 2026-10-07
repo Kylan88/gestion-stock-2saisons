@@ -77,19 +77,23 @@
 
     <div v-if="demandes.length > 0" style="margin-top:24px">
       <h2 style="font-size:16px;font-weight:600;margin-bottom:12px">Demandes récentes</h2>
-      <div v-for="d in demandes" :key="d.id" class="card anim-fade" style="margin-bottom:8px;padding:12px 16px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <strong>{{ d.lot?.code_lot || d.lot_id }}</strong>
-            <span style="margin-left:8px;font-size:12px;color:var(--text-muted)">{{ new Date(d.date_demande).toLocaleDateString() }}</span>
-          </div>
-          <StatusBadge :status="d.statut" />
-        </div>
-        <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">
-          <span v-for="l in d.lignes" :key="l.id" style="margin-right:12px">
-            {{ l.type_flux }}: {{ l.nb_cartons }} → CF{{ l.zone_id }}
-          </span>
-        </div>
+      <div class="table-wrap demande-table">
+        <table class="table">
+          <thead><tr><th>Date</th><th>Lot</th><th>Statut</th><th>Détail</th><th>Responsable</th></tr></thead>
+          <tbody>
+            <tr v-for="d in demandes" :key="d.id">
+              <td>{{ d.date_demande ? new Date(d.date_demande).toLocaleDateString('fr-FR') : '—' }}</td>
+              <td><strong>{{ d.lot?.code_lot || d.lot_id }}</strong></td>
+              <td><StatusBadge :status="d.statut" /></td>
+              <td>
+                <span v-for="l in d.lignes" :key="l.id" class="line-chip">
+                  {{ l.type_flux }} : {{ l.nb_cartons }} → {{ l.zone?.nom || ('CF' + l.zone_id) }}
+                </span>
+              </td>
+              <td>{{ d.responsable || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -222,5 +226,7 @@ onMounted(load)
 .flux-info { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; }
 .flux-badge { padding: 2px 8px; border-radius: 99px; color: white; font-size: 11px; font-weight: 600; }
 .transfert-ok { padding: 16px; background: var(--success-light); border: 1px solid var(--success); border-radius: var(--radius-sm); text-align: center; font-weight: 600; color: var(--success); }
+.demande-table { overflow: auto; max-height: 340px; }
+.line-chip { display: inline-block; padding: 2px 8px; margin: 1px 6px 1px 0; background: var(--primary-50); color: var(--primary); border-radius: 10px; font-size: 11px; font-weight: 500; }
 .no-flux { padding: 12px; text-align: center; color: var(--text-muted); font-size: 13px; }
 </style>
