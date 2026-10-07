@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Reception from '../views/Reception.vue'
 import Dashboard from '../views/Dashboard.vue'
 import Lots from '../views/Lots.vue'
-import Musserie from '../views/Musserie.vue'
+import Murisserie from '../views/Murisserie.vue'
 import Production from '../views/Production.vue'
 import ProductionChariots from '../views/ProductionChariots.vue'
 import Conditionnement from '../views/Conditionnement.vue'
@@ -20,7 +20,7 @@ const routes = [
   { path: '/', name: 'Dashboard', component: Dashboard },
   { path: '/reception', name: 'Reception', component: Reception },
   { path: '/lots', name: 'Lots', component: Lots },
-  { path: '/musserie', name: 'Musserie', component: Musserie },
+  { path: '/murisserie', name: 'Murisserie', component: Murisserie },
   { path: '/production', name: 'Production', component: Production },
   { path: '/production/chariots', name: 'ProductionChariots', component: ProductionChariots },
   { path: '/conditionnement', name: 'Conditionnement', component: Conditionnement },

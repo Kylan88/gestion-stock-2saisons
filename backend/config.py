@@ -11,6 +11,10 @@ def get_db_url() -> str:
     """Retourne l'URL de connexion."""
     url = os.getenv("DATABASE_URL")
     if url:
+        # SQLAlchemy 2.x utilise le driver psycopg (v3) par défaut pour
+        # postgresql://, mais le projet dépend de psycopg2-binary.
+        if url.startswith("postgresql://"):
+            url = "postgresql+psycopg2://" + url[len("postgresql://"):]
         return url
     db_path = os.getenv("DB_PATH", "saisons_stock.db")
     print(f"[INFO] Fallback SQLite ({db_path})")

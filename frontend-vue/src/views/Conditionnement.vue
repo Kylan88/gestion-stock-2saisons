@@ -10,6 +10,7 @@
             Historique
           </button>
         </div>
+        <button v-if="activeView === 'historique'" class="btn btn-outline btn-sm" @click="doExportExcelHist">Excel</button>
       </template>
     </PageHeader>
 
@@ -21,6 +22,8 @@
     >
       <template #meta><div class="flow-metric"><strong>{{ lots.length }}</strong><span>à finaliser</span></div></template>
     </WorkflowFrame>
+
+    <RappelsBanner />
 
     <!-- HISTORIQUE -->
     <div v-if="activeView === 'historique'" class="anim-fade">
@@ -39,9 +42,9 @@
             <tr v-for="ep in historique" :key="ep.id">
               <td>{{ formatDate(ep.date_debut) }}</td>
               <td><strong>{{ ep.lot?.code_lot || ep.lot_id }}</strong></td>
-              <td>{{ ep.poids_entree }} kg</td>
-              <td>{{ ep.poids_sortie || '—' }} kg</td>
-              <td>{{ ep.rendement_pourcentage ? ep.rendement_pourcentage + '%' : '—' }}</td>
+              <td>{{ fmt(ep.poids_entree) }} kg</td>
+              <td>{{ ep.poids_sortie != null ? fmt(ep.poids_sortie) + ' kg' : '—' }}</td>
+              <td>{{ ep.rendement_pourcentage != null ? fmt(ep.rendement_pourcentage) + '%' : '—' }}</td>
               <td>{{ ep.operateur || '—' }}</td>
             </tr>
           </tbody>
@@ -59,7 +62,7 @@
 
       <div v-if="lots.length > 1" class="lot-nav">
         <span class="lot-nav-label">Aller à :</span>
-        <button v-for="lot in lots" :key="lot.id" class="lot-nav-pill" :class="{active: expandedLotId === lot.id}" @click="scrollToLot(lot.id)">{{ lot.code_lot }}</button>
+        <button v-for="lot in lots" :key="lot.id" class="lot-nav-pill" :class="{active: expandedLotId === lot.id}" @click="scrollToLot(lot.id)">{{ lot.code_lot }} <small>({{ totalCartonsLot(lot) }} cart.)</small></button>
         <button class="lot-nav-pill ghost" @click="expandedLotId = expandedLotId ? null : lots[0]?.id">{{ expandedLotId ? 'Tout réduire' : 'Tout ouvrir' }}</button>
       </div>
 
@@ -73,27 +76,28 @@
             <span style="font-size:11px;color:var(--text-muted)">J+1</span>
           </div>
           <div class="lot-header-right">
+            <span class="lot-recap"><strong>{{ totalCartonsLot(lot) }}</strong> cartons</span>
+            <span class="lot-recap reste">Dryers : <strong>{{ dryersProgress(lot).done }}/{{ dryersProgress(lot).total }}</strong></span>
             <span class="expand-icon">{{ expandedLotId === lot.id ? '▲' : '▼' }}</span>
           </div>
         </div>
-        <template v-if="expandedLotId === lot.id">
-
-        <!-- Barre de progression -->
+        <!-- Progression dryers du jour -->
         <div class="lot-progress">
           <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: progressConditionnement(lot) + '%' }"></div>
+            <div class="progress-fill" :style="{ width: dryersProgressPct(lot) + '%' }"></div>
           </div>
-          <span class="progress-label">{{ progressConditionnement(lot) }}% conditionné</span>
+          <span class="progress-label">{{ dryersProgressPct(lot) }}% saisi</span>
         </div>
+        <template v-if="expandedLotId === lot.id">
 
-         <!-- Déjà conditionné -->
+         <!-- Conditionné du jour (la veille disparaît chaque matin) -->
         <div v-if="hasCumul(lot)" class="cumul-section">
-          <div class="cumul-section-title">Déjà conditionné (cumul lot)</div>
+          <div class="cumul-section-title">Conditionné aujourd'hui</div>
           <div class="flux-grid">
             <div v-for="flux in getFluxList(lot)" :key="'cum-'+flux.key" class="flux-card">
               <div class="flux-head" :style="{ borderColor: flux.color }">
                 <span>{{ flux.label }}</span>
-                <span class="flux-weight">{{ cumulPoidsFlux(lot, flux.key) }} kg</span>
+                <span class="flux-weight">{{ fmt(cumulPoidsFlux(lot, flux.key)) }} kg</span>
               </div>
               <div class="flux-cumul-body">
                 <span><strong>{{ getCumulCartons(lot, flux.key) }}</strong> cartons</span>
@@ -103,12 +107,13 @@
             </div>
           </div>
           <div class="cumul-total">
-            <span>Total conditionné : <strong>{{ totalCumulPoids(lot) }} kg</strong></span>
-            <span v-if="ecartCumul(lot) != null">Écart : <strong>{{ ecartCumul(lot) }}%</strong></span>
+            <span>Total conditionné : <strong>{{ fmt(totalCumulPoids(lot)) }} kg</strong></span>
+            <span v-if="ecartCumul(lot) != null">Écart : <strong>{{ fmt(ecartCumul(lot)) }}%</strong></span>
           </div>
           <div class="cloture-row">
-            <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer le conditionnement' }}
+            <span v-if="toCanonical(lot.statut) === CONDITIONNE" class="badge badge-success">Lot épuisé ✓ — voir transfert</span>
+            <button v-else class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
+              {{ cloturing ? '...' : 'Valider la journée' }}
             </button>
           </div>
         </div>
@@ -127,7 +132,7 @@
                 <div v-for="flux in getFluxList(lot)" :key="flux.key+'-'+d" class="flux-card">
                   <div class="flux-head" :style="{ borderColor: flux.color }">
                     <span>{{ flux.label }}</span>
-                    <span class="flux-weight">{{ fluxPoidsDryer(lot.id, d, flux.key) }} kg</span>
+                    <span class="flux-weight">{{ fmt(fluxPoidsDryer(lot.id, d, flux.key)) }} kg</span>
                   </div>
                   <div class="flux-inputs">
                     <div class="form-row-flux">
@@ -148,8 +153,8 @@
                 </div>
               </div>
               <div class="bilan-bar">
-                <span>Dryer {{ d }} — Ajout : <strong>{{ totalPoidsDryer(lot.id, d) }} kg</strong></span>
-                <span>Écart : <strong>{{ ecartValDryer(lot.id, d) ?? '—' }}%</strong></span>
+                <span>Dryer {{ d }} — Ajout : <strong>{{ fmt(totalPoidsDryer(lot.id, d)) }} kg</strong></span>
+                <span>Écart : <strong>{{ ecartValDryer(lot.id, d) != null ? fmt(ecartValDryer(lot.id, d)) + '%' : '—' }}</strong></span>
               </div>
               <div class="form-row" style="margin-top:12px">
                 <div class="form-group" style="flex:2">
@@ -162,8 +167,8 @@
                 </div>
                 <div class="form-group" style="flex:0">
                   <label class="input-label">&nbsp;</label>
-                  <button class="btn btn-primary" :disabled="totalPoidsDryer(lot.id, d) <= 0 || saving" @click="enregistrerDryer(lot, d)">
-                    {{ saving ? '...' : 'Enreg. D' + d }}
+                  <button class="btn" :class="isCondValidated(lot.id, d) ? 'btn-outline' : 'btn-primary'" :disabled="totalPoidsDryer(lot.id, d) <= 0 || saving" @click="enregistrerDryer(lot, d)">
+                    {{ saving ? '...' : (isCondValidated(lot.id, d) ? 'Mettre à jour D' + d : 'Enregistrer D' + d) }}
                   </button>
                 </div>
               </div>
@@ -177,9 +182,9 @@
 
     <ConfirmDialog
       :show="!!confirmClotureLot"
-      :title="'Clôturer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Terminer le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot passera en chambre froide. Cette action est irréversible.'"
-      confirmText="Clôturer"
+      :title="'Valider la journée du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
+      :message="'Valider le conditionnement du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — Dryers ' + ((condDryersAvailable[confirmClotureLot?.id] || []).map(d=>'D'+d).join(', ') || 'D?') + ' (production veille). Le lot restera ouvert ; pensez ensuite au transfert vers la chambre froide.'"
+      confirmText="Valider"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
       @cancel="confirmClotureLot = null"
@@ -189,14 +194,16 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch, nextTick } from 'vue'
-import { getLots, getProductionsEtapes, validerConditionnement, cloturerConditionnement, getHistoriqueConditionnement, getZonesStock, creerDemandeTransfert, validerDemandeTransfert, getConditionnementDryersDisponibles, validerConditionnementDryer } from '../api'
+import { getLots, getProductionsEtapes, validerConditionnement, cloturerConditionnement, getHistoriqueConditionnement, getZonesStock, creerDemandeTransfert, validerDemandeTransfert, getConditionnementDryersDisponibles, validerConditionnementDryer, getConditionnementEntries } from '../api'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
+import RappelsBanner from '../components/RappelsBanner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import WorkflowFrame from '../components/WorkflowFrame.vue'
-import { toCanonical, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
+import { toCanonical, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK } from '../utils/statuses'
 
 const lots = ref([])
 const zones = ref([])
@@ -234,10 +241,24 @@ function formatDate(d) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+function fmt(v) { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '—' }
+function todayISO() { return new Date().toISOString().slice(0,10) }
+const condTodayEntries = reactive({}) // key lotId_dryer -> entry du jour
+function isCondValidated(lotId, dryer) { return !!condTodayEntries[lotId + '_' + dryer] }
 
 async function loadHistorique() {
   loadingHist.value = true
   try { historique.value = await getHistoriqueConditionnement() } finally { loadingHist.value = false }
+}
+
+function doExportExcelHist() {
+  const headers = ['Date', 'Lot', 'Poids entrée (kg)', 'Poids sortie (kg)', 'Rendement (%)', 'Opérateur']
+  const rows = historique.value.map(ep => [
+    ep.date_debut ? new Date(ep.date_debut).toLocaleDateString('fr-FR') : '',
+    ep.lot?.code_lot || ep.lot_id, ep.poids_entree ?? '', ep.poids_sortie ?? '',
+    ep.rendement_pourcentage ?? '', ep.operateur || '',
+  ])
+  exportExcel(headers, rows, `conditionnement-historique-${todayStamp()}.xlsx`, 'Conditionnement')
 }
 
 const allFluxes = [
@@ -295,28 +316,67 @@ function recalcDryer(lotId, dryer) {
   ecarts[key] = ecartValDryer(lotId, dryer)
 }
 
-function hasCumul(lot) {
+// Récap en-tête : cartons conditionnés + avancement dryers du jour.
+function totalCartonsLot(lot) {
   return (lot.export_cartons || 0) + (lot.local_cartons || 0) + (lot.dechets_cartons || 0) +
-         (lot.rhum_cartons || 0) + (lot['fitini_fe_cartons'] || 0) > 0
+         (lot.rhum_cartons || 0) + (lot.fitini_fe_cartons || 0)
+}
+function dryersProgress(lot) {
+  const total = (condDryersAvailable[lot.id] || []).length
+  const done = (condDryersAvailable[lot.id] || []).filter(d => isCondValidated(lot.id, d)).length
+  return { done, total }
+}
+function dryersProgressPct(lot) {
+  const { done, total } = dryersProgress(lot)
+  if (!total) return 0
+  return Math.min(100, Math.round((done / total) * 100))
+}
+
+function hasCumul(lot) {
+  // Entrées du jour uniquement : celles de la veille disparaissent chaque matin.
+  return todayEntriesList(lot).some(e =>
+    (e.export_cartons || 0) + (e.local_cartons || 0) + (e.dechets_cartons || 0) +
+    (e.rhum_cartons || 0) + (e.fitini_fe_cartons || 0) +
+    (e.export_sachets || 0) + (e.local_sachets || 0) + (e.dechets_sachets || 0) +
+    (e.rhum_sachets || 0) + (e.fitini_fe_sachets || 0) > 0)
+}
+
+function todayEntriesList(lot) {
+  const prefix = lot.id + '_'
+  const fromAvail = (condDryersAvailable[lot.id] || [])
+    .map(d => condTodayEntries[prefix + d])
+    .filter(Boolean)
+  if (fromAvail.length) return fromAvail
+  return Object.keys(condTodayEntries)
+    .filter(k => k.startsWith(prefix))
+    .map(k => condTodayEntries[k])
+    .filter(Boolean)
+}
+
+function entryPoidsSachet(e, key) {
+  const field = key === 'fitini_fe' ? 'fitini_fe_poids_sachet' : key + '_poids_sachet'
+  return e[field] || 2.5
 }
 
 function getCumulCartons(lot, key) {
   const field = key === 'fitini_fe' ? 'fitini_fe_cartons' : key + '_cartons'
-  return lot[field] || 0
+  return todayEntriesList(lot).reduce((s, e) => s + (e[field] || 0), 0)
 }
 function getCumulSachets(lot, key) {
   const field = key === 'fitini_fe' ? 'fitini_fe_sachets' : key + '_sachets'
-  return lot[field] || 0
+  return todayEntriesList(lot).reduce((s, e) => s + (e[field] || 0), 0)
 }
 function getPoidsSachet(lot, key) {
+  const list = todayEntriesList(lot)
+  if (list.length) return entryPoidsSachet(list[list.length - 1], key)
   const field = key === 'fitini_fe' ? 'fitini_fe_poids_sachet' : key + '_poids_sachet'
   return lot[field] || 2.5
 }
 function cumulPoidsFlux(lot, key) {
-  const cartons = getCumulCartons(lot, key)
-  const sachets = getCumulSachets(lot, key)
-  const p = getPoidsSachet(lot, key)
-  return Math.round(((cartons * 6) + sachets) * p * 100) / 100
+  const cartonsF = key === 'fitini_fe' ? 'fitini_fe_cartons' : key + '_cartons'
+  const sachetsF = key === 'fitini_fe' ? 'fitini_fe_sachets' : key + '_sachets'
+  return Math.round(todayEntriesList(lot).reduce((s, e) =>
+    s + (((e[cartonsF] || 0) * 6) + (e[sachetsF] || 0)) * entryPoidsSachet(e, key), 0) * 100) / 100
 }
 function totalCumulPoids(lot) {
   return Math.round(getFluxList(lot).reduce((s, fl) => s + cumulPoidsFlux(lot, fl.key), 0) * 100) / 100
@@ -326,18 +386,6 @@ function ecartCumul(lot) {
   const total = totalCumulPoids(lot)
   if (!ref || !total) return null
   return Math.round(Math.abs(ref - total) / ref * 10000) / 100
-}
-
-function resteConditionnement(lot) {
-  const ref = refEntree(lot)
-  const cond = totalCumulPoids(lot)
-  return Math.round(Math.max(0, ref - cond) * 100) / 100
-}
-
-function progressConditionnement(lot) {
-  const ref = refEntree(lot)
-  if (!ref) return 0
-  return Math.min(100, Math.round((totalCumulPoids(lot) / ref) * 100))
 }
 
 function scrollToLot(lotId) {
@@ -360,7 +408,7 @@ async function load() {
     zones.value = z.filter(zz => zz.actif)
 
     const result = []
-    const filtered = raw.filter(l => [EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
+    const filtered = raw.filter(l => [EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut)))
     for (const lot of filtered) {
       etapesData.value[lot.id] = await getProductionsEtapes(lot.id)
       const prodEtapes = etapesData.value[lot.id].filter(e => e.etape === 'production')
@@ -369,10 +417,16 @@ async function load() {
         if (!form[lot.id]) {
           form[lot.id] = reactive({})
         }
-        // init per dryer forms for available dryers J+1
+        // init per dryer forms pour les dryers disponibles J+1 — 1 dryer produit = 1 dryer à conditionner
         await loadCondDryers(lot.id)
-        const avail = condDryersAvailable[lot.id] || [1]
+        const avail = condDryersAvailable[lot.id] || []
+        // récupère les entrées du jour pour MAJ (une seule validation par dryer/jour)
+        let todayEntries = []
+        try { todayEntries = await getConditionnementEntries({ lot_id: lot.id, date: todayISO() }) } catch {}
         for (const d of avail) {
+          const entryToday = todayEntries.find(e => e.dryer === d)
+          const key = lot.id + '_' + d
+          condTodayEntries[key] = entryToday || null
           if (!form[lot.id][d]) {
             form[lot.id][d] = reactive({
               export_cartons: 0, export_sachets: 0, export_poids_sachet: lot.export_poids_sachet || 2.5,
@@ -382,6 +436,12 @@ async function load() {
               rhum_cartons: 0, rhum_sachets: 0, rhum_poids_sachet: lot.rhum_poids_sachet || 2.5,
               responsable: '', notes: '',
             })
+          }
+          if (entryToday) {
+            // pré-remplissage pour MAJ
+            for (const k of ['export_cartons','export_sachets','export_poids_sachet','local_cartons','local_sachets','local_poids_sachet','fitini_fe_cartons','fitini_fe_sachets','fitini_fe_poids_sachet','dechets_cartons','dechets_sachets','dechets_poids_sachet','rhum_cartons','rhum_sachets','rhum_poids_sachet','responsable','notes']) {
+              form[lot.id][d][k] = entryToday[k] ?? form[lot.id][d][k]
+            }
           }
         }
         if (!activeCondDryer[lot.id] && avail.length) activeCondDryer[lot.id] = avail[0]
@@ -413,34 +473,51 @@ async function load() {
   } finally { loading.value = false }
 }
 
+function stockMsg(stock) {
+  if (stock?.alimente) return ` — stock +${stock.cartons} cartons (${(stock.zones || []).join(', ')})`
+  return ''
+}
+function stockMsgDryer(res) {
+  if (res?.stock_alimente) return ` — stock +${res.stock_cartons} cartons (${(res.stock_zones || []).join(', ')})`
+  return ''
+}
+
 async function enregistrer(lot) {
   saving.value = true
   try {
-    await validerConditionnement(lot.id, form[lot.id])
-    toast.success(`Conditionnement enregistré pour ${lot.code_lot}`)
+    const res = await validerConditionnement(lot.id, form[lot.id])
+    toast.success(`Conditionnement enregistré pour ${lot.code_lot}` + stockMsg(res?.stock))
     await load()
   } finally { saving.value = false }
 }
 async function enregistrerDryer(lot, dryer) {
+  const isMaj = isCondValidated(lot.id, dryer)
   saving.value = true
   try {
     const payload = { dryer, ...form[lot.id][dryer] }
-    await validerConditionnementDryer(lot.id, payload)
-    toast.success(`Conditionnement D${dryer} enregistré pour ${lot.code_lot}`)
-    // bascule auto si autre dryer disponible
-    const avail = condDryersAvailable[lot.id] || []
-    const next = avail.find(d => d !== dryer)
-    if (next) activeCondDryer[lot.id] = next
+    const res = await validerConditionnementDryer(lot.id, payload)
+    toast.success((isMaj ? `Conditionnement D${dryer} mis à jour pour ${lot.code_lot}` : `Conditionnement D${dryer} enregistré pour ${lot.code_lot}`) + stockMsgDryer(res))
+    // bascule auto si autre dryer disponible et pas en MAJ
+    if (!isMaj) {
+      const avail = condDryersAvailable[lot.id] || []
+      const next = avail.find(d => d !== dryer)
+      if (next) activeCondDryer[lot.id] = next
+    }
     await load()
-  } catch(e){ toast.error(e.message) } finally { saving.value = false }
+  } catch(e){ toast.error(e.response?.data?.detail || e.message) } finally { saving.value = false }
 }
 
 async function cloturer(lot) {
   confirmClotureLot.value = null
   cloturing.value = true
   try {
-    await cloturerConditionnement(lot.id)
-    toast.success(`Conditionnement clôturé pour ${lot.code_lot} — passage en chambre froide`)
+    const date = new Date().toISOString().slice(0, 10)
+    const res = await cloturerConditionnement(lot.id, date)
+    if (res?.lot_epuise) {
+      toast.success(`Lot ${lot.code_lot} épuisé — passage seul en chambre froide` + stockMsg(res?.stock))
+    } else {
+      toast.success(`Journée validée pour ${lot.code_lot} — lot toujours ouvert` + stockMsg(res?.stock))
+    }
     await load()
   } finally { cloturing.value = false }
 }

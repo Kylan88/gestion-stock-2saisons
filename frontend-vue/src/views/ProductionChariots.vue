@@ -10,6 +10,7 @@
             Historique
           </button>
         </div>
+        <button v-if="activeView === 'historique'" class="btn btn-outline btn-sm" @click="doExportExcelHist">Excel</button>
       </template>
      </PageHeader>
     <RappelsBanner />
@@ -71,13 +72,13 @@
           </div>
         </div>
 
-        <!-- Musserie disponible pour production aujourd'hui -->
-        <div v-if="musserieData[lot.id] && musserieData[lot.id].length > 0" class="musserie-available">
-          <div class="musserie-available-title">Musserie du jour (à charger) :</div>
-          <div class="musserie-available-grid">
-            <div v-for="m in musserieData[lot.id]" :key="m.dryer" class="musserie-available-item">
-              <span class="musserie-dryer">Dryer {{ m.dryer }}</span>
-              <strong class="musserie-poids">{{ m.poids_sortie }} kg</strong>
+        <!-- Murisserie disponible pour production aujourd'hui -->
+        <div v-if="murisserieData[lot.id] && murisserieData[lot.id].length > 0" class="murisserie-available">
+          <div class="murisserie-available-title">Frais net issu de la murisserie du jour :</div>
+          <div class="murisserie-available-grid">
+            <div v-for="m in murisserieData[lot.id]" :key="m.dryer" class="murisserie-available-item">
+              <span class="murisserie-dryer">Dryer {{ m.dryer }}</span>
+              <strong class="murisserie-poids">{{ m.poids_sortie }} kg</strong>
             </div>
           </div>
         </div>
@@ -91,43 +92,56 @@
               <div class="cumul-box-body">
                 <div class="cumul-stat"><span>Chariots</span><strong>{{ d.nbre_chariots }}</strong></div>
                 <div class="cumul-stat"><span>Claies</span><strong>{{ d.total_claies }}</strong></div>
-                <div class="cumul-stat"><span>Production</span><strong>{{ d.quantite_totale }} kg</strong></div>
+                <div class="cumul-stat"><span>Frais net</span><strong>{{ d.poids_frais_net_kg }} kg</strong></div>
+                <div class="cumul-stat"><span>Pulpe chargée</span><strong>{{ d.pulpe_kg }} kg</strong></div>
+                <div v-if="d.poids_sec_kg != null" class="cumul-stat"><span>Poids sec</span><strong>{{ d.poids_sec_kg }} kg</strong></div>
               </div>
               <div class="cumul-chariots">
                 <span v-for="c in d.chariots" :key="c.id" class="chariot-pill">
-                  C{{ c.numero_chariot }} {{ c.heure_remplissage }}→{{ c.heure_entree_sechoir }}
+                  C{{ c.numero_chariot }} {{ c.heure_remplissage }}→{{ c.heure_entree_dryer }}
                 </span>
               </div>
             </div>
           </div>
 
           <div class="cumul-total">
-            <span>Total produit : <strong>{{ totalAllDryers(lot.id) }} kg</strong></span>
+            <span>Total pulpe chargée : <strong>{{ totalAllDryers(lot.id) }} kg</strong></span>
             <span>Chariots : <strong>{{ totalChariots(lot.id) }}</strong></span>
             <span>Claies : <strong>{{ totalClaies(lot.id) }}</strong></span>
           </div>
 
           <div class="cloture-row">
             <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer la production' }}
+              {{ cloturing ? 'Clôture...' : 'Clôturer la journée' }}
             </button>
           </div>
         </div>
 
-          <!-- Formulaire nouveau dryer : caché si pas de musserie aujourd'hui -->
-         <div v-if="availableDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune musserie aujourd'hui pour ce lot — effectuer la musserie d'abord.</div>
-         <div v-else class="prod-form compact">
+          <!-- Formulaire nouveau dryer : caché si pas de murisserie aujourd'hui -->
+          <div v-if="availableDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Aucune murisserie aujourd'hui pour ce lot — effectuer la murisserie d'abord.</div>
+          <div v-else-if="readyDryers(lot.id).length === 0" class="empty" style="padding:16px;margin-top:12px">Tous les dryers du jour sont chargés ✓ — clôturez la journée ci-dessous.</div>
+          <div v-else class="prod-form compact">
             <div class="dryers-title" style="margin-top:12px">
               {{ dryers[lot.id] && dryers[lot.id].length > 0 ? 'Ajouter un dryer' : 'Nouveau dryer' }}
             </div>
 
-            <!-- Dryer + configuration (uniquement dryers du jour) -->
+            <!-- État des dryers du jour : seuls les « prêts » sont saisissables -->
+            <div class="dryer-pills">
+              <div v-for="d in [1, 2]" :key="'pill-'+d" class="dryer-pill" :class="pillClass(lot.id, d)">
+                <strong>Dryer {{ d }}</strong>
+                <span v-if="isDryerLoaded(lot.id, d)">Chargé {{ dryerCharge(lot.id, d) }} kg ✓</span>
+                <span v-else-if="isDryerAvailable(lot.id, d)">Prêt — frais {{ getMurisseriePoids(lot.id, d) }} kg</span>
+                <span v-else>Verrouillé — pas de murisserie aujourd'hui</span>
+                <button v-if="isDryerLoaded(lot.id, d) && isDryerAvailable(lot.id, d) && forceDryer[lot.id] !== d" class="btn btn-ghost btn-sm" @click="completerDryer(lot.id, d)">Compléter</button>
+              </div>
+            </div>
+
+            <!-- Dryer + configuration (uniquement dryers saisissables) -->
             <div class="form-row">
               <div class="form-group">
                 <label class="input-label">Dryer *</label>
                 <select v-model="f[lot.id].dryer" class="input compact" @change="onDryerChange(lot.id)">
-                  <option v-if="isDryerAvailable(lot.id,1)" :value="1">Dryer 1 — 6 chariots, 42 claies/chariot (1575 kg)</option>
-                  <option v-if="isDryerAvailable(lot.id,2)" :value="2">Dryer 2 — 12 chariots, 20 claies/chariot (1500 kg)</option>
+                  <option v-for="d in [1, 2]" :key="'opt-'+d" v-if="isDryerSelectable(lot.id, d)" :value="d">Dryer {{ d }} — {{ DRYER[d].chariots }} chariots, {{ DRYER[d].claies }} claies/chariot</option>
                 </select>
               </div>
              <div class="form-group">
@@ -156,20 +170,28 @@
             </div>
           </div>
 
+          <!-- Reste à charger (garde-fou : la saisie ne doit pas dépasser le frais net du jour) -->
+          <div class="reste-banner" :class="{ 'reste-alert': depasseReste(lot.id) }">
+            <span>Frais net du jour : <strong>{{ fraisNetJour(lot.id) }} kg</strong></span>
+            <span>Déjà chargé : <strong>{{ chargeJour(lot.id) }} kg</strong></span>
+            <span>Reste à charger : <strong>{{ resteJour(lot.id) }} kg</strong></span>
+            <span v-if="depasseReste(lot.id)" class="reste-warn">Dépasse le reste (+5 %) — réduisez les chariots</span>
+          </div>
+
             <!-- Tableau chariots -->
            <div v-if="f[lot.id].nbre_chariots > 0" class="chariot-table">
               <div class="chariot-header">
                 <span>Chariot</span>
                 <span>Remplissage</span>
-                <span>Entrée séchoir</span>
+                <span>Entrée Dryer</span>
                 <span></span>
               </div>
               <div class="chariot-progress"><div class="chariot-progress-fill" :style="{width: (f[lot.id].chariots.filter(c=>c.enregistre).length / f[lot.id].nbre_chariots * 100) + '%'}"></div></div>
               <div v-for="i in f[lot.id].nbre_chariots" :key="i" class="chariot-row" :class="{ 'chariot-ok': f[lot.id].chariots[i-1].enregistre }">
                 <span class="ch-num">{{ i }}</span>
                 <input type="time" v-model="f[lot.id].chariots[i-1].heure_remplissage" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-                <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_sechoir" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
-                <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm" :class="f[lot.id].chariots[i-1].heure_remplissage && f[lot.id].chariots[i-1].heure_entree_sechoir ? 'btn-primary' : 'btn-outline'" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_sechoir" @click="enregistrerChariot(lot.id, i-1)">✓ Valider</button>
+                <input type="time" v-model="f[lot.id].chariots[i-1].heure_entree_dryer" class="input ch-input compact" :disabled="f[lot.id].chariots[i-1].enregistre" required />
+                <button v-if="!f[lot.id].chariots[i-1].enregistre" class="btn btn-sm" :class="f[lot.id].chariots[i-1].heure_remplissage && f[lot.id].chariots[i-1].heure_entree_dryer ? 'btn-primary' : 'btn-outline'" :disabled="!f[lot.id].chariots[i-1].heure_remplissage || !f[lot.id].chariots[i-1].heure_entree_dryer" @click="enregistrerChariot(lot.id, i-1)">✓ Valider</button>
                 <span v-else class="ch-check">✓ Fait</span>
               </div>
             </div>
@@ -180,18 +202,18 @@
                <label class="input-label">Opérateur</label>
                <input v-model="f[lot.id].operateur" class="input compact" placeholder="Nom" />
              </div>
-             <div class="form-group" style="flex:0">
-               <label class="input-label">&nbsp;</label>
-               <button class="btn btn-primary" :disabled="!canSubmit(lot.id) || saving" @click="enregistrer(lot)">
-                 {{ saving ? 'Enregistrement...' : 'Enregistrer ce dryer' }}
-               </button>
-             </div>
+              <div class="form-group" style="flex:0">
+                <label class="input-label">&nbsp;</label>
+                <button class="btn btn-primary" :disabled="!canSubmit(lot.id) || saving || depasseReste(lot.id)" @click="confirmDryer = lot">
+                  {{ saving ? 'Enregistrement...' : 'Vérifier et enregistrer' }}
+                </button>
+              </div>
            </div>
 
           <!-- Clôturer -->
           <div v-if="dryers[lot.id] && dryers[lot.id].length > 0" style="margin-top:12px;text-align:right">
             <button class="btn btn-success" :disabled="cloturing" @click="confirmClotureLot = lot">
-              {{ cloturing ? 'Clôture...' : 'Clôturer la production' }}
+              {{ cloturing ? 'Clôture...' : 'Clôturer la journée' }}
             </button>
           </div>
         </div>
@@ -201,25 +223,36 @@
     <ConfirmDialog
       :show="!!confirmClotureLot"
       :title="'Clôturer la production du ' + new Date().toLocaleDateString('fr-FR') + ' ?'"
-      :message="'Terminer la production du ' + new Date().toLocaleDateString('fr-FR') + ' pour ' + (confirmClotureLot?.code_lot || '') + ' — tous les dryers du jour (D' + (availableDryers(confirmClotureLot?.id) || []).join(', D') + ') seront clôturés. Cette action est irréversible.'"
+      :message="'Valider les dryers de cette journée pour ' + (confirmClotureLot?.code_lot || '') + '. Le lot restera ouvert tant qu’il reste de la matière à traiter.'"
       confirmText="Clôturer"
       variant="warning"
       @confirm="cloturer(confirmClotureLot)"
       @cancel="confirmClotureLot = null"
+    />
+
+    <ConfirmDialog
+      :show="!!confirmDryer"
+      :title="'Charger Dryer ' + (confirmDryer ? f[confirmDryer.id]?.dryer : '') + ' ?'"
+      :message="confirmDryer ? recapText(confirmDryer) : ''"
+      confirmText="Enregistrer"
+      variant="info"
+      @confirm="validerDryer(confirmDryer)"
+      @cancel="confirmDryer = null"
     />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
-import { getLots, getProductionsEtapes, validerProduction, getDryersProduction, cloturerProduction, getHistoriqueProduction, getMusserieByDateDryer } from '../api'
+import { getLots, getProductionsEtapes, validerProduction, getDryersProduction, cloturerProduction, getHistoriqueProduction, getMurisserieByDateDryer } from '../api'
+import { exportExcel, todayStamp } from '../utils/exportExcel'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PageHeader from '../components/PageHeader.vue'
 import RappelsBanner from '../components/RappelsBanner.vue'
-import { toCanonical, EN_MUSSERIE, EN_PRODUCTION, TERMINE } from '../utils/statuses'
+import { toCanonical, EN_MURISSERIE, EN_PRODUCTION, TERMINE } from '../utils/statuses'
 
 const DRYER = { 1: { chariots: 6, claies: 42, kg_par_claie: 6.25 }, 2: { chariots: 12, claies: 20, kg_par_claie: 6.25 } }
 
@@ -227,6 +260,8 @@ const showHistorique = ref(false)
 const historique = ref([])
 const loadingHist = ref(false)
 const confirmClotureLot = ref(null)
+const confirmDryer = ref(null)
+const forceDryer = reactive({})
 
 function formatDate(d) {
   if (!d) return '—'
@@ -236,6 +271,17 @@ function formatDate(d) {
 async function loadHistorique() {
   loadingHist.value = true
   try { historique.value = await getHistoriqueProduction() } finally { loadingHist.value = false }
+}
+
+function doExportExcelHist() {
+  const headers = ['Date', 'Lot', 'Poids entrée (kg)', 'Poids sortie (kg)', 'Rendement (%)', 'Dryer', 'Chariots', 'Opérateur']
+  const rows = historique.value.map(ep => [
+    ep.date_debut ? new Date(ep.date_debut).toLocaleDateString('fr-FR') : '',
+    ep.lot?.code_lot || ep.lot_id, ep.poids_entree ?? '', ep.poids_sortie ?? '',
+    ep.rendement_pourcentage ?? '', ep.dryer ? 'D' + ep.dryer : '',
+    ep.nbre_chariots ?? '', ep.operateur || '',
+  ])
+  exportExcel(headers, rows, `chariots-historique-${todayStamp()}.xlsx`, 'Chariots')
 }
 
 watch(showHistorique, (v) => { if (v) loadHistorique() })
@@ -248,7 +294,7 @@ const toast = useToastStore()
 const f = reactive({})
 const dryers = reactive({})
 const etapesData = reactive({})
-const musserieData = reactive({}) // { lotId: { dryer: { date: poids_sortie } } }
+const murisserieData = reactive({}) // { lotId: { dryer: { date: poids_sortie } } }
 const activeView = ref('saisie')
 
 function maxChariots(lotId) { return DRYER[f[lotId]?.dryer || 1].chariots }
@@ -259,6 +305,7 @@ function qtéTotale(lotId) { return Math.round(totalClaies(lotId) * kgParClaie(l
 function canSubmit(lotId) {
   const d = f[lotId]
   if (!d || !d.dryer || d.nbre_chariots <= 0) return false
+  if (!isDryerSelectable(lotId, d.dryer)) return false
   return d.chariots.every(c => c.enregistre)
 }
 function onDryerChange(lotId) {
@@ -269,7 +316,7 @@ function onDryerChange(lotId) {
 function rebuildChariots(lotId) {
   const d = f[lotId]
   const n = d.nbre_chariots || 0
-  while (d.chariots.length < n) d.chariots.push({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })
+  while (d.chariots.length < n) d.chariots.push({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false })
   while (d.chariots.length > n) d.chariots.pop()
 }
 function calcQté(lotId) { rebuildChariots(lotId) }
@@ -281,7 +328,7 @@ function enregistrerChariot(lotId, index) {
 
 function totalAllDryers(lotId) {
   if (!dryers[lotId]) return 0
-  return dryers[lotId].reduce((sum, d) => sum + d.quantite_totale, 0)
+  return dryers[lotId].reduce((sum, d) => sum + (d.pulpe_kg ?? d.quantite_totale ?? 0), 0)
 }
 
 function totalChariots(lotId) {
@@ -289,36 +336,90 @@ function totalChariots(lotId) {
   return dryers[lotId].reduce((sum, d) => sum + (d.nbre_chariots || 0), 0)
 }
 
-function getMusseriePoids(lotId, dryer) {
-  const data = musserieData[lotId]
+function getMurisseriePoids(lotId, dryer) {
+  const data = murisserieData[lotId]
   if (!data) return 0
   const entry = data.find(m => m.dryer === dryer)
   return entry?.poids_sortie || 0
 }
 
 function availableDryers(lotId) {
-  return (musserieData[lotId] || []).map(m => m.dryer)
+  return (murisserieData[lotId] || []).map(m => m.dryer)
 }
 function isDryerAvailable(lotId, dryer) {
   return availableDryers(lotId).includes(dryer)
 }
 
+function todayLocal() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+// Dryers déjà chargés aujourd'hui (date backend, pas tout l'historique).
+function dryersToday(lotId) {
+  const t = todayLocal()
+  return (dryers[lotId] || []).filter(d => String(d.date || '').slice(0, 10) === t)
+}
+function isDryerLoaded(lotId, dryer) {
+  return dryersToday(lotId).some(x => x.dryer === dryer)
+}
+function dryerCharge(lotId, dryer) {
+  const d = dryersToday(lotId).find(x => x.dryer === dryer)
+  return d ? (d.pulpe_kg ?? d.quantite_totale ?? 0) : 0
+}
+// Seuls les dryers prêts (murisserie du jour, pas encore chargés) sont saisissables.
+function readyDryers(lotId) {
+  return availableDryers(lotId).filter(d => !isDryerLoaded(lotId, d))
+}
+function isDryerSelectable(lotId, dryer) {
+  return readyDryers(lotId).includes(dryer) || forceDryer[lotId] === dryer
+}
+function pillClass(lotId, dryer) {
+  if (isDryerLoaded(lotId, dryer)) return 'pill-loaded'
+  if (isDryerAvailable(lotId, dryer)) return 'pill-ready'
+  return 'pill-locked'
+}
+// Garde-fou quantités : frais net du jour − déjà chargé = reste (tolérance 5 % comme backend).
+function fraisNetJour(lotId) {
+  return Math.round(((murisserieData[lotId] || []).reduce((s, m) => s + (m.poids_sortie || 0), 0)) * 100) / 100
+}
+function chargeJour(lotId) {
+  return Math.round((dryersToday(lotId).reduce((s, d) => s + (d.pulpe_kg ?? d.quantite_totale ?? 0), 0)) * 100) / 100
+}
+function resteJour(lotId) {
+  return Math.max(0, Math.round((fraisNetJour(lotId) - chargeJour(lotId)) * 100) / 100)
+}
+function depasseReste(lotId) {
+  if (!(fraisNetJour(lotId) > 0)) return false
+  return qtéTotale(lotId) > resteJour(lotId) * 1.05
+}
+function completerDryer(lotId, dryer) {
+  // Déverrouillage explicite : compléter un dryer déjà chargé reste possible.
+  forceDryer[lotId] = dryer
+  if (f[lotId]) { f[lotId].dryer = dryer; onDryerChange(lotId) }
+}
+function syncFormDryer(lotId) {
+  // Replie le formulaire sur un dryer saisissable (après chargement ou clôture).
+  if (!f[lotId]) return
+  if (!isDryerSelectable(lotId, f[lotId].dryer)) {
+    delete forceDryer[lotId]
+    const ready = readyDryers(lotId)
+    if (ready.length) { f[lotId].dryer = ready[0]; onDryerChange(lotId) }
+  }
+}
+
 function initForm(lotId) {
   if (!f[lotId]) {
-    const avail = availableDryers(lotId)
+    const ready = readyDryers(lotId)
+    const avail = ready.length ? ready : availableDryers(lotId)
     const d = avail.length ? avail[0] : 1
     const n = DRYER[d].chariots
     f[lotId] = reactive({
       dryer: d, nbre_chariots: n,
-      operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false })),
+      operateur: '', chariots: Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false })),
     })
   } else {
-    // corrige si dryer actuel n'est plus disponible
-    const avail = availableDryers(lotId)
-    if (avail.length && !avail.includes(f[lotId].dryer)) {
-      f[lotId].dryer = avail[0]
-      onDryerChange(lotId)
-    }
+    // corrige si dryer actuel n'est plus saisissable
+    syncFormDryer(lotId)
   }
 }
 
@@ -328,7 +429,7 @@ function resetForm(lotId) {
     const n = DRYER[d].chariots
     f[lotId].dryer = d
     f[lotId].nbre_chariots = n
-    f[lotId].chariots = Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_sechoir: '', enregistre: false }))
+    f[lotId].chariots = Array.from({ length: n }, () => ({ heure_remplissage: '', heure_entree_dryer: '', enregistre: false }))
     f[lotId].operateur = ''
   }
 }
@@ -338,13 +439,13 @@ async function loadDryers(lotId) {
   dryers[lotId] = data
 }
 
-async function loadMusserieForToday(lotId) {
+async function loadMurisserieForToday(lotId) {
     const today = new Date().toISOString().split('T')[0]
     try {
-      const data = await getMusserieByDateDryer(lotId, today)
-      musserieData[lotId] = data
+      const data = await getMurisserieByDateDryer(lotId, today)
+      murisserieData[lotId] = data
     } catch {
-      musserieData[lotId] = []
+      murisserieData[lotId] = []
     }
   }
 
@@ -352,7 +453,7 @@ async function loadMusserieForToday(lotId) {
     loading.value = true
     try {
       const raw = await getLots()
-      const filtered = raw.filter(l => [EN_MUSSERIE, EN_PRODUCTION].includes(toCanonical(l.statut)))
+      const filtered = raw.filter(l => [EN_MURISSERIE, EN_PRODUCTION].includes(toCanonical(l.statut)))
       const result = []
       for (const lot of filtered) {
         const etapes = await getProductionsEtapes(lot.id)
@@ -360,17 +461,34 @@ async function loadMusserieForToday(lotId) {
         if (prodEtapes.length > 0 && prodEtapes.every(e => toCanonical(e.statut) === TERMINE)) {
           continue
         }
-        await loadMusserieForToday(lot.id)
+        await loadMurisserieForToday(lot.id)
         initForm(lot.id)
         await loadDryers(lot.id)
+        syncFormDryer(lot.id)
         result.push(lot)
       }
       lots.value = result
     } finally { loading.value = false }
   }
 
+function recapText(lot) {
+  const d = f[lot.id]
+  const apres = Math.max(0, Math.round((resteJour(lot.id) - qtéTotale(lot.id)) * 100) / 100)
+  return `Dryer ${d.dryer} — ${d.nbre_chariots} chariots (${totalClaies(lot.id)} claies) — ${qtéTotale(lot.id)} kg pour ${lot.code_lot}`
+    + ` • Frais net du jour : ${fraisNetJour(lot.id)} kg, déjà chargé : ${chargeJour(lot.id)} kg, reste après : ${apres} kg.`
+}
+
+function validerDryer(lot) {
+  confirmDryer.value = null
+  enregistrer(lot)
+}
+
 async function enregistrer(lot) {
   const currentDryer = f[lot.id].dryer
+  if (depasseReste(lot.id)) {
+    toast.error(`Quantité (${qtéTotale(lot.id)} kg) supérieure au reste à charger (${resteJour(lot.id)} kg) pour ${lot.code_lot}`)
+    return
+  }
   saving.value = true
   try {
     await validerProduction(lot.id, {
@@ -381,22 +499,20 @@ async function enregistrer(lot) {
       chariots: f[lot.id].chariots.map(c => ({
         numero_chariot: f[lot.id].chariots.indexOf(c) + 1,
         heure_remplissage: c.heure_remplissage || '',
-        heure_entree_sechoir: c.heure_entree_sechoir || '',
+        heure_entree_dryer: c.heure_entree_dryer || '',
       })),
     })
     toast.success(`Dryer ${currentDryer} enregistré`)
-    // bascule auto vers le prochain dryer disponible du jour (si musserie validée)
-    const avail = availableDryers(lot.id)
-    const next = avail.find(d => d !== currentDryer && !dryers[lot.id]?.some(x => x.dryer === d && x.chariots?.length))
-    // fallback : prochain dans la liste
-    const fallbackNext = avail.find(d => d !== currentDryer)
-    const target = next ?? fallbackNext
+    // bascule auto vers le prochain dryer prêt (murisserie du jour non encore chargée)
+    if (forceDryer[lot.id] === currentDryer) delete forceDryer[lot.id]
     resetForm(lot.id)
     await loadDryers(lot.id)
+    syncFormDryer(lot.id)
+    const target = readyDryers(lot.id).find(d => d !== currentDryer)
     if (target) {
       f[lot.id].dryer = target
       onDryerChange(lot.id)
-      toast.success(`Basculé sur Dryer ${target} (musserie du jour)`)
+      toast.success(`Basculé sur Dryer ${target} (murisserie du jour)`)
     }
   } finally { saving.value = false }
 }
@@ -405,8 +521,9 @@ async function cloturer(lot) {
   confirmClotureLot.value = null
   cloturing.value = true
   try {
-    await cloturerProduction(lot.id)
-    toast.success(`Production clôturée pour ${lot.code_lot}`)
+    const date = new Date().toISOString().slice(0, 10)
+    await cloturerProduction(lot.id, date)
+    toast.success(`Production du jour clôturée pour ${lot.code_lot} — lot toujours ouvert`)
     await load()
   } finally { cloturing.value = false }
 }
@@ -470,6 +587,16 @@ onMounted(load)
 .ch-check{ display:inline-flex; align-items:center; gap:4px; font-weight:700; color:var(--success); font-size:12px; background:var(--success-light); padding:4px 10px; border-radius:99px; border:1px solid var(--success)}
 .chariot-ok{ background:rgba(22,101,32,0.04)}
 .chariot-progress{ height:4px; background:var(--border-light); border-radius:99px; overflow:hidden; margin:0 14px 10px}
+.dryer-pills{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 4px}
+.dryer-pill{ display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; font-size:12px; border:1px solid var(--border)}
+.dryer-pill strong{ font-size:12px}
+.pill-ready{ background:#EFF6FF; border-color:#BFDBFE; color:#1D4ED8}
+.pill-loaded{ background:#F0FDF4; border-color:#86EFAC; color:#15803D}
+.pill-locked{ background:var(--surface); color:var(--text-muted)}
+.reste-banner{ display:flex; flex-wrap:wrap; gap:8px 20px; padding:10px 14px; margin-top:12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); font-size:13px; color:var(--text-secondary)}
+.reste-banner strong{ color:var(--dark)}
+.reste-alert{ border-color:#FCA5A5; background:#FEF2F2}
+.reste-warn{ color:var(--error); font-weight:700}
 .chariot-progress-fill{ height:100%; background:linear-gradient(90deg,var(--primary),var(--success)); transition:width 0.3s}
 
 .cumul-section { border-top: 1px solid var(--border-light); padding-top: 14px; margin-top: 14px; }
@@ -496,15 +623,15 @@ onMounted(load)
 
 .cloture-row { margin-top: 12px; text-align: right; }
 
-.musserie-available {
+.murisserie-available {
   margin-top: 12px; padding: 12px;
   background: var(--info-light); border: 1px solid var(--info); border-radius: var(--radius-sm);
 }
-.musserie-available-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--info); letter-spacing: 0.3px; margin-bottom: 8px; }
-.musserie-available-grid { display: flex; gap: 16px; flex-wrap: wrap; }
-.musserie-available-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.musserie-dryer { color: var(--text-secondary); }
-.musserie-poids { color: var(--info); font-weight: 700; }
+.murisserie-available-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--info); letter-spacing: 0.3px; margin-bottom: 8px; }
+.murisserie-available-grid { display: flex; gap: 16px; flex-wrap: wrap; }
+.murisserie-available-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.murisserie-dryer { color: var(--text-secondary); }
+.murisserie-poids { color: var(--info); font-weight: 700; }
 
 .saisie-section { border-top: 1px solid var(--border-light); padding-top: 14px; margin-top: 14px; }
 .saisie-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3px; margin-bottom: 10px; }

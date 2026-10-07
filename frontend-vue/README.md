@@ -1,5 +1,45 @@
-# Vue 3 + Vite
+# 2Saisons — Frontend (Vue 3 + Vite)
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Application de gestion de stock & production (Bazré, Côte d'Ivoire).
+Voir le [README racine](../README.md) pour les règles métier et l'API.
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+## Commandes
+
+```bash
+npm install
+npm run dev      # http://localhost:8080 (proxy /api → http://localhost:8000)
+npm run build    # build production (image Docker nginx)
+npm run preview  # prévisualiser le build
+npm test -- --run  # tests vitest
+```
+
+## Pages (routes)
+
+| Route | Page |
+|-------|------|
+| `/` | Dashboard |
+| `/reception` | Réception (création lots) |
+| `/lots` | Lots (+ poids total reçu, rendement) |
+| `/murisserie` | Murisserie (saisie du jour + historique) |
+| `/production` | Rendements par dryer/fruit/lot |
+| `/production/chariots` | Chariots (dryers guidés, reste à charger, récapitulatif) |
+| `/conditionnement` | Conditionnement J+1 + historique |
+| `/stock/transfert` | Transferts chambre froide (manuel) |
+| `/stock` | Stock par zone |
+| `/stock/reconditionnement` | Sachets 100g + rhum arrangé |
+| `/produits` | Catalogue (stock kg, cartons) |
+| `/fournisseurs` | Annuaire (depuis réceptions) |
+| `/commandes` | Commandes clients |
+| `/anomalies` | Anomalies + rappels |
+| `/historique` | Historique global (5 onglets) |
+
+## Export Excel
+
+Les 17 vrais tableaux s'exportent en `.xlsx` via `src/utils/exportExcel.js`
+(ExcelJS : thème navy, filtres auto, volets gelés, largeurs auto).
+Pages multi-tableaux (Réception, Production, Historique) → un onglet par tableau.
+
+## Conventions d'affichage
+
+- Poids : 2 décimales max (`maximumFractionDigits: 2`), entiers sans zéros parasites.
+- Dates jour : comparées en local (`todayLocal`), jamais en UTC.

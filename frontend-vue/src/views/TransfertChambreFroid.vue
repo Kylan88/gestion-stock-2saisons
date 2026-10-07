@@ -3,9 +3,17 @@
     <PageHeader title="Transfert Chambre Froide" subtitle="Envoyer les cartons conditionnés vers la chambre froide" />
 
     <LoadingSpinner v-if="loading" />
+    <div v-else-if="zones.length === 0" class="card anim-fade" style="padding:24px;text-align:center">
+      <div class="empty-text">Aucune chambre froide configurée</div>
+      <div style="font-size:12px;color:var(--text-muted);margin:6px 0 12px">Créez les 2 chambres froides pour activer le transfert</div>
+      <button class="btn btn-primary" :disabled="creatingZones" @click="seedZones">
+        {{ creatingZones ? 'Création...' : 'Créer Chambre Froide 1 + 2' }}
+      </button>
+    </div>
     <div v-else-if="lots.length === 0" class="empty anim-fade">
       <div class="empty-icon" style="font-size:28px;font-weight:300;color:var(--border)">—</div>
-      <div class="empty-text">Aucun lot terminé en attente de transfert</div>
+      <div class="empty-text">Aucun carton en attente de transfert</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:6px">Les cartons arrivent ici après chaque saisie de conditionnement — créez une demande puis validez-la</div>
     </div>
 
     <div v-for="lot in lots" :key="lot.id" class="card anim-fade" style="margin-bottom:16px">
@@ -17,22 +25,22 @@
         </div>
       </div>
 
-      <div v-if="lot.statut_transfert === 'valide'" class="transfert-ok">
-        Transfert validé
+      <div v-if="restantTotal(lot) === 0" class="transfert-ok">
+        Stock à jour — chambre froide alimentée
       </div>
 
       <div v-else class="transfert-form">
         <div class="transfert-fluxes">
-          <div v-for="flux in getFluxesForLot(lot)" :key="flux.key" class="transfert-flux" :class="{'has-error': (form[lot.id][flux.key + '_cartons']||0) > lot[flux.field]}">
+          <div v-for="flux in getFluxesForLot(lot)" :key="flux.key" class="transfert-flux" :class="{'has-error': (form[lot.id][flux.key + '_cartons']||0) > restantCartons(lot, flux)}">
             <div class="flux-info">
               <span class="flux-badge" :style="{background: flux.color}">{{ flux.label }}</span>
-              <span>{{ lot[flux.field] }} cartons disponibles</span>
-              <span v-if="(form[lot.id][flux.key + '_cartons']||0) > lot[flux.field]" class="field-error" style="margin-left:auto">Dépasse max {{ lot[flux.field] }}</span>
+              <span>{{ restantCartons(lot, flux) }} cartons à transférer ({{ lot[flux.field] }} conditionnés)</span>
+              <span v-if="(form[lot.id][flux.key + '_cartons']||0) > restantCartons(lot, flux)" class="field-error" style="margin-left:auto">Dépasse max {{ restantCartons(lot, flux) }}</span>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label>Cartons à transférer</label>
-                <input type="number" v-model.number="form[lot.id][flux.key + '_cartons']" class="input" min="0" :max="lot[flux.field]" :placeholder="'max ' + lot[flux.field]" />
+                <input type="number" v-model.number="form[lot.id][flux.key + '_cartons']" class="input" min="0" :max="restantCartons(lot, flux)" :placeholder="'max ' + restantCartons(lot, flux)" />
               </div>
               <div class="form-group">
                 <label>Chambre froide</label>
@@ -69,19 +77,23 @@
 
     <div v-if="demandes.length > 0" style="margin-top:24px">
       <h2 style="font-size:16px;font-weight:600;margin-bottom:12px">Demandes récentes</h2>
-      <div v-for="d in demandes" :key="d.id" class="card anim-fade" style="margin-bottom:8px;padding:12px 16px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <strong>{{ d.lot?.code_lot || d.lot_id }}</strong>
-            <span style="margin-left:8px;font-size:12px;color:var(--text-muted)">{{ new Date(d.date_demande).toLocaleDateString() }}</span>
-          </div>
-          <StatusBadge :status="d.statut" />
-        </div>
-        <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">
-          <span v-for="l in d.lignes" :key="l.id" style="margin-right:12px">
-            {{ l.type_flux }}: {{ l.nb_cartons }} → CF{{ l.zone_id }}
-          </span>
-        </div>
+      <div class="table-wrap demande-table">
+        <table class="table">
+          <thead><tr><th>Date</th><th>Lot</th><th>Statut</th><th>Détail</th><th>Responsable</th></tr></thead>
+          <tbody>
+            <tr v-for="d in demandes" :key="d.id">
+              <td>{{ d.date_demande ? new Date(d.date_demande).toLocaleDateString('fr-FR') : '—' }}</td>
+              <td><strong>{{ d.lot?.code_lot || d.lot_id }}</strong></td>
+              <td><StatusBadge :status="d.statut" /></td>
+              <td>
+                <span v-for="l in d.lignes" :key="l.id" class="line-chip">
+                  {{ l.type_flux }} : {{ l.nb_cartons }} → {{ l.zone?.nom || ('CF' + l.zone_id) }}
+                </span>
+              </td>
+              <td>{{ d.responsable || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -89,12 +101,12 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { getLots, getZonesStock, creerDemandeTransfert, validerDemandeTransfert, getDemandesTransfert } from '../api'
+import { getLots, getZonesStock, createZoneStock, creerDemandeTransfert, validerDemandeTransfert, getDemandesTransfert } from '../api'
 import { useToastStore } from '../stores/toast'
 import LoadingSpinner from '../components/LoadingSpinner.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import PageHeader from '../components/PageHeader.vue'
-import { toCanonical, CONDITIONNE, EN_STOCK } from '../utils/statuses'
+import { toCanonical, CONDITIONNE, EN_STOCK, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT } from '../utils/statuses'
 
 const lots = ref([])
 const demandes = ref([])
@@ -103,6 +115,8 @@ const loading = ref(true)
 const saving = ref(false)
 const toast = useToastStore()
 const form = reactive({})
+// Cartons déjà en chambre froide (demandes validées) par lot+flux : "lotId_flux" -> nb
+const transferes = reactive({})
 
 const fluxConfig = [
   { key: 'export', label: 'Export', field: 'export_cartons', color: '#00853E' },
@@ -112,13 +126,32 @@ const fluxConfig = [
   { key: 'rhum', label: 'Rhum', field: 'rhum_cartons', color: '#d97706' },
 ]
 function getFluxesForLot(lot) {
-  return fluxConfig.filter(f => (lot[f.field] || 0) > 0)
+  return fluxConfig.filter(f => restantCartons(lot, f) > 0)
+}
+// Reste à transférer = cartons conditionnés − déjà en chambre froide (auto + manuel validés)
+function restantCartons(lot, flux) {
+  return Math.max(0, (lot[flux.field] || 0) - (transferes[lot.id + '_' + flux.key] || 0))
+}
+function restantTotal(lot) {
+  return fluxConfig.reduce((s, f) => s + restantCartons(lot, f), 0)
+}
+const creatingZones = ref(false)
+async function seedZones() {
+  creatingZones.value = true
+  try {
+    await createZoneStock({ nom: 'Chambre Froide 1', type_zone: 'froid', capacite_kg: 0, actif: true })
+    await createZoneStock({ nom: 'Chambre Froide 2', type_zone: 'froid', capacite_kg: 0, actif: true })
+    toast.success('Chambres froides créées')
+    await load()
+  } catch(e) {
+    toast.error(e.response?.data?.detail || e.message)
+  } finally { creatingZones.value = false }
 }
 function initForm(lotId, lot) {
   const init = { responsable: '', notes: '' }
-  const defaultZone = zones.value[0]?.id || 1
+  const defaultZone = zones.value[0]?.id ?? ''
   for (const f of fluxConfig) {
-    init[f.key + '_cartons'] = lot[f.field] || 0
+    init[f.key + '_cartons'] = restantCartons(lot, f)
     init[f.key + '_zone_id'] = defaultZone
   }
   form[lotId] = reactive(init)
@@ -127,7 +160,8 @@ function initForm(lotId, lot) {
 function canSubmit(lotId) {
   const d = form[lotId]
   if (!d || !d.responsable?.trim()) return false
-  return fluxConfig.some(f => (d[f.key + '_cartons'] || 0) > 0)
+  if (zones.value.length === 0) return false
+  return fluxConfig.some(f => (d[f.key + '_cartons'] || 0) > 0 && d[f.key + '_zone_id'])
 }
 
 async function load() {
@@ -135,11 +169,25 @@ async function load() {
   try {
     const [raw, z] = await Promise.all([getLots(), getZonesStock()])
     zones.value = z.filter(z => z.actif)
-    lots.value = raw.filter(l => toCanonical(l.statut) === CONDITIONNE)
+    demandes.value = await getDemandesTransfert()
+    // Déjà transféré (validé) par lot+flux — auto-journalier inclus
+    for (const k of Object.keys(transferes)) delete transferes[k]
+    for (const d of demandes.value) {
+      if (toCanonical(d.statut) !== 'validee') continue
+      for (const l of (d.lignes || [])) {
+        const k = d.lot_id + '_' + l.type_flux
+        transferes[k] = (transferes[k] || 0) + (l.nb_cartons || 0)
+      }
+    }
+    // Flux continu : tout lot avec des cartons conditionnés non transférés,
+    // quel que soit son statut (murisserie/production/conditionnement/conditionne).
+    lots.value = raw.filter(l =>
+      [EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE].includes(toCanonical(l.statut))
+      && restantTotal(l) > 0
+    )
     for (const lot of lots.value) {
       initForm(lot.id, lot)
     }
-    demandes.value = await getDemandesTransfert()
   } finally { loading.value = false }
 }
 
@@ -152,7 +200,8 @@ async function valider(lot) {
     for (const f of fluxConfig) {
       const nb = d[f.key + '_cartons'] || 0
       if (nb > 0) {
-        if (nb > (lot[f.field] || 0)) { toast.error(`${f.label}: ${nb} dépasse ${lot[f.field]}`); return }
+        const max = restantCartons(lot, f)
+        if (nb > max) { toast.error(`${f.label}: ${nb} dépasse le reste à transférer (${max})`); return }
         lignes.push({ type_flux: f.key, nb_cartons: nb, zone_id: d[f.key + '_zone_id'] })
       }
     }
@@ -177,5 +226,7 @@ onMounted(load)
 .flux-info { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; }
 .flux-badge { padding: 2px 8px; border-radius: 99px; color: white; font-size: 11px; font-weight: 600; }
 .transfert-ok { padding: 16px; background: var(--success-light); border: 1px solid var(--success); border-radius: var(--radius-sm); text-align: center; font-weight: 600; color: var(--success); }
+.demande-table { overflow: auto; max-height: 340px; }
+.line-chip { display: inline-block; padding: 2px 8px; margin: 1px 6px 1px 0; background: var(--primary-50); color: var(--primary); border-radius: 10px; font-size: 11px; font-weight: 500; }
 .no-flux { padding: 12px; text-align: center; color: var(--text-muted); font-size: 13px; }
 </style>

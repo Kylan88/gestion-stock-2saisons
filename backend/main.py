@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 
 from database import engine, Base, get_db
 from routers import produits, mouvements, lots, commandes, dashboard
@@ -23,6 +24,39 @@ import schemas
 
 # ── Creation des tables au demarrage ──
 Base.metadata.create_all(bind=engine)
+
+# Mise à niveau légère des bases existantes. create_all crée les nouvelles
+# tables mais n'ajoute pas les colonnes aux installations déjà en service.
+_etapes_columns = {column["name"] for column in inspect(engine).get_columns("etapes_production")}
+if "poids_sec_kg" not in _etapes_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE etapes_production ADD COLUMN poids_sec_kg FLOAT"))
+_recond_columns = {column["name"] for column in inspect(engine).get_columns("reconditionnements")}
+for _col in ("rhum_cartons_sortie INTEGER", "rhum_sachets_sortis INTEGER", "rhum_poids_sachet FLOAT", "rhum_poids_vrac_kg FLOAT"):
+    _name = _col.split()[0]
+    if _name not in _recond_columns:
+        with engine.begin() as connection:
+            connection.execute(text(f"ALTER TABLE reconditionnements ADD COLUMN {_col}"))
+# Renommage heure_entree_sechoir -> heure_entree_dryer (données préservées).
+_chariots_columns = {column["name"] for column in inspect(engine).get_columns("chariots")}
+if "heure_entree_sechoir" in _chariots_columns and "heure_entree_dryer" not in _chariots_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE chariots RENAME COLUMN heure_entree_sechoir TO heure_entree_dryer"))
+# Renommage musserie -> murisserie des étapes existantes (données préservées).
+with engine.begin() as connection:
+    connection.execute(text("UPDATE etapes_production SET etape='murisserie' WHERE etape='musserie'"))
+# Colonne cartons dédiée (séparée du seuil stock_min) + reprise idempotente
+# des compteurs cartons jusque-là stockés dans stock_min (produits de flux).
+_produits_columns = {column["name"] for column in inspect(engine).get_columns("produits")}
+if "cartons" not in _produits_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE produits ADD COLUMN cartons FLOAT DEFAULT 0"))
+with engine.begin() as connection:
+    connection.execute(text(
+        "UPDATE produits SET cartons = stock_min, stock_min = 0 "
+        "WHERE nom IN ('Local', 'Export', 'Fitini Fê', 'Déchets', 'Rhum arrangé') "
+        "AND stock_min <> 0 AND cartons = 0"
+    ))
 
 # ── Application FastAPI ──
 app = FastAPI(

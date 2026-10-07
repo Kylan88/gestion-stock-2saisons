@@ -1,7 +1,7 @@
 # Canonical status constants for 2Saisons backend
 # Use snake_case without accents to avoid comparison issues.
 RECEPTION = "reception"
-EN_MUSSERIE = "en_musserie"
+EN_MURISSERIE = "en_murisserie"
 EN_PRODUCTION = "en_production"
 EN_CONDITIONNEMENT = "en_conditionnement"
 CONDITIONNE = "conditionne"
@@ -16,7 +16,7 @@ VALIDEE = "validee"
 VALIDE = "valide"
 ANNULEE = "annulee"
 
-STATUTS_LOT = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
+STATUTS_LOT = [RECEPTION, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK, EXPEDIE, PERIME]
 
 # Normalization helpers
 import unicodedata
@@ -24,7 +24,7 @@ import unicodedata
 # Map canonical -> legacy variants (common historical spellings/accents)
 _LEGACY_MAP = {
     RECEPTION: ['réception', 'reception'],
-    EN_MUSSERIE: ['en musserie', 'en_musserie', 'en-musserie'],
+    EN_MURISSERIE: ['en murisserie', 'en_murisserie', 'en-murisserie'],
     EN_PRODUCTION: ['en production', 'en_production', 'en-production'],
     EN_CONDITIONNEMENT: ['en conditionnement', 'en_conditionnement', 'en-conditionnement'],
     CONDITIONNE: ['conditionné', 'conditionne', 'conditionne'],
@@ -73,13 +73,13 @@ def is_lot_status(status: str) -> bool:
 
 # ── Workflow validation ──
 # Order defines the valid production pipeline
-WORKFLOW_ORDER = [RECEPTION, EN_MUSSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK]
+WORKFLOW_ORDER = [RECEPTION, EN_MURISSERIE, EN_PRODUCTION, EN_CONDITIONNEMENT, CONDITIONNE, EN_STOCK]
 TERMINAL_STATUSES = [EXPEDIE, PERIME]
 
 # Allowed transitions: from -> set of allowed "to"
 TRANSITIONS = {
-    RECEPTION: {EN_MUSSERIE},
-    EN_MUSSERIE: {EN_PRODUCTION, EN_CONDITIONNEMENT},
+    RECEPTION: {EN_MURISSERIE},
+    EN_MURISSERIE: {EN_PRODUCTION, EN_CONDITIONNEMENT},
     EN_PRODUCTION: {EN_CONDITIONNEMENT},
     EN_CONDITIONNEMENT: {CONDITIONNE},
     CONDITIONNE: {EN_STOCK},
@@ -105,9 +105,15 @@ def next_statuses(current: str) -> list:
 
 
 def validate_transition(from_status: str, to_status: str):
-    """Raise ValueError if the transition is not allowed."""
+    """Raise ValueError (message clair pour l'utilisateur) if the transition is not allowed."""
     if not can_transition(from_status, to_status):
+        allowed = sorted(TRANSITIONS.get(normalize(from_status), set()))
+        if normalize(from_status) == normalize(to_status):
+            raise ValueError(
+                f"Action déjà effectuée : le lot est déjà à l'étape '{from_status}'. "
+                f"Prochaine étape possible : {', '.join(repr(s) for s in allowed) if allowed else 'aucune (fin de parcours)'}."
+            )
         raise ValueError(
-            f"Transition invalide: '{from_status}' → '{to_status}'. "
-            f"Statuts autorises: {sorted(TRANSITIONS.get(normalize(from_status), set()))}"
+            f"Action impossible : le lot est à l'étape '{from_status}', on ne peut pas le passer à '{to_status}'. "
+            f"Prochaine étape possible : {', '.join(repr(s) for s in allowed) if allowed else 'aucune (fin de parcours)'}."
         )
